@@ -7,3 +7,6 @@
 [submodule "dlpack"]
 	path = dlpack
 	url = https://github.com/dmlc/dlpack
+[submodule "nnpu/NNPUSim"]
+	path = nnpu/NNPUSim
+	url = https://github.com/Elecky/NNPUSim.git
