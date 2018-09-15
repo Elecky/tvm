@@ -7,4 +7,9 @@ driver function declarations of nnpu simulator
 
 #include <cstdint>
 
+enum class NNPUDevType
+{
+    S0, S1
+};
+
 #endif
