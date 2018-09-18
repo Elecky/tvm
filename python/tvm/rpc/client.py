@@ -146,6 +146,8 @@ class RPCSession(object):
         """Construct extension device."""
         return self.context(12, dev_id)
 
+    def nnpu(self, dev_id):
+        return self.context(13, dev_id)
 
 class LocalSession(RPCSession):
     """RPCSession interface backed by local environment.

@@ -173,6 +173,21 @@ def ext_dev(dev_id=0):
     """
     return TVMContext(12, dev_id)
 
+def nnpu(dev_id=0):
+    """Construct a extension device
+
+    Parameters
+    ----------
+    dev_id : int, optional
+        The integer device id
+
+    Returns
+    -------
+    ctx : TVMContext
+        The created context
+    """
+    return TVMContext(13, dev_id)
+
 
 cl = opencl
 mtl = metal

@@ -20,7 +20,7 @@ from . import hybrid
 
 from . import ndarray as nd
 from .ndarray import context, cpu, gpu, opencl, cl, vulkan, metal, mtl
-from .ndarray import vpi, rocm, opengl, ext_dev
+from .ndarray import vpi, rocm, opengl, ext_dev, nnpu
 
 from ._ffi.runtime_ctypes import TypeCode
 from ._ffi.function import Function

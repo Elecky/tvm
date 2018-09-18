@@ -68,6 +68,7 @@ typedef enum {
   // The device api can differ depending on the xpu driver registered.
   kExtDev = 12,
   // AddExtraTVMType which is not in DLPack here
+  kNNPU = 13,
 } TVMDeviceExtType;
 
 /*!
