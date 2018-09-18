@@ -9,6 +9,7 @@
 #include "ir_util.h"
 #include "storage_access.h"
 #include "../arithmetic/compute_expr.h"
+#include <iostream>
 
 namespace tvm {
 namespace ir {
@@ -299,10 +300,21 @@ class StorageAccessInfoLower : public IRMutator {
       return AddressOffset(buffer_var, dtype, offset);
     }
     int dtype_bits = dtype.bits() * dtype.lanes();
-    CHECK_EQ(info->unit_bits % dtype_bits, 0);
-    return cast(ptr_type,
-                   ir::Simplify(offset / make_const(
-                       offset.type(), info->unit_bits / dtype_bits)));
+    // std::cout << "dtype_bits = " << dtype_bits << std::endl;
+    // std::cout << ptr_type.is_uint() << std::endl;
+    if (dtype_bits > info->unit_bits) {
+      // when dtype_bits is larger than info->unit_bits
+      CHECK_EQ(dtype_bits % info->unit_bits, 0);
+      return cast(ptr_type,
+                    ir::Simplify(offset * make_const(
+                        offset.type(), dtype_bits / info->unit_bits)));
+    }
+    else {
+      CHECK_EQ(info->unit_bits % dtype_bits, 0);
+      return cast(ptr_type,
+                    ir::Simplify(offset / make_const(
+                        offset.type(), info->unit_bits / dtype_bits)));
+    }
   }
   // The storage entry.
   struct StorageEntry {
