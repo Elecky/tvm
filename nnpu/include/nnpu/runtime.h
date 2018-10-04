@@ -7,8 +7,8 @@ runtime function declarations of NNPU simulator
 
 #include <cstdint>
 #include <vector>
-#include "driver.h"
-#include "insn.h"
+#include <nnpu/driver.h>
+#include <nnpu/insn.h>
 
 using nnpu_dram_addr_t = uint32_t;
 using nnpu_buf_addr_t = uint32_t;
@@ -28,13 +28,13 @@ void NNPUBufferCopy(const void* from,
                     size_t size,
                     int kind_mask);
 
-void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len);
+void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode);
 
-void NNPU_DMALoad(void *dram_buf_addr, uint32_t dram_buf_offset,
+void NNPU_DMALoad(void *host_buf_addr, uint32_t host_buf_offset,
                   nnpu_dram_addr_t dst_phy_addr, uint32_t dst_phy_offset,
                   uint32_t size);
 
-void NNPU_DMAStore(void *dram_buf_addr, uint32_t dram_buf_offset,
+void NNPU_DMAStore(void *host_buf_addr, uint32_t host_buf_offset,
                   nnpu_dram_addr_t src_phy_addr, uint32_t src_phy_offset,
                   uint32_t size);
 

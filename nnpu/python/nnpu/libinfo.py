@@ -32,6 +32,13 @@ def _load_lib():
     if not lib_path:
         return []
     try:
-        return [ctypes.CDLL(lib_path[0], ctypes.RTLD_GLOBAL)]
+        _ = ctypes.CDLL('/usr/local/lib/libyaml-cpp.so', ctypes.RTLD_GLOBAL)
     except OSError:
-        return []
+        raise RuntimeError('cannot load libyaml-cpp, please install yaml-cpp or \
+                            modify the path here!')
+    
+    try:
+        return [ctypes.CDLL(lib_path[0], ctypes.RTLD_GLOBAL)]
+    except OSError as err:
+        print(err.strerror)
+        raise RuntimeError('libnnpu not loaded')

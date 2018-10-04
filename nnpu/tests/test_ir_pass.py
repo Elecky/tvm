@@ -5,14 +5,14 @@ import numpy as np
 def test():
     env = nnpu.get_env()
     shape = (4, 16)
-    a_host = tvm.placeholder(shape, 'float16', 'a_host')
+    a_host = tvm.placeholder(shape, env.cfg['dtype_n'], 'a_host')
     a = tvm.compute(shape, lambda *i: a_host(*i), name='a')
     a_buf = tvm.compute(shape, lambda *i: a(*i), name='a_buf')
     
-    b_buf = tvm.compute(shape, lambda i, j: tvm.exp(a_buf[i, j]), name='b_buf')
+    b_buf = tvm.compute(shape, lambda i, j: tvm.exp(a_buf[i, j]).astype(env.cfg['dtype_w']), name='b_buf')
     b = tvm.compute(shape, lambda *i: b_buf(*i), name='b')
     b_host = tvm.compute(shape, lambda *i: b(*i), name='b_host')
-    
+
 
     s = tvm.create_schedule(b_host.op)
 
@@ -35,7 +35,7 @@ def test():
     s[a_buf].compute_at(s[b_buf], b_buf.op.axis[0])
 
     # tensorize
-    s[b_buf].tensorize(s[b_buf].op.axis[1], env.intrins.get('VEXP'))
+    s[b_buf].tensorize(s[b_buf].op.axis[1], env.intrins.get('VEXP', mode='inc'))
 
     # build
     print(tvm.lower(s, [a_host, b_host], simple_mode=True))

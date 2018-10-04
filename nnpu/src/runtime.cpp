@@ -143,6 +143,21 @@ public:
         return insnQueue;
     }
 
+    /*!
+    * \brief dump all instructions(string repr) into ostream.
+    * \param os, the ostream into which to dump the instructions.
+    */
+    void Dump(std::ostream& os)
+    {
+        InsnDumper dumper;
+
+        for (auto& insn : insnQueue)
+        {
+            insn.Call(dumper, os);
+            os << std::endl;
+        }
+    }
+
 private:
     vector<NNPUInsn> insnQueue;
 };
@@ -194,35 +209,87 @@ void NNPUBufferCopy(const void *from,
     }
 }
 
-void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len)
+void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode)
 {
     LOG(INFO) << "VEXP " << vctr_out_addr << ", " << vctr_in_addr << ", " << len << std::endl;
 
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
-    nnpu::LiInsn li(0, vctr_out_addr);
-    queue->EmplaceBack(li);
+    // load vector out address into $0
+    nnpu::LiInsn li1(0, vctr_out_addr);
+    queue->EmplaceBack(li1);
+    // vector in address into $1
+    nnpu::LiInsn li2(1, vctr_in_addr);
+    queue->EmplaceBack(li2);
+    // element count into $2
+    nnpu::LiInsn li3(2, len);
+    queue->EmplaceBack(li3);
 
+    // create a vctr exp instruction: VEXP $0, $1, $2
+    nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, 2, mode);
+    queue->EmplaceBack(exp);
 }
 
-void NNPU_DMALoad(void *dram_buf_addr, uint32_t dram_buf_offset,
+void NNPU_DMALoad(void *host_buf_addr, uint32_t host_buf_offset,
                   nnpu_dram_addr_t dst_phy_addr, uint32_t dst_phy_offset,
                   uint32_t size)
 {
     LOG(INFO) << "DMALoad " 
-              << dram_buf_addr << "(" << dram_buf_offset << "), " 
+              << host_buf_addr << "(" << host_buf_offset << "), " 
               << dst_phy_addr << "(" << dst_phy_offset << ")" << ", "
               << size << std::endl;
+
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // load host buffer physical address and offset into $0 and $1
+    nnpu::DataBuffer *buffer = nnpu::DataBuffer::FromHandle(host_buf_addr);
+    Li liAddr1(0, buffer->phy_addr());
+    queue->EmplaceBack(liAddr1);
+    Li liOff1(1, host_buf_offset);
+    queue->EmplaceBack(liOff1);
+
+    // load dram address into $2
+    Li liAddr2(2, dst_phy_addr + dst_phy_offset);
+    queue->EmplaceBack(liAddr2);
+
+    // load copy size in byte into $3
+    Li liSize(3, size);
+    queue->EmplaceBack(liSize);
+    // create a DMA load instruction: DMALoad $0, $1, $2, $3
+    nnpu::DMACopyInsn copyInsn(nnpu::DMADIR::HtoD, 0, 1, 2, 3);
+    queue->EmplaceBack(copyInsn);
 }
 
-void NNPU_DMAStore(void *dram_buf_addr, uint32_t dram_buf_offset,
+void NNPU_DMAStore(void *host_buf_addr, uint32_t host_buf_offset,
                   nnpu_dram_addr_t src_phy_addr, uint32_t src_phy_offset,
                   uint32_t size)
 {
     LOG(INFO) << "DMAStore " 
-              << dram_buf_addr << "(" << dram_buf_offset << "), " 
+              << host_buf_addr << "(" << host_buf_offset << "), " 
               << src_phy_addr << "(" << src_phy_offset << ")" << ", "
               << size << std::endl;
+    
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // load host buffer physical address and offset into $0 and $1
+    nnpu::DataBuffer *buffer = nnpu::DataBuffer::FromHandle(host_buf_addr);
+    Li liAddr1(0, buffer->phy_addr());
+    queue->EmplaceBack(liAddr1);
+    Li liOff1(1, host_buf_offset);
+    queue->EmplaceBack(liOff1);
+
+    // load dram address into $2
+    Li liAddr2(2, src_phy_addr + src_phy_offset);
+    queue->EmplaceBack(liAddr2);
+
+    // load copy size in byte into $3
+    Li liSize(3, size);
+    queue->EmplaceBack(liSize);
+    // create a DMA load instruction: DMALoad $0, $1, $2, $3
+    nnpu::DMACopyInsn copyInsn(nnpu::DMADIR::DtoH, 0, 1, 2, 3);
+    queue->EmplaceBack(copyInsn);
 }
 
 void NNPU_ScratchpadLoad(nnpu_dram_addr_t src_phy_addr, uint32_t src_offset,
@@ -233,6 +300,25 @@ void NNPU_ScratchpadLoad(nnpu_dram_addr_t src_phy_addr, uint32_t src_offset,
               << src_phy_addr << "(" << src_offset << "), "
               << dst_phy_addr << "(" << dst_offset << "), "
               << size << std::endl;
+
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // load dram address into $0
+    Li liAddr1(0, src_phy_addr + src_offset);
+    queue->EmplaceBack(liAddr1);
+
+    // load scratchpad address into $1
+    Li liAddr2(1, dst_phy_addr + dst_offset);
+    queue->EmplaceBack(liAddr2);
+
+    // $2 <- size
+    Li liSize(2, size);
+    queue->EmplaceBack(liSize);
+
+    // create a scratchpad load instruction: load.b $0, $1, $2
+    nnpu::BufferLSInsn load(nnpu::LSDIR::Load, 0, 1, 2);
+    queue->EmplaceBack(load);
 }
 
 void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
@@ -243,11 +329,32 @@ void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
               << dst_phy_addr << "(" << dst_offset << "), "
               << src_phy_addr << "(" << src_offset << "), "
               << size << std::endl;
+    
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // load dram address into $0
+    Li liAddr1(0, dst_phy_addr + dst_offset);
+    queue->EmplaceBack(liAddr1);
+
+    // load scratchpad address into $1
+    Li liAddr2(1, src_phy_addr + src_offset);
+    queue->EmplaceBack(liAddr2);
+
+    // $2 <- size
+    Li liSize(2, size);
+    queue->EmplaceBack(liSize);
+
+    // create a scratchpad load instruction: load.b $0, $1, $2
+    nnpu::BufferLSInsn load(nnpu::LSDIR::Store, 0, 1, 2);
+    queue->EmplaceBack(load);
 }
 
 void NNPUSynchronize(uint32_t timeout)
 {
     LOG(INFO) << "Sync" << std::endl;
 
-    LOG(INFO) << nnpu::InsnQueue::ThreadLocal()->GetInsns().size() << " instructions to run";
+    LOG(INFO) << "instructions to run: " << std::endl;
+
+    nnpu::InsnQueue::ThreadLocal()->Dump(LOG(INFO));
 }

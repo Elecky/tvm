@@ -1,6 +1,6 @@
 # data configs
-dtype: float16
-data_width: 16  # data width in bits, for those data in scratchpad
+dtype_w: int16
+dtype_n: int8
 
 # dram configs
 dram:
@@ -14,10 +14,11 @@ dram:
   # memory address map policy
   map_policy: interleaved
   # timing related parameters
-  
 
-# use a unified scratch pad or not
-use_uni_scratchpad: true
+
+# scratchpad design, choices are [unified, seperated]
+scratchpad_design: unified
+
 # unified scratchpad configs
 scratchpad:
   nchannel: 2

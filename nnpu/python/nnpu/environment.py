@@ -44,8 +44,11 @@ class Environment(object):
     dma_copy_pragma = 'nnpu_dma_copy'
     scratchpad_ls = 'nnpu_scratchpad_ls'
 
-    def __init__(self, cfg):
+    def __init__(self, cfg_path):
         self.cfg = {}
+
+        cfg = yaml.load(open(cfg_path))
+        self.cfg_path = cfg_path
         self.cfg.update(cfg)
 
         self.nnpu_axis = tvm.thread_axis('nnpu')
@@ -56,10 +59,13 @@ class Environment(object):
     def __enter__(self):
         self.last_env = Environment.current
         Environment.current = self
+        set_device(self)
         return self
 
     def __exit__(self, ptype, value, trace):
         Environment.current = self.last_env
+        # reset device based on the last Environment
+        set_device(Environment.current)
 
     def scope2config(self, scope):
         key = None
@@ -72,6 +78,12 @@ class Environment(object):
         else:
             raise ValueError('illegal scope name')
         return self.cfg[key]
+
+# set device with the configs in the environment
+def set_device(env):
+    func = tvm.get_global_func('nnpu.set_dev',True)
+    func('S0', env.cfg_path)
+    pass
 
 def get_env():
     return Environment.current
@@ -90,7 +102,7 @@ def mem_info_dram():
 @tvm.register_func("tvm.info.mem.{0}".format(Environment.uni_scratchpad_scope))
 def mem_info_scratchpad():
     spec = get_env()
-    if (spec.cfg['use_uni_scratchpad']):
+    if (spec.cfg['scratchpad_design'] == 'unified'):
         buffer_cfg = spec.cfg['scratchpad']
         return tvm.make.node("MemoryInfo",
                              unit_bits=8,
@@ -125,9 +137,7 @@ def init_default_env():
         raise RuntimeError(
             "Error: {} not found.make sure you have config.json in your vta root"
             .format(filename))
-    return Environment(yaml.load(open(path_list[0])))
-
-Environment.current = init_default_env()
+    return Environment(path_list[0])
 
 # TVM related registration
 @tvm.register_func("tvm.intrin.rule.default.nnpu.coproc_sync")
@@ -135,3 +145,8 @@ def coproc_sync(op):
     _ = op
     return tvm.call_extern(
         "int32", "NNPUSynchronize", 1<<31)
+
+def init():
+    Environment.current = init_default_env()
+    # set initial device
+    set_device(Environment.current)

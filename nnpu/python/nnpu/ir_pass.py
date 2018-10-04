@@ -4,6 +4,7 @@ additional ir pass for nnpu, to transform ir before lowering
 
 from .environment import get_env
 import tvm
+from helper import dtype_bytes as get_dtype_bytes
 from topi import util
 
 # some helper functions
@@ -97,8 +98,6 @@ def _fold(src_shape, src_strides, dst_shape, dst_strides, pad_before = None, pad
 
 def inject_dma_intrin(stmt_in):
     env = get_env()
-    dtype_width = env.cfg['data_width']
-    dtype_bytes = dtype_width / 8
 
     def _inject_copy(src, dst, pad_before, pad_after, pad_value):
         if (pad_after or pad_before):
@@ -110,6 +109,8 @@ def inject_dma_intrin(stmt_in):
 
         assert src.dtype == dst.dtype, 'dtype of copying source and destination does not match, \
             {0} vs {1}'.format(src.dtype, dst.dtype)
+        
+        dtype_bytes = get_dtype_bytes(src.dtype)
         
         ndim = len(src.shape)
         
@@ -224,8 +225,6 @@ def inject_dma_intrin(stmt_in):
 
 def inject_scratchpad_ls(stmt_in):
     env = get_env()
-    dtype_width = env.cfg['data_width']
-    dtype_bytes = dtype_width / 8
 
     def _inject_copy(src, dst, pad_before, pad_after, pad_value):
         if (pad_after or pad_before):
@@ -238,6 +237,8 @@ def inject_scratchpad_ls(stmt_in):
         assert src.dtype == dst.dtype, 'dtype of copying source and destination does not match, \
             {0} vs {1}'.format(src.dtype, dst.dtype)
         
+        dtype_bytes = get_dtype_bytes(src.dtype)
+
         ndim = len(src.shape)
         
         assert util.equal_const_int(src.strides[ndim - 1], 1), \

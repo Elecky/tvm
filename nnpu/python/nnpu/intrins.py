@@ -1,4 +1,5 @@
 import tvm
+from helper import dtype_bytes
 
 class IntrinManager(object):
 
@@ -8,27 +9,38 @@ class IntrinManager(object):
         self.intrin_cache = {}
         self.env = env
 
+        # some helper dicts
+        self.mode2code = {'n': 0, 'w': 1, 'dec': 2, 'inc': 3}
+
         # define intrin constructors here
         
         # unary vector intrin
-        def vctr_unary(intrin_op, scope_in = self.env.uni_scratchpad_scope, 
-                       scope_out = self.env.uni_scratchpad_scope):
-            name = intrin_op + ';' + scope_in + ';' + scope_out
+        def vctr_unary(intrin_op, scope_in = 'uni', scope_out = 'uni', mode='w'):
+            env = self.env
+            cfg = self.env.cfg
+
+            scope_in = self.get_scope(scope_in)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in = cfg['dtype_w'] if mode in ['w', 'dec'] else cfg['dtype_n']
+            dtype_out = cfg['dtype_w'] if mode in ['w', 'inc'] else cfg['dtype_n']
+            dtype_in_bits = dtype_bytes(dtype_in) * 8
+            dtype_out_bits = dtype_bytes(dtype_out) * 8
+            
+            # the name should contain all parameters
+            name = intrin_op + ';' + scope_in + ';' + scope_out + ';' + mode
 
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
-            
-            env = self.env
-            cfg = self.env.cfg
 
             in_shape = (cfg['vector_unit']['size'], )
             out_shape = (cfg['vector_unit']['size'], )
 
-            op_in = tvm.placeholder(in_shape, dtype=cfg['dtype'],
-                                 name='in')
+            op_in = tvm.placeholder(in_shape, dtype=dtype_in,
+                                    name='in')
             # To Add More Intrins, just add other expression and extern function call here!!!!!
             if (intrin_op == 'VEXP'):
-                expr = lambda i: tvm.exp(op_in[i])
+                expr = lambda i: tvm.exp(op_in[i]).astype(dtype_out)
                 extern_func = 'NNPU_VEXP'
             else:
                 raise ValueError('unsupported vctr unary intrin op')
@@ -37,11 +49,11 @@ class IntrinManager(object):
             in_layout = tvm.decl_buffer(
                 op_in.shape, op_in.dtype, 'op1', scope=scope_in, 
                 data_alignment=env.scope2config(scope_in)['width_per_channel'] / 8,
-                offset_factor=env.scope2config(scope_in)['width_per_channel'] / cfg['data_width'])
+                offset_factor=env.scope2config(scope_in)['width_per_channel'] / dtype_in_bits)
             out_layout = tvm.decl_buffer(
                 out.shape, out.dtype, 'out', scope=scope_out,
                 data_alignment=env.scope2config(scope_out)['width_per_channel'] / 8,
-                offset_factor=env.scope2config(scope_out)['width_per_channel'] / cfg['data_width'])
+                offset_factor=env.scope2config(scope_out)['width_per_channel'] / dtype_out_bits)
 
             def lower_func(ins, outs):
                 din = ins[0]
@@ -52,7 +64,8 @@ class IntrinManager(object):
                 irb.emit(tvm.call_extern("int32", extern_func,
                             dout.access_ptr("w", 'uint32'),
                             din.access_ptr("r", 'uint32'),
-                            cfg['vector_unit']['size']
+                            cfg['vector_unit']['size'],
+                            self.get_mode_code(mode)
                             ))
                 
                 return irb.get()
@@ -67,7 +80,33 @@ class IntrinManager(object):
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
             format(intrin_op)
+        if ('mode' in kwargs):
+            assert kwargs['mode'] in self.mode2code, \
+                'illegal mode value {0}'.format(kwargs['mode'])
         return self.intrin_ctors[intrin_op](intrin_op, **kwargs)
+
+    # convert scope name, also check whether scope is legal under current config
+    def get_scope(self, scope_str):
+        env = self.env
+        scope = scope_str
+        if (scope_str == 'uni'):
+            scope = env.uni_scratchpad_scope
+        elif (scope_str == 'vctr'):
+            scope = env.vctr_scratch_scope
+        elif (scope_str == 'mat'):
+            scope = env.mat_scratch_scope
+        design = env.cfg['scratchpad_design']
+        assert not (design == 'unified') or (scope == env.uni_scratchpad_scope), \
+            'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
+        assert not (design == 'seperated') or \
+                (scope in [env.vctr_scratch_scope, env.mat_scratch_scope]), \
+                'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
+        return scope
+    
+    def get_mode_code(self, mode_str):
+        return self.mode2code[mode_str]
+
+# the code follows is not used
 
 def declare_intrins(env):
     intrins = {}
