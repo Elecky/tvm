@@ -226,7 +226,7 @@ void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint
     queue->EmplaceBack(li3);
 
     // create a vctr exp instruction: VEXP $0, $1, $2
-    nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, 2, mode);
+    nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, 2, nnpu::ModeFromInt(mode));
     queue->EmplaceBack(exp);
 }
 

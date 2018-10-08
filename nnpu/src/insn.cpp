@@ -3,6 +3,7 @@
 */
 #include <nnpu/insn.h>
 #include <string>
+#include <stdexcept>
 
 using std::ostream;
 using std::string;
@@ -10,24 +11,45 @@ using std::string;
 namespace nnpu
 {
 
-const char* mode2str(uint32_t mode)
+const char* mode2str(ModeCode mode)
 {
     switch (mode)
     {
-    case 0:
+    case ModeCode::N:
         return "n";
     
-    case 1:
+    case ModeCode::W:
         return "w";
 
-    case 2:
+    case ModeCode::Dec:
         return "dec";
 
-    case 3:
+    case ModeCode::Inc:
         return "inc";
 
     default:
         return "??";
+    }
+}
+
+ModeCode ModeFromInt(uint32_t mode)
+{
+    switch (mode)
+    {
+    case 0:
+        return ModeCode::N;
+    
+    case 1:
+        return ModeCode::W;
+
+    case 2:
+        return ModeCode::Dec;
+
+    case 3:
+        return ModeCode::Inc;
+
+    default:
+        throw std::invalid_argument("unexpected mode number");
     }
 }
 

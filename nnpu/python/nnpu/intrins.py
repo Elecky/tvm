@@ -22,10 +22,7 @@ class IntrinManager(object):
             scope_in = self.get_scope(scope_in)
             scope_out = self.get_scope(scope_out)
 
-            dtype_in = cfg['dtype_w'] if mode in ['w', 'dec'] else cfg['dtype_n']
-            dtype_out = cfg['dtype_w'] if mode in ['w', 'inc'] else cfg['dtype_n']
-            dtype_in_bits = dtype_bytes(dtype_in) * 8
-            dtype_out_bits = dtype_bytes(dtype_out) * 8
+            dtype_in, dtype_out = self.mode2dtype(mode)
             
             # the name should contain all parameters
             name = intrin_op + ';' + scope_in + ';' + scope_out + ';' + mode
@@ -40,20 +37,18 @@ class IntrinManager(object):
                                     name='in')
             # To Add More Intrins, just add other expression and extern function call here!!!!!
             if (intrin_op == 'VEXP'):
-                expr = lambda i: tvm.exp(op_in[i]).astype(dtype_out)
+                if (mode == 'inc'):
+                    expr = lambda i: tvm.exp(op_in[i].astype(dtype_out))
+                elif (mode == 'dec'):
+                    expr = lambda i: tvm.exp(op_in[i]).astype(dtype_out)
+                else:
+                    expr = lambda i: tvm.exp(op_in[i])
                 extern_func = 'NNPU_VEXP'
             else:
                 raise ValueError('unsupported vctr unary intrin op')
+            
             out = tvm.compute(out_shape, expr,
                             name = 'out')
-            in_layout = tvm.decl_buffer(
-                op_in.shape, op_in.dtype, 'op1', scope=scope_in, 
-                data_alignment=env.scope2config(scope_in)['width_per_channel'] / 8,
-                offset_factor=env.scope2config(scope_in)['width_per_channel'] / dtype_in_bits)
-            out_layout = tvm.decl_buffer(
-                out.shape, out.dtype, 'out', scope=scope_out,
-                data_alignment=env.scope2config(scope_out)['width_per_channel'] / 8,
-                offset_factor=env.scope2config(scope_out)['width_per_channel'] / dtype_out_bits)
 
             def lower_func(ins, outs):
                 din = ins[0]
@@ -69,6 +64,9 @@ class IntrinManager(object):
                             ))
                 
                 return irb.get()
+            
+            in_layout = self.decl_buffer(op_in, scope_in, 'in_buf')
+            out_layout = self.decl_buffer(out, scope_out, 'out_buf')
 
             return tvm.decl_tensor_intrin(out.op, lower_func,
                                     name=name,
@@ -103,6 +101,19 @@ class IntrinManager(object):
                 'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
         return scope
     
+    def decl_buffer(self, op, scope, buf_name):
+        dtype_bits = dtype_bytes(op.dtype) * 8
+        return tvm.decl_buffer(
+                op.shape, op.dtype, buf_name, scope=scope,
+                data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8,
+                offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
+
+    def mode2dtype(self, mode):
+        cfg = self.env.cfg
+        dtype_in = cfg['dtype_w'] if mode in ['w', 'dec'] else cfg['dtype_n']
+        dtype_out = cfg['dtype_w'] if mode in ['w', 'inc'] else cfg['dtype_n']
+        return dtype_in, dtype_out
+
     def get_mode_code(self, mode_str):
         return self.mode2code[mode_str]
 

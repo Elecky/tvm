@@ -171,11 +171,13 @@ TVM_REGISTER_GLOBAL("nnpu.set_dev")
         Type devType;
         std::string t_str = args[0];
 
-        if (t_str == std::string("S0"))
+        static const std::string s0("S0"), s1("S1");
+
+        if (t_str == s0)
         {
             devType = Type::S0;
         }
-        else if (t_str == std::string("S1"))
+        else if (t_str == s1)
         {
             devType = Type::S1;
         }

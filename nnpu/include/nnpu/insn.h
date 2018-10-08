@@ -20,6 +20,13 @@ enum class InsnType
     VctrUnary, DMACopy, BufferLS, Li
 };
 
+/*!
+ * Mode type for instructios, which indicates the input, output data type.
+*/
+enum class ModeCode { N, W, Dec, Inc };
+
+ModeCode ModeFromInt(uint32_t mode);
+
 /*
 * unary vector instruction
 */
@@ -36,14 +43,14 @@ public:
     uint32_t VctrInAddrReg;
     uint32_t ElemCountReg;
 
-    uint32_t Mode;
+    ModeCode Mode;
 
     /* default constructor */
     VctrUnaryInsn() = default;
 
     /* constructor */
     VctrUnaryInsn(VctrUnaryOp _op, uint32_t _vctrOutAddrReg, uint32_t _vctrInAddrReg, 
-        uint32_t _elemCountReg, uint32_t _mode) :
+        uint32_t _elemCountReg, ModeCode _mode) :
         Op(_op), VctrOutAddrReg(_vctrOutAddrReg), VctrInAddrReg(_vctrInAddrReg), 
         ElemCountReg(_elemCountReg), Mode(_mode)
     {}

@@ -2,6 +2,10 @@
 dtype_w: int16
 dtype_n: int8
 
+# scalar register file configs
+# number of register file elements
+register_file_size: 32
+
 # dram configs
 dram:
   nchannel: 2
