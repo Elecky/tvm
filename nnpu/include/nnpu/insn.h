@@ -17,7 +17,7 @@ namespace nnpu
 */
 enum class InsnType
 {
-    VctrUnary, DMACopy, BufferLS, Li
+    VctrUnary, DMACopy, BufferLS, Li, Stall
 };
 
 /*!
@@ -150,6 +150,14 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+struct StallInsn
+{
+public:
+    StallInsn() = default;
+
+    void Dump(std::ostream& os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -169,6 +177,8 @@ public:
         VctrUnaryInsn VctrUnary;
 
         LiInsn Li;
+
+        StallInsn stall;
     };
 
     /* dispatch a call depends on the instruction type
@@ -232,6 +242,9 @@ public:
     {}
 
     NNPUInsn(const LiInsn& _insn) : Type(InsnType::Li), Li(_insn)
+    {}
+
+    NNPUInsn(const StallInsn &_insn) : Type(InsnType::Stall), stall(_insn)
     {}
 };
 

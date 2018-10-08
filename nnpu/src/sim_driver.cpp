@@ -137,6 +137,11 @@ void NNPUMemFree(void *buf)
     return nnpu::DRAM::Global()->Free(buf);
 }
 
+void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns)
+{
+    nnpu::Simulator::ThreadLocal()->Run(insns);
+}
+
 /*!
 * \brief construct a nnpu simulator based on given configuration
 * \param:

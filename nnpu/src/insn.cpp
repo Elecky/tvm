@@ -76,6 +76,11 @@ void LiInsn::Dump(std::ostream& os) const
     os << "li $" << this->ResReg << ", " << this->Imm;
 }
 
+void StallInsn::Dump(std::ostream& os) const
+{
+    os << "stall";
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)

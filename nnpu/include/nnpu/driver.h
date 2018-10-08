@@ -31,6 +31,8 @@ uint32_t NNPUMemGetPhyAddr(void *buf);
 
 void NNPUMemFree(void *buf);
 
+void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns);
+
 #ifdef __cplusplus
 }
 #endif
@@ -61,7 +63,7 @@ public:
     * \brief run instructions on the simultor, pure virtual method.
     * \param insns: instructions to run.
     */
-    virtual void Run(std::vector<NNPUInsn> insns) = 0;
+    virtual void Run(const std::vector<NNPUInsn> &insns) = 0;
 
     virtual ~Simulator() {}
 

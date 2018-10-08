@@ -354,7 +354,12 @@ void NNPUSynchronize(uint32_t timeout)
 {
     LOG(INFO) << "Sync" << std::endl;
 
-    LOG(INFO) << "instructions to run: " << std::endl;
+    //LOG(INFO) << "instructions to run: " << std::endl;
+
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    nnpu::StallInsn stall;
+    queue->EmplaceBack(stall);
 
     nnpu::InsnQueue::ThreadLocal()->Dump(LOG(INFO));
 }

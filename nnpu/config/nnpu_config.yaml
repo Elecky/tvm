@@ -9,7 +9,7 @@ register_file_size: 32
 # dram configs
 dram:
   nchannel: 2
-  unit_bits: 32  # the addressable bits
+  #unit_bits: 32  # the addressable bits
   # width in bits of every channel, has to be the power of 2
   width_per_channel: 64
   # log size in byte of every channel
