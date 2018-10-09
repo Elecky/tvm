@@ -105,11 +105,9 @@ DevType Simulator::DefaultType = DevType::S0;
 /*!
 * use dmlc Thread Local to achieve thread local instance.
 */
-std::shared_ptr<Simulator> Simulator::ThreadLocal()
+std::shared_ptr<Simulator>& Simulator::ThreadLocal()
 {
-    std::shared_ptr<Simulator> ptr = *(dmlc::ThreadLocalStore<std::shared_ptr<Simulator>>::Get());
-
-    return ptr;
+    return *(dmlc::ThreadLocalStore<std::shared_ptr<Simulator>>::Get());
 }
 
 } // namespace nnpu
@@ -139,6 +137,7 @@ void NNPUMemFree(void *buf)
 
 void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns)
 {
+    //LOG(INFO) << "pointer to simulator is: " << nnpu::Simulator::ThreadLocal();
     nnpu::Simulator::ThreadLocal()->Run(insns);
 }
 

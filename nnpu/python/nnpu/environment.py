@@ -146,7 +146,4 @@ def coproc_sync(op):
     return tvm.call_extern(
         "int32", "NNPUSynchronize", 1<<31)
 
-def init():
-    Environment.current = init_default_env()
-    # set initial device
-    set_device(Environment.current)
+Environment.current = init_default_env()

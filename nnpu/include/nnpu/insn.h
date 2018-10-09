@@ -223,8 +223,12 @@ public:
         case InsnType::Li:
             return functor(this->Li, std::forward<TArgs>(args)...);
 
+        case InsnType::Stall:
+            return functor(this->stall, std::forward<TArgs>(args)...);
+
         default:
-            LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type);
+            LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
+                       << ". please modify NNPUInsn::Call to implement missing dispatch";
             return typename T::result_type();
             break;
         }

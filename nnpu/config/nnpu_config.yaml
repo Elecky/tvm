@@ -1,5 +1,5 @@
 # data configs
-dtype_w: int16
+dtype_w: float32
 dtype_n: int8
 
 # scalar register file configs

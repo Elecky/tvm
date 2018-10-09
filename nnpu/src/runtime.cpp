@@ -361,5 +361,7 @@ void NNPUSynchronize(uint32_t timeout)
     nnpu::StallInsn stall;
     queue->EmplaceBack(stall);
 
-    nnpu::InsnQueue::ThreadLocal()->Dump(LOG(INFO));
+    nnpu::InsnQueue::ThreadLocal()->Dump(LOG(INFO) << std::endl);
+
+    NNPU_Run(queue->GetInsns());
 }

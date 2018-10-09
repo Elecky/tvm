@@ -70,7 +70,7 @@ public:
     /*!
     * \brief get a thread local simulator instance 
     */
-    static std::shared_ptr<Simulator> ThreadLocal();
+    static std::shared_ptr<Simulator>& ThreadLocal();
 
     /*! 
     * \brief default simulator type
