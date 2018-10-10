@@ -11,6 +11,7 @@ def test():
     a_buf = tvm.compute(shape, lambda *i: a(*i), name='a_buf')
     
     b_buf = tvm.compute(shape, lambda i, j: tvm.exp(a_buf[i, j].astype(env.cfg['dtype_w'])), name='b_buf')
+    #b_buf = tvm.compute(shape, lambda i, j: tvm.exp(a_buf[i, j]).astype(env.cfg['dtype_n']), name='b_buf')
     b = tvm.compute(shape, lambda *i: b_buf(*i), name='b')
     b_host = tvm.compute(shape, lambda *i: b(*i), name='b_host')
 
@@ -51,6 +52,7 @@ def test():
     ctx = tvm.nd.TVMContext(13, 0)
 
     a_np = np.random.randint(size=shape, dtype=a_host.dtype, low = 0, high = 20)
+    #a_np = np.random.random(size=shape).astype(a_host.dtype)
     a_nd = tvm.nd.array(a_np, ctx)
     b_nd = tvm.nd.array(np.zeros(shape).astype(b_host.dtype), ctx)
 
@@ -66,6 +68,7 @@ def test():
     print(b_np)
     print('ground truth =')
     gt = np.exp(a_np, dtype=b_host.dtype)
+    #gt = np.exp(a_np).astype(b_host.dtype)
     print(gt)
     np.testing.assert_allclose(b_np, gt)
 

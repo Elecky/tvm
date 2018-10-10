@@ -10,7 +10,7 @@ class IntrinManager(object):
         self.env = env
 
         # some helper dicts
-        self.mode2code = {'n': 0, 'w': 1, 'dec': 2, 'inc': 3}
+        self.mode2code = {'n': 0, 'inc': 1, 'dec': 2, 'w': 3}
 
         # define intrin constructors here
         
@@ -75,6 +75,67 @@ class IntrinManager(object):
 
         self.intrin_ctors['VEXP'] = vctr_unary
 
+        def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
+                 scope_out = 'uni', mode='inc'):
+            env = self.env
+            cfg = self.env.cfg
+
+            assert len(shape) == 3, 'shape should be tuple or list with 3 values'
+            # TODO: do a shape check with cfg here!!!!
+            nRowOut, factor, nColOut = shape
+
+            scope_in1 = self.get_scope(scope_in1)
+            scope_in2 = self.get_scope(scope_in2)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+            
+            # the name should contain all parameters
+            name = intrin_op + str(nRowOut) + '_' + str(factor) + '_' + str(nColOut) + ';' \
+                   + ';' + scope_in1 + ';' + scope_in2 + ';' + scope_out + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+
+            in1 = tvm.placeholder((nRowOut, factor), dtype=dtype_in, name='in1')
+            in2 = tvm.placeholder((nColOut, factor), dtype=dtype_in, name='in2')
+            k = tvm.reduce_axis((0, factor), 'k')
+            if (mode == 'inc'):
+                expr = lambda i, j: \
+                    tvm.sum(in1[i, k].astype(dtype_out) * in2[j, k].astype(dtype_out), axis=k)
+            elif (mode == 'dec'):
+                expr = lambda i, j: tvm.sum(in1[i, k] * in2[j, k], axis=k).astype(dtype_out)
+            else:
+                expr = lambda i, j: tvm.sum(in1[i, k] * in2[j, k], axis=k)
+            out = tvm.compute((nRowOut, nColOut), expr, name='out')
+            in1_buf = self.decl_buffer(in1, scope_in1, 'in1')
+            in2_buf = self.decl_buffer(in2, scope_in2, 'in2')
+            out_buf = self.decl_buffer(out, scope_out, 'out')
+
+            def lower_func(ins, outs):
+                din1, din2 = ins[0], ins[1]
+                dout = outs[0]
+
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", 'NNPU_Gemm',
+                            nRowOut, factor, nColOut,
+                            dout.access_ptr('w', 'uint32'),
+                            din1.access_ptr('r', 'uint32'),
+                            din2.access_ptr('r', 'uint32'),
+                            self.get_mode_code(mode)
+                            ))
+                
+                return irb.get()
+
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                          name=name,
+                                          binds={in1: in1_buf,
+                                                 in2: in2_buf,
+                                                 out: out_buf})
+        
+        self.intrin_ctors['GEMM'] = gemm
+
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
             format(intrin_op)
@@ -101,15 +162,17 @@ class IntrinManager(object):
                 'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
         return scope
     
-    def decl_buffer(self, op, scope, buf_name):
-        dtype_bits = dtype_bytes(op.dtype) * 8
+    def decl_buffer(self, tensor, scope, buf_name):
+        dtype_bits = dtype_bytes(tensor.dtype) * 8
         return tvm.decl_buffer(
-                op.shape, op.dtype, buf_name, scope=scope,
+                tensor.shape, tensor.dtype, buf_name, scope=scope,
                 data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8,
                 offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
 
     def mode2dtype(self, mode):
         cfg = self.env.cfg
+        assert mode in ['w', 'n', 'inc', 'dec'], 'invalid mode string'
+
         dtype_in = cfg['dtype_w'] if mode in ['w', 'dec'] else cfg['dtype_n']
         dtype_out = cfg['dtype_w'] if mode in ['w', 'inc'] else cfg['dtype_n']
         return dtype_in, dtype_out

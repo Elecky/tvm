@@ -46,6 +46,9 @@ void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
                         nnpu_buf_addr_t src_phy_addr, uint32_t src_offset,
                         uint32_t size);
 
+void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut, 
+             uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t mode);
+
 void NNPUSynchronize(uint32_t timeout);
 
 #ifdef __cplusplus

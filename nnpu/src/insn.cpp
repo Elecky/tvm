@@ -40,13 +40,13 @@ ModeCode ModeFromInt(uint32_t mode)
         return ModeCode::N;
     
     case 1:
-        return ModeCode::W;
+        return ModeCode::Inc;
 
     case 2:
         return ModeCode::Dec;
 
     case 3:
-        return ModeCode::Inc;
+        return ModeCode::W;
 
     default:
         throw std::invalid_argument("unexpected mode number");
@@ -79,6 +79,12 @@ void LiInsn::Dump(std::ostream& os) const
 void StallInsn::Dump(std::ostream& os) const
 {
     os << "stall";
+}
+
+void GemmInsn::Dump(std::ostream& os) const
+{
+    os << "gemm_" << NRowOut << '_' << Factor << '_' << NColOut << '.' << mode2str(this->Mode)
+       << " $" << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
 // ToString functions starts from here

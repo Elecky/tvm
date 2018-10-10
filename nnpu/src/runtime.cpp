@@ -350,6 +350,27 @@ void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
     queue->EmplaceBack(load);
 }
 
+void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut, 
+             uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t mode)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // load 3 addresses
+    Li li1(0, outAddr);
+    queue->EmplaceBack(li1);
+    
+    Li li2(1, in1Addr);
+    queue->EmplaceBack(li2);
+
+    Li li3(2, in2Addr);
+    queue->EmplaceBack(li3);
+
+    // create a gemm instruction
+    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, nnpu::ModeFromInt(mode));
+    queue->EmplaceBack(gemm);
+}
+
 void NNPUSynchronize(uint32_t timeout)
 {
     LOG(INFO) << "Sync" << std::endl;
