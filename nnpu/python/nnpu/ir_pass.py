@@ -142,8 +142,7 @@ def inject_dma_intrin(stmt_in):
 
             src_index = src_index + src.elem_offset #if src.elem_offset.defined() else \
                         #src_index
-            dst_index = dst_index #+ dst.elem_offset if dst.elem_offset.defined() else \
-                        #dst_index
+            dst_index = dst_index # access_ptr includes elem_offset already
             # NNPU_DMALoad(src_buf_addr, src_buf_offset, dst_phy_addr, dst_phy_offset, bytes)
             body = tvm.call_extern('int32', 'NNPU_DMALoad', 
                         src.data, src_index * dtype_bytes,

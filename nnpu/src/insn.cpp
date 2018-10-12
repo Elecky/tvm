@@ -40,13 +40,13 @@ ModeCode ModeFromInt(uint32_t mode)
         return ModeCode::N;
     
     case 1:
-        return ModeCode::W;
+        return ModeCode::Inc;
 
     case 2:
         return ModeCode::Dec;
 
     case 3:
-        return ModeCode::Inc;
+        return ModeCode::W;
 
     default:
         throw std::invalid_argument("unexpected mode number");
@@ -79,6 +79,18 @@ void LiInsn::Dump(std::ostream& os) const
 void StallInsn::Dump(std::ostream& os) const
 {
     os << "stall";
+}
+
+void GemmInsn::Dump(std::ostream& os) const
+{
+    os << "gemm_" << NRowOut << '_' << Factor << '_' << NColOut << '.' << mode2str(this->Mode)
+       << " $" << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+}
+
+void VctrBinaryInsn::Dump(ostream& os) const
+{
+    os << 'V' << ToString(Op) << "V_" << Size << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
 // ToString functions starts from here
@@ -120,6 +132,30 @@ const char* ToString(LSDIR value)
 
     case LSDIR::Store:
         return "Store";
+
+    default:
+        return "Unknown";
+    }
+}
+
+const char* ToString(VctrBinaryOp value)
+{
+    switch (value)
+    {
+    case VctrBinaryOp::Add:
+        return "Add";
+
+    case VctrBinaryOp::Sub:
+        return "Sub";
+
+    case VctrBinaryOp::Mul:
+        return "Mul";
+
+    case VctrBinaryOp::Div:
+        return "Div";
+
+    case VctrBinaryOp::GTM:
+        return "GTM";
 
     default:
         return "Unknown";

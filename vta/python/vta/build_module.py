@@ -72,7 +72,6 @@ def lower(*args, **kwargs):
 
     This wrapper automatically applies VTA's build_config
     if there is no user specified build_config in context.
-
     See Also
     --------
     tvm.lower : The original TVM's lower function

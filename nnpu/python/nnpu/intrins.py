@@ -10,7 +10,7 @@ class IntrinManager(object):
         self.env = env
 
         # some helper dicts
-        self.mode2code = {'n': 0, 'w': 1, 'dec': 2, 'inc': 3}
+        self.mode2code = {'n': 0, 'inc': 1, 'dec': 2, 'w': 3}
 
         # define intrin constructors here
         
@@ -109,15 +109,17 @@ class IntrinManager(object):
                 'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
         return scope
     
-    def decl_buffer(self, op, scope, buf_name):
-        dtype_bits = dtype_bytes(op.dtype) * 8
+    def decl_buffer(self, tensor, scope, buf_name):
+        dtype_bits = dtype_bytes(tensor.dtype) * 8
         return tvm.decl_buffer(
-                op.shape, op.dtype, buf_name, scope=scope,
-                data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8,
-                offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
+                tensor.shape, tensor.dtype, buf_name, scope=scope,
+                data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8)
+                #offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
 
     def mode2dtype(self, mode):
         cfg = self.env.cfg
+        assert mode in ['w', 'n', 'inc', 'dec'], 'invalid mode string'
+
         dtype_in = cfg['dtype_w'] if mode in ['w', 'dec'] else cfg['dtype_n']
         dtype_out = cfg['dtype_w'] if mode in ['w', 'inc'] else cfg['dtype_n']
         return dtype_in, dtype_out

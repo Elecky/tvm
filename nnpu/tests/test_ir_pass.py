@@ -7,10 +7,11 @@ def test():
     nnpu.set_device(env)
     shape = (2, 16)
     a_host = tvm.placeholder(shape, env.cfg['dtype_n'], 'a_host')
+    print('a host '+str(a_host))
     a = tvm.compute(shape, lambda *i: a_host(*i), name='a')
     a_buf = tvm.compute(shape, lambda *i: a(*i), name='a_buf')
     
-    b_buf = tvm.compute(shape, lambda i, j: tvm.exp(a_buf[i, j].astype(env.cfg['dtype_w'])), name='b_buf')
+    b_buf = tvm.compute(shape, lambda i, j: tvm.log(a_buf[i, j].astype(env.cfg['dtype_w'])), name='b_buf')
     b = tvm.compute(shape, lambda *i: b_buf(*i), name='b')
     b_host = tvm.compute(shape, lambda *i: b(*i), name='b_host')
 
@@ -23,7 +24,8 @@ def test():
     s[a_buf].set_scope(env.uni_scratchpad_scope)
     s[b_buf].set_scope(env.uni_scratchpad_scope)
 
-    #print(dir(s[b].op.body))
+    #print
+    # (dir(s[b].op.body))
 
     # mark compiler pragmas
     s[a].pragma(s[a].op.axis[0], env.dma_copy_pragma)
@@ -35,22 +37,23 @@ def test():
     s[a_buf].compute_at(s[b_buf], b_buf.op.axis[0])
 
     # tensorize
-    s[b_buf].tensorize(s[b_buf].op.axis[1], env.intrins.get('VEXP', mode='inc'))
+    s[b_buf].tensorize(s[b_buf].op.axis[1], env.intrins.get('VLOG', mode='inc'))
 
     # build
     print(tvm.lower(s, [a_host, b_host], simple_mode=True))
 
     print(nnpu.lower(s, [a_host, b_host], simple_mode=True))
     #exit()
-    func = nnpu.build(s, [a_host, b_host], 'nnpu', 'llvm', name='nnpu_exp')
+    func = nnpu.build(s, [a_host, b_host], 'nnpu', 'llvm', name='nnpu_log')
 
     print('function built: ')
     #print(func.get_source())
 
     # prepare data
-    ctx = tvm.nd.TVMContext(13, 0)
-
-    a_np = np.random.randint(size=shape, dtype=a_host.dtype, low = 0, high = 20)
+    ctx = tvm.nd.TVMContext(13, 0)#???
+    print ('i want to know:')
+    print (ctx.exist)
+    a_np = np.random.randint(size=shape, dtype=a_host.dtype, low = 1, high = 20)
     a_nd = tvm.nd.array(a_np, ctx)
     b_nd = tvm.nd.array(np.zeros(shape).astype(b_host.dtype), ctx)
 
@@ -65,7 +68,7 @@ def test():
     print('b=')
     print(b_np)
     print('ground truth =')
-    gt = np.exp(a_np, dtype=b_host.dtype)
+    gt = np.log(a_np, dtype=b_host.dtype)
     print(gt)
     np.testing.assert_allclose(b_np, gt)
 

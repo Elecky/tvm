@@ -17,7 +17,7 @@ namespace nnpu
 */
 enum class InsnType
 {
-    VctrUnary, DMACopy, BufferLS, Li, Stall
+    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary
 };
 
 /*!
@@ -158,6 +158,65 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+struct GemmInsn
+{
+public:
+    GemmInsn() = default;
+
+    GemmInsn(uint32_t _nRowOut, uint32_t _factor, uint32_t _nColOut, 
+             uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg, ModeCode _mode)
+            : NRowOut(_nRowOut), Factor(_factor), NColOut(_nColOut),
+              OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
+              Mode(_mode)
+    {}
+
+    // the following 3 field is not Imm nor register operand, 
+    // they are part of the instruction encoding, since only limited kinds of Gemm is supported,
+    // it's possible to use a few bits to encode the gemm operand shape in real use, 
+    // here to ease the coding of simulator, we use 3 uint32 instead.
+    uint32_t NRowOut;
+    uint32_t Factor;
+    uint32_t NColOut;
+
+    uint32_t OutAddrReg;
+    uint32_t In1AddrReg;
+    uint32_t In2AddrReg;
+
+    ModeCode Mode;
+
+    /*!
+    * \brief dump the string representation of this instruction into ostream
+    * \param os: the stream to which to dump.
+    */
+    void Dump(std::ostream& os) const;
+};
+
+enum class VctrBinaryOp { Add, Sub, Div, Mul, GTM /* greater than merge */ };
+const char* ToString(VctrBinaryOp value);
+struct VctrBinaryInsn
+{
+public:
+    VctrBinaryInsn() = default;
+
+    VctrBinaryInsn(VctrBinaryOp _op, uint32_t _outAddrReg, uint32_t _in1AddrReg, 
+        uint32_t _in2AddrReg, uint32_t _size, ModeCode _mode) :
+        Op(_op), OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
+        Size(_size), Mode(_mode)
+    {}
+
+    VctrBinaryOp Op;
+
+    uint32_t OutAddrReg;
+    uint32_t In1AddrReg;
+    uint32_t In2AddrReg;
+
+    // this is not a register nor an immediate, its part of insn encoding.
+    uint32_t Size;
+    ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -176,9 +235,13 @@ public:
 
         VctrUnaryInsn VctrUnary;
 
+        VctrBinaryInsn VctrBinary;
+
         LiInsn Li;
 
         StallInsn stall;
+
+        GemmInsn Gemm;
     };
 
     /* dispatch a call depends on the instruction type
@@ -226,6 +289,12 @@ public:
         case InsnType::Stall:
             return functor(this->stall, std::forward<TArgs>(args)...);
 
+        case InsnType::Gemm:
+            return functor(this->Gemm, std::forward<TArgs>(args)...);
+
+        case InsnType::VctrBinary:
+            return functor(this->VctrBinary, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -249,6 +318,12 @@ public:
     {}
 
     NNPUInsn(const StallInsn &_insn) : Type(InsnType::Stall), stall(_insn)
+    {}
+
+    NNPUInsn(const GemmInsn &_insn) : Type(InsnType::Gemm), Gemm(_insn)
+    {}
+
+    NNPUInsn(const VctrBinaryInsn &_insn) : Type(InsnType::VctrBinary), VctrBinary(_insn)
     {}
 };
 
