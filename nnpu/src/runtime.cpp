@@ -409,3 +409,23 @@ void NNPU_VAddV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t s
 {
     NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::Add);
 }
+
+void NNPU_VSubV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
+{
+    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::Sub);
+}
+
+void NNPU_VMulV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
+{
+    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::Mul);
+}
+
+void NNPU_VDivV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
+{
+    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::Div);
+}
+
+void NNPU_VGTMV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
+{
+    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::GTM);
+}

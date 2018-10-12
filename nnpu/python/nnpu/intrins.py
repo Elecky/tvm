@@ -194,6 +194,19 @@ class IntrinManager(object):
             if (intrin_op == 'VAddV'):
                 expr = lambda i: expr_template(in1[i], in2[i], lambda x, y: x + y)
                 extern_func = 'NNPU_VAddV'
+            elif (intrin_op == 'VSubV'):
+                expr = lambda i: expr_template(in1[i], in2[i], lambda x, y: x - y)
+                extern_func = 'NNPU_VSubV'
+            elif (intrin_op == 'VMulV'):
+                expr = lambda i: expr_template(in1[i], in2[i], lambda x, y: x * y)
+                extern_func = 'NNPU_VMulV'
+            elif (intrin_op == 'VDivV'):
+                expr = lambda i: expr_template(in1[i], in2[i], lambda x, y: x / y)
+                extern_func = 'NNPU_VDivV'
+            elif (intrin_op == 'VGTMV'):
+                expr = lambda i: expr_template(in1[i], in2[i], 
+                                    lambda x, y: tvm.select(x > y, x, y))
+                extern_func = 'NNPU_VGTMV'
             else:
                 raise ValueError('unhandled intrin_op in vctr_binary')
 
@@ -224,6 +237,10 @@ class IntrinManager(object):
                                                  in2: in2_buf,
                                                  out: out_buf})
         self.intrin_ctors['VAddV'] = vctr_binary
+        self.intrin_ctors['VSubV'] = vctr_binary
+        self.intrin_ctors['VMulV'] = vctr_binary
+        self.intrin_ctors['VDivV'] = vctr_binary
+        self.intrin_ctors['VGTMV'] = vctr_binary
 
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
@@ -255,8 +272,8 @@ class IntrinManager(object):
         dtype_bits = dtype_bytes(tensor.dtype) * 8
         return tvm.decl_buffer(
                 tensor.shape, tensor.dtype, buf_name, scope=scope,
-                data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8)
-                #offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
+                data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8,
+                offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
 
     def mode2dtype(self, mode):
         cfg = self.env.cfg
