@@ -82,7 +82,9 @@ class IntrinManager(object):
                                            out: out_layout})
 
         self.intrin_ctors['VEXP'] = vctr_unary
+<<<<<<< HEAD
         self.intrin_ctors['VLOG'] = vctr_unary
+=======
 
         def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
                  scope_out = 'uni', mode='inc', reduce=False):
