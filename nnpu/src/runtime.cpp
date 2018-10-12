@@ -229,6 +229,26 @@ void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint
     nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, 2, nnpu::ModeFromInt(mode));
     queue->EmplaceBack(exp);
 }
+void NNPU_VLOG(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode)
+{
+    LOG(INFO) << "VLOG " << vctr_out_addr << ", " << vctr_in_addr << ", " << len << std::endl;
+
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // load vector out address into $0
+    nnpu::LiInsn li1(0, vctr_out_addr);
+    queue->EmplaceBack(li1);
+    // vector in address into $1
+    nnpu::LiInsn li2(1, vctr_in_addr);
+    queue->EmplaceBack(li2);
+    // element count into $2
+    nnpu::LiInsn li3(2, len);
+    queue->EmplaceBack(li3);
+
+    // create a vctr log instruction: VLOG $0, $1, $2
+    nnpu::VctrUnaryInsn log(nnpu::VctrUnaryOp::Log, 0, 1, 2, nnpu::ModeFromInt(mode));
+    queue->EmplaceBack(log);
+}
 
 void NNPU_DMALoad(void *host_buf_addr, uint32_t host_buf_offset,
                   nnpu_dram_addr_t dst_phy_addr, uint32_t dst_phy_offset,

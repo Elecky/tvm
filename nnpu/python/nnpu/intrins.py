@@ -44,6 +44,14 @@ class IntrinManager(object):
                 else:
                     expr = lambda i: tvm.exp(op_in[i])
                 extern_func = 'NNPU_VEXP'
+            elif (intrin_op == 'VLOG'):
+                if (mode == 'inc'):
+                    expr = lambda i: tvm.log(op_in[i].astype(dtype_out))
+                elif (mode == 'dec'):
+                    expr = lambda i: tvm.log(op_in[i]).astype(dtype_out)
+                else:
+                    expr = lambda i: tvm.log(op_in[i])
+                extern_func = 'NNPU_VLOG'
             else:
                 raise ValueError('unsupported vctr unary intrin op')
             
@@ -74,7 +82,7 @@ class IntrinManager(object):
                                            out: out_layout})
 
         self.intrin_ctors['VEXP'] = vctr_unary
-
+        self.intrin_ctors['VLOG'] = vctr_unary
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
             format(intrin_op)
@@ -165,7 +173,47 @@ def declare_intrins(env):
                                          out: out_layout})
     
     intrins['VEXP'] = VExp(env, env.uni_scratchpad_scope, env.uni_scratchpad_scope, 'VEXP')
+    def VLog(env, scope1, scope2, name):
+        cfg = env.cfg
+        op1_shape = (cfg['vector_unit']['size'], )
+        out_shape = (cfg['vector_unit']['size'], )
 
+        op1 = tvm.placeholder(op1_shape, dtype=cfg['dtype'],
+                              name='op1')
+        #out = tvm.placeholder(out_shape, dtype=cfg['dtype'],
+        #                      name='op2')
+        out = tvm.compute(out_shape, 
+                          lambda i : tvm.log(op1[i]),
+                          name = 'out')
+
+        op1_layout = tvm.decl_buffer(
+            op1.shape, op1.dtype, 'op1', scope=scope1, 
+            data_alignment=env.scope2config(scope1)['width_per_channel'] / 8,
+            offset_factor=env.scope2config(scope1)['width_per_channel'] / cfg['data_width'])
+        out_layout = tvm.decl_buffer(
+            out.shape, out.dtype, 'out', scope=scope2,
+            data_alignment=env.scope2config(scope2)['width_per_channel'] / 8,
+            offset_factor=env.scope2config(scope2)['width_per_channel'] / cfg['data_width'])
+
+        def lower_func(ins, outs):
+            din = ins[0]
+            dout = outs[0]
+
+            irb = tvm.ir_builder.create()
+            irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+            irb.emit(tvm.call_extern("int32", 'NNPU_VLOG',
+                        din.access_ptr("r", 'uint32'),
+                        dout.access_ptr("rw", 'uint32'),
+                        cfg['vector_unit']['size']
+                        ))
+            
+            return irb.get()
+
+        return tvm.decl_tensor_intrin(out.op, lower_func,
+                                  name=name,
+                                  binds={op1: op1_layout,
+                                         out: out_layout})
+    intrins['VLOG'] = VLog(env, env.uni_scratchpad_scope, env.uni_scratchpad_scope, 'VLOG')
     def VAS(env, scope_in, scope_out, name, s_value=1):
         cfg = env.cfg
         in_shape = (cfg['vector_unit']['size'], )

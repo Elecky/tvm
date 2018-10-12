@@ -29,7 +29,7 @@ void NNPUBufferCopy(const void* from,
                     int kind_mask);
 
 void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode);
-
+void NNPU_VLOG(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode);
 void NNPU_DMALoad(void *host_buf_addr, uint32_t host_buf_offset,
                   nnpu_dram_addr_t dst_phy_addr, uint32_t dst_phy_offset,
                   uint32_t size);

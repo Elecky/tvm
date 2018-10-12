@@ -82,6 +82,7 @@ class Environment(object):
 # set device with the configs in the environment
 def set_device(env):
     func = tvm.get_global_func('nnpu.set_dev',True)
+    print(env.cfg_path)
     func('S0', env.cfg_path)
     pass
 
