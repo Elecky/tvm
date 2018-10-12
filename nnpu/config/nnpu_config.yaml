@@ -1,6 +1,6 @@
 # data configs
 dtype_w: int16
-dtype_n: int8
+dtype_n: float32
 
 # scalar register file configs
 # number of register file elements
