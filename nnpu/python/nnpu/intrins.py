@@ -251,7 +251,6 @@ class IntrinManager(object):
         self.intrin_ctors['VDivV'] = vctr_binary
         self.intrin_ctors['VGTMV'] = vctr_binary
 
->>>>>>> bfd26633835a71278179ce065427caa95f094531
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
             format(intrin_op)
