@@ -87,6 +87,12 @@ void GemmInsn::Dump(std::ostream& os) const
        << " $" << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
+void VctrBinaryInsn::Dump(ostream& os) const
+{
+    os << 'V' << ToString(Op) << "V_" << Size << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)
@@ -126,6 +132,30 @@ const char* ToString(LSDIR value)
 
     case LSDIR::Store:
         return "Store";
+
+    default:
+        return "Unknown";
+    }
+}
+
+const char* ToString(VctrBinaryOp value)
+{
+    switch (value)
+    {
+    case VctrBinaryOp::Add:
+        return "Add";
+
+    case VctrBinaryOp::Sub:
+        return "Sub";
+
+    case VctrBinaryOp::Mul:
+        return "Mul";
+
+    case VctrBinaryOp::Div:
+        return "Div";
+
+    case VctrBinaryOp::GTM:
+        return "GTM";
 
     default:
         return "Unknown";

@@ -17,7 +17,7 @@ namespace nnpu
 */
 enum class InsnType
 {
-    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm
+    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary
 };
 
 /*!
@@ -191,6 +191,32 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+enum class VctrBinaryOp { Add, Sub, Div, Mul, GTM /* greater than merge */ };
+const char* ToString(VctrBinaryOp value);
+struct VctrBinaryInsn
+{
+public:
+    VctrBinaryInsn() = default;
+
+    VctrBinaryInsn(VctrBinaryOp _op, uint32_t _outAddrReg, uint32_t _in1AddrReg, 
+        uint32_t _in2AddrReg, uint32_t _size, ModeCode _mode) :
+        Op(_op), OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
+        Size(_size), Mode(_mode)
+    {}
+
+    VctrBinaryOp Op;
+
+    uint32_t OutAddrReg;
+    uint32_t In1AddrReg;
+    uint32_t In2AddrReg;
+
+    // this is not a register nor an immediate, its part of insn encoding.
+    uint32_t Size;
+    ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -208,6 +234,8 @@ public:
         BufferLSInsn BufferLS;
 
         VctrUnaryInsn VctrUnary;
+
+        VctrBinaryInsn VctrBinary;
 
         LiInsn Li;
 
@@ -264,6 +292,9 @@ public:
         case InsnType::Gemm:
             return functor(this->Gemm, std::forward<TArgs>(args)...);
 
+        case InsnType::VctrBinary:
+            return functor(this->VctrBinary, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -290,6 +321,9 @@ public:
     {}
 
     NNPUInsn(const GemmInsn &_insn) : Type(InsnType::Gemm), Gemm(_insn)
+    {}
+
+    NNPUInsn(const VctrBinaryInsn &_insn) : Type(InsnType::VctrBinary), VctrBinary(_insn)
     {}
 };
 

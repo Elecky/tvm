@@ -11,26 +11,27 @@ def test():
     a = tvm.compute(shape, lambda *i: a_host(*i), name='a')
     a_buf = tvm.compute(shape, lambda *i: a(*i), name='a_buf')
     
-    vctr_shape = (16, )
+    vctr_shape = (1, 16)
     b_host = tvm.placeholder(vctr_shape, env.cfg['dtype_n'], 'b_host')
     b = tvm.compute(vctr_shape, lambda *i: b_host(*i), name='b')
     b_buf = tvm.compute(vctr_shape, lambda *i: b(*i), name='b_buf')
 
     dtype_w = env.cfg['dtype_w']
     
-    out_shape = (16,)
+    mul_shape = (1, 16)
     k = tvm.reduce_axis((0, 16), 'k')
-    c_buf = tvm.compute(out_shape, 
-                    lambda i: 
-                        tvm.sum(a_buf[i, k].astype(dtype_w) * b_buf[k].astype(dtype_w), axis=k))
+    c_buf = tvm.compute(mul_shape, 
+                    lambda i, j: 
+                        tvm.sum(b_buf[i, k].astype(dtype_w) * a_buf[j, k].astype(dtype_w), axis=k))
     
+    out_shape = (16, )
     bias_host = tvm.placeholder(out_shape, env.cfg['dtype_w'], 'bias_host')
     bias = tvm.compute(out_shape, lambda *i: bias_host(*i), 'bias')
     bias_buf = tvm.compute(out_shape, lambda *i: bias(*i), 'bias_buf')
     #c = tvm.compute(out_shape, lambda *i: c_buf(*i), name='c')
     #c_host = tvm.compute(out_shape, lambda *i: c(*i), name='c_host')
 
-    out_buf = tvm.compute(out_shape, lambda i: c_buf[i] + bias_buf[i], 'out_buf')
+    out_buf = tvm.compute(out_shape, lambda i: c_buf[0, i] + bias_buf[i], 'out_buf')
     out = tvm.compute(out_shape, lambda *i: out_buf(*i), 'out')
     out_host = tvm.compute(out_shape, lambda *i: out(*i), 'out_host')
 
@@ -65,8 +66,8 @@ def test():
 
     # tensorize
     #s[b_buf].tensorize(s[b_buf].op.axis[1], env.intrins.get('VEXP', mode='inc'))
-    s[c_buf].tensorize(s[c_buf].op.axis[0], env.intrins.get('GEMM', shape=(16, 16, 1), 
-                        mode='inc', reduce=True))
+    s[c_buf].tensorize(s[c_buf].op.axis[0], env.intrins.get('GEMM', shape=(1, 16, 16), 
+                        mode='inc'))
     #outer, inner = out_buf.op.axis
     #s[out_buf].reorder(inner, outer)
     #print(outer)
@@ -115,7 +116,7 @@ def test():
     print(out_nd.asnumpy())
 
     print('numpy ground truth is: ')
-    gt = np.dot(a_np.astype(dtype_w), b_np.astype(dtype_w)) + bias_np
+    gt = np.dot(b_np.astype(dtype_w), a_np.astype(dtype_w).transpose((1, 0))).reshape((16,)) + bias_np
     print(gt)
 
     np.testing.assert_allclose(out_nd.asnumpy(), gt)
