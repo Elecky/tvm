@@ -127,6 +127,7 @@ def inject_dma_intrin(stmt_in):
             loop_vars = []
             src_index = None
             dst_index = None
+            src_pad_offset = 0
             for i in range(ndim - 1):
                 var = tvm.var('i{0}'.format(i))
                 #print(var)
@@ -136,6 +137,10 @@ def inject_dma_intrin(stmt_in):
                 #print(src_index)
                 dst_index = var * dst_strides[i] if (dst_index is None) else \
                             dst_index + var * dst_strides[i]
+                # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
+                src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
+                                    if pad_before else \
+                                 src_pad_offset
             # src_index and dst_index are index by element number
             src_index = 0 if (src_index is None) else src_index
             dst_index = 0 if (dst_index is None) else dst_index
@@ -145,7 +150,7 @@ def inject_dma_intrin(stmt_in):
             dst_index = dst_index # access_ptr includes elem_offset already
             # NNPU_DMALoad(src_buf_addr, src_buf_offset, dst_phy_addr, dst_phy_offset, bytes)
             body = tvm.call_extern('int32', 'NNPU_DMALoad', 
-                        src.data, src_index * dtype_bytes,
+                        src.data, util.simplify(src_index * dtype_bytes - src_pad_offset),
                         dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
@@ -172,6 +177,7 @@ def inject_dma_intrin(stmt_in):
             loop_vars = []
             src_index = None
             dst_index = None
+            src_pad_offset = 0
             for i in range(ndim - 1):
                 var = tvm.var('i{0}'.format(i))
                 loop_vars.append(var)
@@ -180,18 +186,23 @@ def inject_dma_intrin(stmt_in):
                 #print(src_index)
                 dst_index = var * dst_strides[i] if (dst_index is None) else \
                             dst_index + var * dst_strides[i]
+                # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
+                src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
+                                    if pad_before else \
+                                 src_pad_offset
+
             # src_index and dst_index are index by element number
             src_index = 0 if (src_index is None) else src_index
             dst_index = 0 if (dst_index is None) else dst_index
 
-            src_index = src_index #+ src.elem_offset if src.elem_offset.defined() else \
-                        #src_index
+            src_index = src_index # access_ptr includes elem_offset already
             dst_index = dst_index + dst.elem_offset #if dst.elem_offset.defined() else \
                         #dst_index
             # NNPU_DMAStore(dst_phy_addr, dst_phy_offset, src_buf_addr, src_buf_offset, length)
             body = tvm.call_extern('int32', 'NNPU_DMAStore', 
                         dst.data, dst_index * dtype_bytes,
-                        src.access_ptr('r', 'uint32'), src_index * dtype_bytes,
+                        src.access_ptr('r', 'uint32'), 
+                        util.simplify(src_index * dtype_bytes - src_pad_offset),
                         dst_shape[-1] * dtype_bytes)
 
             # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
@@ -253,6 +264,7 @@ def inject_scratchpad_ls(stmt_in):
             loop_vars = []
             src_index = None
             dst_index = None
+            src_pad_offset = 0
             for i in range(ndim - 1):
                 var = tvm.var('i{0}'.format(i))
                 #print(var)
@@ -262,17 +274,21 @@ def inject_scratchpad_ls(stmt_in):
                 #print(src_index)
                 dst_index = var * dst_strides[i] if (dst_index is None) else \
                             dst_index + var * dst_strides[i]
+                # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
+                src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
+                                    if pad_before else \
+                                 src_pad_offset
+                
             # src_index and dst_index are index by element number
             src_index = 0 if (src_index is None) else src_index
             dst_index = 0 if (dst_index is None) else dst_index
 
-            src_index = src_index #+ src.elem_offset if src.elem_offset.defined() else \
-                        #src_index
-            dst_index = dst_index #+ dst.elem_offset if dst.elem_offset.defined() else \
-                        #dst_index
+            src_index = src_index # access_ptr includes elem_offset already
+            dst_index = dst_index # access_ptr includes elem_offset already
             # NNPU_ScratchpadLoad(dram_phy_addr, dram_phy_offset, dst_phy_addr, dst_phy_offset, length)
             body = tvm.call_extern('int32', 'NNPU_ScratchpadLoad', 
-                        src.access_ptr('r', 'uint32'), src_index * dtype_bytes,
+                        src.access_ptr('r', 'uint32'), 
+                        util.simplify(src_index * dtype_bytes - src_pad_offset),
                         dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
@@ -299,28 +315,32 @@ def inject_scratchpad_ls(stmt_in):
             loop_vars = []
             src_index = None
             dst_index = None
+            src_pad_offset = 0
             for i in range(ndim - 1):
                 var = tvm.var('i{0}'.format(i))
                 loop_vars.append(var)
                 src_index = var * src_strides[i] if (src_index is None) else \
                             src_index + var * src_strides[i]
-                print(src_index)
+                #print(src_index)
                 dst_index = var * dst_strides[i] if (dst_index is None) else \
                             dst_index + var * dst_strides[i]
+                # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
+                src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
+                                    if pad_before else \
+                                 src_pad_offset
             # src_index and dst_index are index by element number
             src_index = 0 if (src_index is None) else src_index
             dst_index = 0 if (dst_index is None) else dst_index
 
-            src_index = src_index #+ src.elem_offset if src.elem_offset.defined() else \
-                        #src_index
-            dst_index = dst_index #+ dst.elem_offset# if dst.elem_offset.defined() else \
-                        #dst_index
+            src_index = src_index # access_ptr includes elem_offset already
+            dst_index = dst_index # access_ptr includes elem_offset already
             # NNPU_ScratchpadStore(dram_phy_addr, dram_phy_offset, src_phy_addr, src_phy_offset, length)
             #print([util.get_const_int(st) for st in src.strides])
             #print(src.data)
             body = tvm.call_extern('int32', 'NNPU_ScratchpadStore', 
                         dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
-                        src.access_ptr('r', 'uint32'), src_index * dtype_bytes,
+                        src.access_ptr('r', 'uint32'), 
+                        util.simplify(src_index * dtype_bytes - src_pad_offset),
                         dst_shape[-1] * dtype_bytes)
 
             # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
