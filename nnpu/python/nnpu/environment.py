@@ -8,7 +8,6 @@ import copy
 import tvm
 import yaml
 
-from intrins import declare_intrins
 from intrins import IntrinManager
 
 class Environment(object):
@@ -131,6 +130,7 @@ def init_default_env():
         os.path.join(curr_path, filename),
         os.path.join(proj_root, "build", filename),
         os.path.join(proj_root, filename),
+        os.path.join(proj_root, "nnpu", filename),
         os.path.join(proj_root, "nnpu/config", filename)
     ]
     path_list = [p for p in path_list if os.path.exists(p)]
