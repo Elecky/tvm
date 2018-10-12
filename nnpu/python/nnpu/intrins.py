@@ -113,8 +113,8 @@ class IntrinManager(object):
         dtype_bits = dtype_bytes(tensor.dtype) * 8
         return tvm.decl_buffer(
                 tensor.shape, tensor.dtype, buf_name, scope=scope,
-                data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8)
-                #offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
+                data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8,
+                offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
 
     def mode2dtype(self, mode):
         cfg = self.env.cfg
