@@ -82,7 +82,6 @@ class IntrinManager(object):
                                            out: out_layout})
 
         self.intrin_ctors['VEXP'] = vctr_unary
-<<<<<<< HEAD
         self.intrin_ctors['VLOG'] = vctr_unary
 =======
 
