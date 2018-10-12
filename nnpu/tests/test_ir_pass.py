@@ -10,7 +10,6 @@ def test():
     print('a host '+str(a_host))
     a = tvm.compute(shape, lambda *i: a_host(*i), name='a')
     a_buf = tvm.compute(shape, lambda *i: a(*i), name='a_buf')
-    
     b_buf = tvm.compute(shape, lambda i, j: tvm.log(a_buf[i, j].astype(env.cfg['dtype_w'])), name='b_buf')
     b = tvm.compute(shape, lambda *i: b_buf(*i), name='b')
     b_host = tvm.compute(shape, lambda *i: b(*i), name='b_host')
