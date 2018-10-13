@@ -343,6 +343,7 @@ def declare_intrins(env):
                                          out: out_layout})
     
     intrins['VEXP'] = VExp(env, env.uni_scratchpad_scope, env.uni_scratchpad_scope, 'VEXP')
+
     def VLog(env, scope1, scope2, name):
         cfg = env.cfg
         op1_shape = (cfg['vector_unit']['size'], )
@@ -383,7 +384,9 @@ def declare_intrins(env):
                                   name=name,
                                   binds={op1: op1_layout,
                                          out: out_layout})
+
     intrins['VLOG'] = VLog(env, env.uni_scratchpad_scope, env.uni_scratchpad_scope, 'VLOG')
+    
     def VAS(env, scope_in, scope_out, name, s_value=1):
         cfg = env.cfg
         in_shape = (cfg['vector_unit']['size'], )
