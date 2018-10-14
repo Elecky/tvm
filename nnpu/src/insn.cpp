@@ -99,6 +99,12 @@ void VctrImmInsn::Dump(ostream& os) const
     os << 'V' << ToString(Op) << "I_" << Size << '.' << mode2str(Mode) << " $"
        << OutAddrReg << ", $" << InAddrReg << ", (IMM)"<< Imm;
 }
+void VctrDotProdInsn::Dump(ostream &os) const
+{
+    os << "VDotV_" << Size << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)

@@ -508,3 +508,21 @@ void NNPU_VGTMV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t s
 {
     NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::GTM);
 }
+
+void NNPU_VctrDotProd(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
+                      uint32_t size, uint32_t mode)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // assign 3 addresses
+    Li li1(0, outAddr);
+    queue->EmplaceBack(li1);
+    Li li2(1, in1Addr);
+    queue->EmplaceBack(li2);
+    Li li3(2, in2Addr);
+    queue->EmplaceBack(li3);
+
+    nnpu::VctrDotProdInsn insn(0, 1, 2, size, nnpu::ModeFromInt(mode));
+    queue->EmplaceBack(insn);
+}

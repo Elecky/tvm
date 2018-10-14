@@ -168,7 +168,8 @@ class IntrinManager(object):
             
             # the name should contain all parameters
             name = intrin_op + str(nRowOut) + '_' + str(factor) + '_' + str(nColOut) + ';' \
-                   + ';' + scope_in1 + ';' + scope_in2 + ';' + scope_out + ';' + mode
+                   + ';' + scope_in1 + ';' + scope_in2 + ';' + scope_out + ';' + mode + \
+                   ';' + str(reduce)
 
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
@@ -315,6 +316,66 @@ class IntrinManager(object):
         self.intrin_ctors['VMulV'] = vctr_binary
         self.intrin_ctors['VDivV'] = vctr_binary
         self.intrin_ctors['VGTMV'] = vctr_binary
+
+        def vctr_dot_product(intrin_op, scope_in1 = 'uni', scope_in2 = 'uni', scope_out = 'uni',
+                             mode='n'):
+            env = self.env
+            cfg = self.env.cfg
+
+            scope_in1 = self.get_scope(scope_in1)
+            scope_in2 = self.get_scope(scope_in2)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+
+            # the name should contain all parameters
+            name = intrin_op + scope_in1 + ';' + scope_in2 + ';' + scope_out + ';' + mode
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+            # decalre tensors
+            shape = (cfg['vector_unit']['size'], )
+            in1 = tvm.placeholder(shape, dtype_in, 'in1')
+            in2 = tvm.placeholder(shape, dtype_out, 'in1')
+
+            k = tvm.reduce_axis((0, shape[0]), 'k')
+            if (mode == 'inc'):
+                expr = lambda i: tvm.sum(in1[k].astype(dtype_out) * in2[k].astype(dtype_out), axis=k)
+            elif (mode == 'dec'):
+                expr = lambda i: tvm.sum(in1[k] * in2[k], axis=k).astype(dtype_out)
+            else:
+                expr = lambda i: tvm.sum(in1[k] * in2[k], axis=k)
+            out = tvm.compute((1, ), expr, 'out')
+            # declare buffers
+            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf')
+            in2_buf = self.decl_buffer(in2, scope_in1, 'in1_buf')
+            # the output buffer is different from normal buffer
+            out_buf = tvm.decl_buffer(
+                out.shape, out.dtype, 'out_buf', scope=scope_out,
+                data_alignment=dtype_bytes(out.dtype), offset_factor=1)
+            
+            def lower_func(ins, outs):
+                din1, din2 = ins[0], ins[1]
+                dout = outs[0]
+
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", 'NNPU_VctrDotProd',
+                            dout.access_ptr('w', 'uint32'),
+                            din1.access_ptr('r', 'uint32'),
+                            din2.access_ptr('r', 'uint32'),
+                            shape[0],
+                            self.get_mode_code(mode)
+                            ))
+                
+                return irb.get()
+
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                          name=name,
+                                          binds={in1: in1_buf,
+                                                 in2: in2_buf,
+                                                 out: out_buf})
+        
+        self.intrin_ctors['VDotV'] = vctr_dot_product
 
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
