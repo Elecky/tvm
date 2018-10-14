@@ -59,6 +59,16 @@ void NNPU_VMulV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t s
 
 void NNPU_VGTMV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode);
 
+void NNPU_VAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
+
+void NNPU_VMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
+
+void NNPU_VSubI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
+
+void NNPU_VDivI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
+
+void NNPU_VGTMI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
+
 void NNPUSynchronize(uint32_t timeout);
 
 #ifdef __cplusplus

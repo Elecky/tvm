@@ -1,5 +1,7 @@
+import struct
 import tvm
-from helper import dtype_bytes
+from helper import dtype_bytes, convert_scope
+
 
 class IntrinManager(object):
 
@@ -84,6 +86,70 @@ class IntrinManager(object):
         self.intrin_ctors['VEXP'] = vctr_unary
         self.intrin_ctors['VLOG'] = vctr_unary
 
+        def vctr_imm(intrin_op, scope_in = 'uni', scope_out = 'uni', imm_value = 1 , mode = 'w'):
+            env = self.env
+            cfg = self.env.cfg
+            scope_in = self.get_scope(scope_in)
+            scope_out = self.get_scope(scope_out)
+            dtype_in, dtype_out = self.mode2dtype(mode)
+            imm = tvm.const(imm_value, dtype_out)
+            print ('ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ')
+            print (imm)
+            name = intrin_op + ';' + scope_in + ';' + scope_out + ';' +str(imm_value)+';'+ mode
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+            in_shape = (cfg['vector_unit']['size'], )
+            out_shape = (cfg['vector_unit']['size'], )
+            op_in = tvm.placeholder(in_shape, dtype=dtype_in,
+                                    name='in')
+            if (intrin_op == 'VAddI'):
+                expr = lambda i: (op_in[i] + imm).astype(dtype_out)
+                extern_func = 'NNPU_VAddI'
+            elif (intrin_op == 'VSubI'):
+                expr = lambda i: (op_in[i] - imm).astype(dtype_out)
+                extern_func = 'NNPU_VSubI'
+            elif (intrin_op == 'VMulI'):
+                expr = lambda i: (op_in[i] * imm).astype(dtype_out)
+                extern_func = 'NNPU_VMulI'
+            elif (intrin_op == 'VDivI'):
+                expr = lambda i: (op_in[i] / imm).astype(dtype_out)
+                extern_func = 'NNPU_VDivI'
+            elif (intrin_op == 'VGTMI'):
+                expr = lambda i: tvm.select(op_in[i] > imm, op_in[i], imm)
+                extern_func = 'NNPU_VGTMI'
+            else:
+                raise ValueError('unsupported vctr Imm intrin op')
+            out = tvm.compute(out_shape, expr,
+                            name = 'out')
+            def lower_func(ins, outs):
+                din = ins[0]
+                dout = outs[0]
+
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                print('try call_ex fun #############################################')
+                print(float(imm_value))
+                irb.emit(tvm.call_extern("int32", extern_func,
+                            dout.access_ptr("w", 'uint32'),
+                            din.access_ptr("r", 'uint32'),
+                            str(imm_value),
+                            cfg['vector_unit']['size'],
+                            self.get_mode_code(mode)
+                            ))
+                return irb.get()
+            in_layout = self.decl_buffer(op_in, scope_in, 'in_buf')
+            out_layout = self.decl_buffer(out, scope_out, 'out_buf')
+
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                    name=name,
+                                    binds={op_in: in_layout,
+                                           out: out_layout})
+
+        self.intrin_ctors['VAddI'] = vctr_imm
+        self.intrin_ctors['VSubI'] = vctr_imm
+        self.intrin_ctors['VMulI'] = vctr_imm
+        self.intrin_ctors['VDivI'] = vctr_imm
+        self.intrin_ctors['VGTMI'] = vctr_imm
         def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
                  scope_out = 'uni', mode='inc', reduce=False):
             env = self.env
@@ -227,7 +293,6 @@ class IntrinManager(object):
             def lower_func(ins, outs):
                 din1, din2 = ins[0], ins[1]
                 dout = outs[0]
-
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(tvm.call_extern("int32", extern_func,
@@ -261,21 +326,7 @@ class IntrinManager(object):
 
     # convert scope name, also check whether scope is legal under current config
     def get_scope(self, scope_str):
-        env = self.env
-        scope = scope_str
-        if (scope_str == 'uni'):
-            scope = env.uni_scratchpad_scope
-        elif (scope_str == 'vctr'):
-            scope = env.vctr_scratch_scope
-        elif (scope_str == 'mat'):
-            scope = env.mat_scratch_scope
-        design = env.cfg['scratchpad_design']
-        assert not (design == 'unified') or (scope == env.uni_scratchpad_scope), \
-            'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
-        assert not (design == 'seperated') or \
-                (scope in [env.vctr_scratch_scope, env.mat_scratch_scope]), \
-                'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
-        return scope
+        return convert_scope(self.env, scope_str)
     
     def decl_buffer(self, tensor, scope, buf_name):
         dtype_bits = dtype_bytes(tensor.dtype) * 8
@@ -295,197 +346,3 @@ class IntrinManager(object):
     def get_mode_code(self, mode_str):
         return self.mode2code[mode_str]
 
-# the code follows is not used
-
-def declare_intrins(env):
-    intrins = {}
-    uni_scope = env.uni_scratchpad_scope
-
-    def VExp(env, scope1, scope2, name):
-        cfg = env.cfg
-        op1_shape = (cfg['vector_unit']['size'], )
-        out_shape = (cfg['vector_unit']['size'], )
-
-        op1 = tvm.placeholder(op1_shape, dtype=cfg['dtype'],
-                              name='op1')
-        #out = tvm.placeholder(out_shape, dtype=cfg['dtype'],
-        #                      name='op2')
-        out = tvm.compute(out_shape, 
-                          lambda i : tvm.exp(op1[i]),
-                          name = 'out')
-
-        op1_layout = tvm.decl_buffer(
-            op1.shape, op1.dtype, 'op1', scope=scope1, 
-            data_alignment=env.scope2config(scope1)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope1)['width_per_channel'] / cfg['data_width'])
-        out_layout = tvm.decl_buffer(
-            out.shape, out.dtype, 'out', scope=scope2,
-            data_alignment=env.scope2config(scope2)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope2)['width_per_channel'] / cfg['data_width'])
-
-        def lower_func(ins, outs):
-            din = ins[0]
-            dout = outs[0]
-
-            irb = tvm.ir_builder.create()
-            irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-            irb.emit(tvm.call_extern("int32", 'NNPU_VEXP',
-                        din.access_ptr("r", 'uint32'),
-                        dout.access_ptr("rw", 'uint32'),
-                        cfg['vector_unit']['size']
-                        ))
-            
-            return irb.get()
-
-        return tvm.decl_tensor_intrin(out.op, lower_func,
-                                  name=name,
-                                  binds={op1: op1_layout,
-                                         out: out_layout})
-    
-    intrins['VEXP'] = VExp(env, env.uni_scratchpad_scope, env.uni_scratchpad_scope, 'VEXP')
-
-    def VLog(env, scope1, scope2, name):
-        cfg = env.cfg
-        op1_shape = (cfg['vector_unit']['size'], )
-        out_shape = (cfg['vector_unit']['size'], )
-
-        op1 = tvm.placeholder(op1_shape, dtype=cfg['dtype'],
-                              name='op1')
-        #out = tvm.placeholder(out_shape, dtype=cfg['dtype'],
-        #                      name='op2')
-        out = tvm.compute(out_shape, 
-                          lambda i : tvm.log(op1[i]),
-                          name = 'out')
-
-        op1_layout = tvm.decl_buffer(
-            op1.shape, op1.dtype, 'op1', scope=scope1, 
-            data_alignment=env.scope2config(scope1)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope1)['width_per_channel'] / cfg['data_width'])
-        out_layout = tvm.decl_buffer(
-            out.shape, out.dtype, 'out', scope=scope2,
-            data_alignment=env.scope2config(scope2)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope2)['width_per_channel'] / cfg['data_width'])
-
-        def lower_func(ins, outs):
-            din = ins[0]
-            dout = outs[0]
-
-            irb = tvm.ir_builder.create()
-            irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-            irb.emit(tvm.call_extern("int32", 'NNPU_VLOG',
-                        din.access_ptr("r", 'uint32'),
-                        dout.access_ptr("rw", 'uint32'),
-                        cfg['vector_unit']['size']
-                        ))
-            
-            return irb.get()
-
-        return tvm.decl_tensor_intrin(out.op, lower_func,
-                                  name=name,
-                                  binds={op1: op1_layout,
-                                         out: out_layout})
-
-    intrins['VLOG'] = VLog(env, env.uni_scratchpad_scope, env.uni_scratchpad_scope, 'VLOG')
-    
-    def VAS(env, scope_in, scope_out, name, s_value=1):
-        cfg = env.cfg
-        in_shape = (cfg['vector_unit']['size'], )
-        out_shape = (cfg['vector_unit']['size'], )
-
-        op1 = tvm.placeholder(in_shape, dtype=cfg['dtype'],
-                              name='op1')
-        #out = tvm.placeholder(out_shape, dtype=cfg['dtype'],
-        #                      name='op2')
-        scalar = tvm.const(s_value, dtype=cfg['dtype'])
-        out = tvm.compute(out_shape, 
-                          lambda i : op1[i] + scalar,
-                          name = 'out')
-
-        op1_layout = tvm.decl_buffer(
-            op1.shape, op1.dtype, 'op1', scope=scope_in, 
-            data_alignment=env.scope2config(scope_in)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope_in)['width_per_channel'] / cfg['data_width'])
-        out_layout = tvm.decl_buffer(
-            out.shape, out.dtype, 'out', scope=scope_out,
-            data_alignment=env.scope2config(scope_out)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope_out)['width_per_channel'] / cfg['data_width'])
-
-        def lower_func(ins, outs):
-            din = ins[0]
-            dout = outs[0]
-
-            irb = tvm.ir_builder.create()
-            irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-            irb.emit(tvm.call_extern("int32", 'NNPU_VAS',
-                        din.access_ptr("r", 'uint32'),
-                        dout.access_ptr("rw", 'uint32'),
-                        scalar.value,
-                        cfg['vector_unit']['size']
-                        ))
-            
-            return irb.get()
-
-        return tvm.decl_tensor_intrin(out.op, lower_func,
-                                  name=name,
-                                  binds={op1: op1_layout,
-                                         out: out_layout})
-
-    intrins['VAS'] = VAS(env, env.uni_scratchpad_scope, env.uni_scratchpad_scope, 'VAS')
-    
-    def VDV(env, scope_in1, scope_in2, scope_out, name):
-        cfg = env.cfg
-        in1_shape = (cfg['vector_unit']['size'], )
-        in2_shape = (cfg['vector_unit']['size'], )
-        out_shape = (cfg['vector_unit']['size'], )
-
-        in1 = tvm.placeholder(in1_shape, dtype=cfg['dtype'],
-                              name='in1')
-        #out = tvm.placeholder(out_shape, dtype=cfg['dtype'],
-        #                      name='op2')
-        in2 = tvm.placeholder(in2_shape, dtype=cfg['dtype'],
-                              name='in2')
-
-        out = tvm.compute(out_shape, 
-                          lambda i : in1[i] / in2[i],
-                          name = 'out')
-
-        in1_layout = tvm.decl_buffer(
-            in1.shape, in1.dtype, 'in1', scope=scope_in1, 
-            data_alignment=env.scope2config(scope_in1)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope_in1)['width_per_channel'] / cfg['data_width'])
-        
-        in2_layout = tvm.decl_buffer(
-            in2.shape, in2.dtype, 'in2', scope=scope_in2, 
-            data_alignment=env.scope2config(scope_in2)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope_in2)['width_per_channel'] / cfg['data_width'])
-
-        out_layout = tvm.decl_buffer(
-            out.shape, out.dtype, 'out', scope=scope_out,
-            data_alignment=env.scope2config(scope_out)['width_per_channel'] / 8,
-            offset_factor=env.scope2config(scope_out)['width_per_channel'] / cfg['data_width'])
-
-        def lower_func(ins, outs):
-            din1 = ins[0]
-            din2 = ins[1]
-            dout = outs[0]
-
-            irb = tvm.ir_builder.create()
-            irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-            irb.emit(tvm.call_extern("int32", 'NNPU_VDV',
-                        din1.access_ptr("r", 'uint32'),
-                        din2.access_ptr("r", 'uint32'),
-                        dout.access_ptr("rw", 'uint32'),
-                        cfg['vector_unit']['size']
-                        ))
-            
-            return irb.get()
-
-        return tvm.decl_tensor_intrin(out.op, lower_func,
-                                  name=name,
-                                  binds={in1: in1_layout,
-                                         in2: in2_layout,
-                                         out: out_layout})
-
-    intrins['VDV'] = VDV(env, uni_scope, uni_scope, uni_scope, 'VDV')
-
-    return intrins

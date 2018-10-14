@@ -17,7 +17,7 @@ namespace nnpu
 */
 enum class InsnType
 {
-    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary
+    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrImm
 };
 
 /*!
@@ -192,7 +192,9 @@ public:
 };
 
 enum class VctrBinaryOp { Add, Sub, Div, Mul, GTM /* greater than merge */ };
+enum class VctrImmOp { Add, Sub, Div, Mul,GTM/* greater than merge */ };
 const char* ToString(VctrBinaryOp value);
+const char* ToString(VctrImmOp value);
 struct VctrBinaryInsn
 {
 public:
@@ -209,6 +211,30 @@ public:
     uint32_t OutAddrReg;
     uint32_t In1AddrReg;
     uint32_t In2AddrReg;
+
+    // this is not a register nor an immediate, its part of insn encoding.
+    uint32_t Size;
+    ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
+
+struct VctrImmInsn
+{
+public:
+    VctrImmInsn() = default;
+
+    VctrImmInsn(VctrImmOp _op, uint32_t _outAddrReg, uint32_t _inAddrReg, 
+        double _Imm, uint32_t _size, ModeCode _mode) :
+        Op(_op), OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Imm(_Imm),
+        Size(_size), Mode(_mode)
+    {}
+
+    VctrImmOp Op;
+
+    uint32_t OutAddrReg;
+    uint32_t InAddrReg;
+    double Imm;
 
     // this is not a register nor an immediate, its part of insn encoding.
     uint32_t Size;
@@ -236,6 +262,8 @@ public:
         VctrUnaryInsn VctrUnary;
 
         VctrBinaryInsn VctrBinary;
+
+        VctrImmInsn VctrImm;
 
         LiInsn Li;
 
@@ -294,6 +322,9 @@ public:
 
         case InsnType::VctrBinary:
             return functor(this->VctrBinary, std::forward<TArgs>(args)...);
+        
+        case InsnType::VctrImm:
+            return functor(this->VctrImm, std::forward<TArgs>(args)...);
 
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
@@ -324,6 +355,9 @@ public:
     {}
 
     NNPUInsn(const VctrBinaryInsn &_insn) : Type(InsnType::VctrBinary), VctrBinary(_insn)
+    {}
+
+    NNPUInsn(const VctrImmInsn &_insn) : Type(InsnType::VctrImm), VctrImm(_insn)
     {}
 };
 

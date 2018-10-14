@@ -30,7 +30,7 @@ def test():
     #c = tvm.compute(out_shape, lambda *i: c_buf(*i), name='c')
     #c_host = tvm.compute(out_shape, lambda *i: c(*i), name='c_host')
 
-    out_buf = tvm.compute(out_shape, lambda i: tvm.select(c_buf[i] > bias_buf[i], c_buf[i], bias_buf[i]), 'out_buf')
+    out_buf = tvm.compute(out_shape, lambda i: c_buf[i] + bias_buf[i], 'out_buf')
     out = tvm.compute(out_shape, lambda *i: out_buf(*i), 'out')
     out_host = tvm.compute(out_shape, lambda *i: out(*i), 'out_host')
 
@@ -71,7 +71,7 @@ def test():
     #s[out_buf].reorder(inner, outer)
     #print(outer)
     #print(tvm.lower(s, [a_host, b_host, bias_host, out_host], simple_mode=True))
-    s[out_buf].tensorize(s[out_buf].op.axis[0], env.intrins.get('VGTMV', mode='w'))
+    s[out_buf].tensorize(s[out_buf].op.axis[0], env.intrins.get('VAddV', mode='w'))
 
     # build
     print(tvm.lower(s, [a_host, b_host, bias_host, out_host], simple_mode=True))
@@ -94,7 +94,7 @@ def test():
     #b_np = np.random.random(size=vctr_shape).astype(b_host.dtype)
     b_nd = tvm.nd.array(b_np, ctx)
 
-    bias_np = np.random.randint(size=out_shape, dtype=bias_host.dtype, low = 11000, high = 20000)
+    bias_np = np.random.randint(size=out_shape, dtype=bias_host.dtype, low = 0, high = 10000)
     #bias_np = np.random.random(size=out_shape).astype(bias_host.dtype)
     bias_nd = tvm.nd.array(bias_np, ctx)
 
@@ -115,11 +115,11 @@ def test():
     print(out_nd.asnumpy())
 
     print('numpy ground truth is: ')
-    gt = np.dot(a_np.astype(dtype_w), b_np.astype(dtype_w))
+    gt = np.dot(a_np.astype(dtype_w), b_np.astype(dtype_w)) + bias_np
     #gt = np.greater(np.dot(a_np.astype(dtype_w), b_np.astype(dtype_w)), bias_np)
     print(gt)
 
-    #np.testing.assert_allclose(out_nd.asnumpy(), gt)
+    np.testing.assert_allclose(out_nd.asnumpy(), gt)
 
 if __name__ == '__main__':
     test()

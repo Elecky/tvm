@@ -93,6 +93,12 @@ void VctrBinaryInsn::Dump(ostream& os) const
        << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
+// some ploblem
+void VctrImmInsn::Dump(ostream& os) const
+{
+    os << 'V' << ToString(Op) << "I_" << Size << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << InAddrReg << ", (IMM)"<< Imm;
+}
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)
@@ -157,6 +163,29 @@ const char* ToString(VctrBinaryOp value)
     case VctrBinaryOp::GTM:
         return "GTM";
 
+    default:
+        return "Unknown";
+    }
+}
+
+const char* ToString(VctrImmOp value)
+{
+    switch (value)
+    {
+    case VctrImmOp::Add:
+        return "Add";
+
+    case VctrImmOp::Sub:
+        return "Sub";
+
+    case VctrImmOp::Mul:
+        return "Mul";
+
+    case VctrImmOp::Div:
+        return "Div";
+
+    case VctrImmOp::GTM:
+        return "GTM";
     default:
         return "Unknown";
     }
