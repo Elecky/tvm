@@ -93,6 +93,12 @@ void VctrBinaryInsn::Dump(ostream& os) const
        << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
+void VctrDotProdInsn::Dump(ostream &os) const
+{
+    os << "VDotV_" << Size << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)
