@@ -99,6 +99,12 @@ void VctrDotProdInsn::Dump(ostream &os) const
        << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
+void VctrReduceInsn::Dump(std::ostream& os) const
+{
+    os << "VReduce" << ToString(Op) << "_" << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << InAddrReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)
@@ -162,6 +168,24 @@ const char* ToString(VctrBinaryOp value)
 
     case VctrBinaryOp::GTM:
         return "GTM";
+
+    default:
+        return "Unknown";
+    }
+}
+
+const char* ToString(ReduceOp value)
+{
+    switch (value)
+    {
+    case ReduceOp::Sum:
+        return "Sum";
+    
+    case ReduceOp::Max:
+        return "Max";
+
+    case ReduceOp::Min:
+        return "Min";
 
     default:
         return "Unknown";

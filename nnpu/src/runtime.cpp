@@ -467,3 +467,33 @@ void NNPU_VctrDotProd(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     nnpu::VctrDotProdInsn insn(0, 1, 2, size, nnpu::ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
+
+void NNPU_VctrReduce(uint32_t outAddr, uint32_t inAddr, nnpu::ReduceOp op, uint32_t size, uint32_t mode)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // assign 3 addresses
+    Li li1(0, outAddr);
+    queue->EmplaceBack(li1);
+    Li li2(1, inAddr);
+    queue->EmplaceBack(li2);
+    
+    nnpu::VctrReduceInsn insn(0, 1, op, size, nnpu::ModeFromInt(mode));
+    queue->EmplaceBack(insn);
+}
+
+void NNPU_VctrReduceSum(uint32_t outAddr, uint32_t inAddr, uint32_t size, uint32_t mode)
+{
+    NNPU_VctrReduce(outAddr, inAddr, nnpu::ReduceOp::Sum, size, mode);
+}
+
+void NNPU_VctrReduceMax(uint32_t outAddr, uint32_t inAddr, uint32_t size, uint32_t mode)
+{
+    NNPU_VctrReduce(outAddr, inAddr, nnpu::ReduceOp::Max, size, mode);
+}
+
+void NNPU_VctrReduceMin(uint32_t outAddr, uint32_t inAddr, uint32_t size, uint32_t mode)
+{
+    NNPU_VctrReduce(outAddr, inAddr, nnpu::ReduceOp::Min, size, mode);
+}

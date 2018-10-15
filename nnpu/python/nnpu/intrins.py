@@ -312,6 +312,77 @@ class IntrinManager(object):
         
         self.intrin_ctors['VDotV'] = vctr_dot_product
 
+        def vctr_reduce(intrin_op, scope_in='uni', scope_out='uni', mode='inc'):
+            env = self.env
+            cfg = self.env.cfg
+
+            scope_in = self.get_scope(scope_in)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+            
+            # the name should contain all parameters
+            name = intrin_op + ';' + scope_in + ';' + scope_out + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+
+            shape = (cfg['vector_unit']['size'], )
+
+            op_in = tvm.placeholder(shape, dtype=dtype_in, name='in')
+            
+            def expr_template(x, func, k):
+                if (mode == 'inc'):
+                    return lambda i: func(x, k).astype(dtype_out)
+                elif (mode == 'dec'):
+                    x = x.astype(dtype_out)
+                    return lambda i: func(x, k)
+                else:
+                    return lambda i: func(x, k)
+
+            k = tvm.reduce_axis((0, shape[0]), 'k')
+            if (intrin_op == 'VReduceSum'):
+                expr = expr_template(op_in[k], tvm.sum, k)
+                extern_func = 'NNPU_VctrReduceSum'
+            elif (intrin_op == 'VReduceMax'):
+                expr = expr_template(op_in[k], tvm.max, k)
+                extern_func = 'NNPU_VctrReduceMax'
+            elif (intrin_op == 'VReduceMin'):
+                expr = expr_template(op_in[k], tvm.min, k)
+                extern_func = 'NNPU_VctrReduceMin'
+            else:
+                raise ValueError("unimplemented vctr reduce op")
+            out = tvm.compute((1,), expr, 'out')
+
+            in_buf = self.decl_buffer(op_in, scope_in, 'in_buf')
+            out_buf = tvm.decl_buffer(
+                out.shape, out.dtype, 'out_buf', scope=scope_out,
+                data_alignment=dtype_bytes(out.dtype), offset_factor=1)
+
+            def lower_func(ins, outs):
+                din1 = ins[0]
+                dout = outs[0]
+
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", extern_func,
+                            dout.access_ptr('w', 'uint32'),
+                            din1.access_ptr('r', 'uint32'),
+                            shape[0],
+                            self.get_mode_code(mode)
+                            ))
+                
+                return irb.get()
+
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                          name=name,
+                                          binds={op_in: in_buf,
+                                                 out: out_buf})
+        
+        self.intrin_ctors['VReduceSum'] = vctr_reduce
+        self.intrin_ctors['VReduceMax'] = vctr_reduce
+        self.intrin_ctors['VReduceMin'] = vctr_reduce
+
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
             format(intrin_op)

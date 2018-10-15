@@ -17,7 +17,7 @@ namespace nnpu
 */
 enum class InsnType
 {
-    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd
+    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce
 };
 
 /*!
@@ -239,6 +239,30 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+enum class ReduceOp { Sum, Max, Min };
+const char* ToString(ReduceOp value);
+
+struct VctrReduceInsn
+{
+public:
+    VctrReduceInsn() = default;
+
+    VctrReduceInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, 
+                   ReduceOp _op, uint32_t _size, ModeCode _mode) :
+        OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Op(_op), Size(_size), Mode(_mode)
+    {}
+
+    uint32_t OutAddrReg;
+    uint32_t InAddrReg;
+
+    // this is not a register nor an immediate, its part of insn encoding.
+    ReduceOp Op;
+    uint32_t Size;
+    ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -266,6 +290,8 @@ public:
         GemmInsn Gemm;
 
         VctrDotProdInsn VctrDotProd;
+
+        VctrReduceInsn VctrReduce;
     };
 
     /* dispatch a call depends on the instruction type
@@ -322,6 +348,9 @@ public:
         case InsnType::VctrDotProd:
             return functor(this->VctrDotProd, std::forward<TArgs>(args)...);
 
+        case InsnType::VctrReduce:
+            return functor(this->VctrReduce, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -354,6 +383,9 @@ public:
     {}
 
     NNPUInsn(const VctrDotProdInsn &_insn) : Type(InsnType::VctrDotProd), VctrDotProd(_insn)
+    {}
+
+    NNPUInsn(const VctrReduceInsn &_insn) : Type(InsnType::VctrReduce), VctrReduce(_insn)
     {}
 };
 
