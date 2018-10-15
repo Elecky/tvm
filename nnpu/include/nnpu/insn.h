@@ -17,7 +17,7 @@ namespace nnpu
 */
 enum class InsnType
 {
-    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm
+    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm, MatImm
 };
 
 /*!
@@ -193,8 +193,10 @@ public:
 
 enum class VctrBinaryOp { Add, Sub, Div, Mul, GTM /* greater than merge */ };
 enum class VctrImmOp { Add, Sub, Div, Mul,GTM,RSub/* greater than merge */ };
+enum class MatImmOp { Add,Mul,RSub/* greater than merge */ };
 const char* ToString(VctrBinaryOp value);
 const char* ToString(VctrImmOp value);
+const char* ToString(MatImmOp value);
 struct VctrBinaryInsn
 {
 public:
@@ -241,6 +243,30 @@ public:
 
     void Dump(std::ostream& os) const;
 };
+
+struct MatImmInsn
+{
+public:
+    MatImmInsn() = default;
+
+    MatImmInsn(MatImmOp _op, uint32_t _outAddrReg, uint32_t _inAddrReg, 
+        double _Imm,uint32_t _nRow,uint32_t _nCol, ModeCode _mode) :
+        Op(_op), OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg),nRow(_nRow),nCol(_nCol), Imm(_Imm),
+        Mode(_mode)
+    {}
+
+    MatImmOp Op;
+
+    uint32_t OutAddrReg;
+    uint32_t InAddrReg;
+    double Imm;
+    uint32_t nRow;
+    uint32_t nCol;
+    ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
+
 struct VctrDotProdInsn
 {
 public:
@@ -309,6 +335,8 @@ public:
 
         VctrImmInsn VctrImm;
 
+        MatImmInsn MatImm;
+
         LiInsn Li;
 
         StallInsn stall;
@@ -374,6 +402,9 @@ public:
         case InsnType::VctrImm:
             return functor(this->VctrImm, std::forward<TArgs>(args)...);
 
+        case InsnType::MatImm:
+            return functor(this->MatImm, std::forward<TArgs>(args)...);
+
         case InsnType::VctrDotProd:
             return functor(this->VctrDotProd, std::forward<TArgs>(args)...);
 
@@ -412,6 +443,9 @@ public:
     {}
 
     NNPUInsn(const VctrImmInsn &_insn) : Type(InsnType::VctrImm), VctrImm(_insn)
+    {}
+
+    NNPUInsn(const MatImmInsn &_insn) : Type(InsnType::MatImm), MatImm(_insn)
     {}
     
     NNPUInsn(const VctrDotProdInsn &_insn) : Type(InsnType::VctrDotProd), VctrDotProd(_insn)

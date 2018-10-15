@@ -251,6 +251,70 @@ class IntrinManager(object):
                                                  out: out_buf})
         self.intrin_ctors['GEMM'] = gemm
 
+        def mat_imm(intrin_op, shape, scope_in = 'uni',
+                 scope_out = 'uni', mode='inc'):
+            env = self.env
+            cfg = self.env.cfg
+            
+            assert len(shape) == 3, 'shape should be tuple or list with 3 values'
+            # TODO: do a shape check with cfg here!!!!
+            Imm , nRow, nCol  = shape
+            
+            assert nRow != 1 or nCol != 1, 'gemm is not intended to multiply two vector!'
+
+            scope_in = self.get_scope(scope_in)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+            imm = tvm.const(Imm, dtype_in)
+            # the name should contain all parameters
+            name = intrin_op + str(nRow) + '_'+ str(nCol) +  '_'+ str(Imm) +  ';' \
+                   + ';' + scope_in + ';' + scope_out + ';' + mode + \
+                   ';' + str(reduce)
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+
+            in1 = tvm.placeholder((nRow, nCol), dtype=dtype_in, name='in1')
+            def expr_template(in1, imm, func):
+                if (mode == 'inc'):
+                    return lambda i , j: func(in1[i][j].astype(dtype_out), imm.astype(dtype_out))
+                elif (mode == 'dec'):
+                    return lambda i , j: func(in1[i][j], imm).astype(dtype_out)
+                else:
+                    return lambda i , j: func(in1[i][j], imm)
+            # due to the limitation of tvm, we have 3 conditions to consider.
+            if (intrin_op == 'MAddI'):
+                expr = expr_template(in1, imm, lambda x, y: x + y)
+                extern_func = 'NNPU_MAddI'
+            elif (intrin_op == 'MMulI'):
+                expr = expr_template(in1, imm, lambda x, y: x * y)
+                extern_func = 'NNPU_MMulI'
+            elif (intrin_op == 'ISubM'):
+                expr = expr_template(in1, imm, lambda x, y: y - x )
+                extern_func = 'NNPU_ISubM'
+            out = tvm.compute((nRow, nCol), expr, name='out')
+            in1_buf = self.decl_buffer(in1, scope_in, 'in')
+            out_buf = self.decl_buffer(out, scope_out, 'out')
+            def lower_func(ins, outs):
+                din = ins[0]
+                dout = outs[0]
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", extern_func,
+                            dout.access_ptr('w', 'uint32'),
+                            din.access_ptr('r', 'uint32'),
+                            str(Imm),nRow, nCol, 
+                            self.get_mode_code(mode)
+                            ))
+                return irb.get()
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                          name=name,
+                                          binds={in1: in1_buf,
+                                                 out: out_buf})
+        self.intrin_ctors['MAddI'] = mat_imm
+        self.intrin_ctors['MMulI'] = mat_imm
+        self.intrin_ctors['ISubM'] = mat_imm
         def vctr_binary(intrin_op, scope_in1 = 'uni', scope_in2 = 'uni', 
                  scope_out = 'uni', mode='n'):
             env = self.env
