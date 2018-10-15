@@ -424,6 +424,65 @@ void NNPU_VctrBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     nnpu::VctrBinaryInsn insn(op, 0, 1, 2, size, nnpu::ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
+// xian fang zai zhe li yi xia...
+void NNPU_VctrImm(uint32_t outAddr, uint32_t inAddr, double Imm, 
+                    uint32_t size, uint32_t mode, nnpu::VctrImmOp op)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // assign 3 addresses
+    Li li1(0, outAddr);
+    queue->EmplaceBack(li1);
+    Li li2(1, inAddr);
+    queue->EmplaceBack(li2);
+    nnpu::VctrImmInsn insn(op, 0, 1, Imm, size, nnpu::ModeFromInt(mode));
+    queue->EmplaceBack(insn);
+}
+void NNPU_VAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Add);
+}
+
+void NNPU_VSubI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Sub);
+}
+
+void NNPU_VMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Mul);
+}
+
+void NNPU_VDivI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Div);
+}
+
+void NNPU_VGTMI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::GTM);
+}
 
 void NNPU_VAddV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
 {

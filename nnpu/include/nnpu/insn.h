@@ -17,7 +17,7 @@ namespace nnpu
 */
 enum class InsnType
 {
-    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce
+    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm
 };
 
 /*!
@@ -192,7 +192,9 @@ public:
 };
 
 enum class VctrBinaryOp { Add, Sub, Div, Mul, GTM /* greater than merge */ };
+enum class VctrImmOp { Add, Sub, Div, Mul,GTM/* greater than merge */ };
 const char* ToString(VctrBinaryOp value);
+const char* ToString(VctrImmOp value);
 struct VctrBinaryInsn
 {
 public:
@@ -217,6 +219,28 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+struct VctrImmInsn
+{
+public:
+    VctrImmInsn() = default;
+
+    VctrImmInsn(VctrImmOp _op, uint32_t _outAddrReg, uint32_t _inAddrReg, 
+        double _Imm, uint32_t _size, ModeCode _mode) :
+        Op(_op), OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Imm(_Imm),
+        Size(_size), Mode(_mode)
+    {}
+
+    VctrImmOp Op;
+
+    uint32_t OutAddrReg;
+    uint32_t InAddrReg;
+    double Imm;
+
+    uint32_t Size;
+    ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
 struct VctrDotProdInsn
 {
 public:
@@ -283,6 +307,8 @@ public:
 
         VctrBinaryInsn VctrBinary;
 
+        VctrImmInsn VctrImm;
+
         LiInsn Li;
 
         StallInsn stall;
@@ -344,6 +370,9 @@ public:
 
         case InsnType::VctrBinary:
             return functor(this->VctrBinary, std::forward<TArgs>(args)...);
+        
+        case InsnType::VctrImm:
+            return functor(this->VctrImm, std::forward<TArgs>(args)...);
 
         case InsnType::VctrDotProd:
             return functor(this->VctrDotProd, std::forward<TArgs>(args)...);
@@ -382,6 +411,9 @@ public:
     NNPUInsn(const VctrBinaryInsn &_insn) : Type(InsnType::VctrBinary), VctrBinary(_insn)
     {}
 
+    NNPUInsn(const VctrImmInsn &_insn) : Type(InsnType::VctrImm), VctrImm(_insn)
+    {}
+    
     NNPUInsn(const VctrDotProdInsn &_insn) : Type(InsnType::VctrDotProd), VctrDotProd(_insn)
     {}
 

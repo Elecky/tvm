@@ -40,7 +40,6 @@ def test():
 
     # build
     print(tvm.lower(s, [a_host, b_host], simple_mode=True))
-
     print(nnpu.lower(s, [a_host, b_host], simple_mode=True))
     #exit()
     func = nnpu.build(s, [a_host, b_host], 'nnpu', 'llvm', name='nnpu_log')

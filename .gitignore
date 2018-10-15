@@ -192,4 +192,5 @@ build*
 # tmp file
 .nfs*
 
+nnpu_config.yaml
 nnpu/nnpu_config.yaml
