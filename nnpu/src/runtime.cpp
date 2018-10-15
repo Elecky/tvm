@@ -457,6 +457,15 @@ void NNPU_VSubI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t si
     NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Sub);
 }
 
+void NNPU_ISubV(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::RSub);
+}
+
 void NNPU_VMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
     std::stringstream st;
