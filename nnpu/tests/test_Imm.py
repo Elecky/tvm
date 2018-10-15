@@ -16,7 +16,7 @@ def test():
     sph.MarkScope(c_buf)
     c_host, c_dram = nnpu.utils.CopyBufToH(c_buf, 'c', sph)
 
-    sub_buf = tvm.compute((16, ), lambda i: a_buf[i] - Imm, 'sub_buf')
+    sub_buf = tvm.compute((16, ), lambda i: a_buf[i] - Imm , 'sub_buf')
     sph.MarkScope(sub_buf)
     sub_host, sub_dram = nnpu.utils.CopyBufToH(sub_buf, 'sub', sph)
 
@@ -32,16 +32,21 @@ def test():
     sph.MarkScope(gtm_buf)
     gtm_host, gtm_dram = nnpu.utils.CopyBufToH(gtm_buf, 'gtm', sph)
 
-    s = tvm.create_schedule([c_host.op, sub_host.op, mul_host.op, div_host.op, gtm_host.op])
+    rsub_buf = tvm.compute((16, ), lambda i: Imm-a_buf[i], 'rsub_buf')
+    sph.MarkScope(rsub_buf)
+    rsub_host, rsub_dram = nnpu.utils.CopyBufToH(rsub_buf, 'rsub', sph)
+
+
+    s = tvm.create_schedule([c_host.op, sub_host.op, mul_host.op, div_host.op, gtm_host.op,rsub_host.op])
     sph.Transform(s)
     s[c_buf].tensorize(s[c_buf].op.axis[0], env.intrins.get('VAddI', imm_value=Imm.value,mode='w'))
     s[sub_buf].tensorize(s[sub_buf].op.axis[0], env.intrins.get('VSubI', imm_value=Imm.value,mode='w'))
     s[mul_buf].tensorize(s[mul_buf].op.axis[0], env.intrins.get('VMulI', imm_value=Imm.value,mode='w'))
     s[div_buf].tensorize(s[div_buf].op.axis[0], env.intrins.get('VDivI', imm_value=Imm.value,mode='w'))
     s[gtm_buf].tensorize(s[gtm_buf].op.axis[0], env.intrins.get('VGTMI', imm_value=Imm.value,mode='w'))
-
-    print(nnpu.lower(s, [a,c_host,sub_host,mul_host,div_host,gtm_host], simple_mode=True))
-    func = nnpu.build(s, [a,c_host,sub_host,mul_host,div_host,gtm_host], 'nnpu', 'llvm', name='nnpu_vmuli')
+    s[rsub_buf].tensorize(s[rsub_buf].op.axis[0], env.intrins.get('ISubV', imm_value=Imm.value,mode='w'))
+    print(nnpu.lower(s, [a,c_host,sub_host,mul_host,div_host,gtm_host,rsub_host], simple_mode=True))
+    func = nnpu.build(s, [a,c_host,sub_host,mul_host,div_host,gtm_host,rsub_host], 'nnpu', 'llvm', name='nnpu_vmuli')
 
 
     ctx = tvm.nd.TVMContext(13, 0)
@@ -55,8 +60,8 @@ def test():
     mul_nd = tvm.nd.array(np.zeros((16, )).astype(c_host.dtype), ctx)
     div_nd = tvm.nd.array(np.zeros((16, )).astype(c_host.dtype), ctx)
     gtm_nd = tvm.nd.array(np.zeros((16, )).astype(c_host.dtype), ctx)
-
-    func(a_nd, c_nd, sub_nd, mul_nd, div_nd, gtm_nd)
+    rsub_nd = tvm.nd.array(np.zeros((16, )).astype(c_host.dtype), ctx)
+    func(a_nd, c_nd, sub_nd, mul_nd, div_nd, gtm_nd,rsub_nd)
     print(a_nd.asnumpy())
     print('add result is: ')
     print(c_nd.asnumpy())
@@ -80,6 +85,8 @@ def test():
     print('gtm result is: ')
     print(gtm_nd.asnumpy())
     #np.testing.assert_allclose(gtm_nd.asnumpy(), a_np  Imm.value)
-
+    print('rsub result is: ')
+    print(rsub_nd.asnumpy())
+    np.testing.assert_allclose(rsub_nd.asnumpy(), Imm.value-a_np)
 if __name__ == '__main__':
     test()

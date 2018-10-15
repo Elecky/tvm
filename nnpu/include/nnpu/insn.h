@@ -193,7 +193,7 @@ public:
 };
 
 enum class VctrBinaryOp { Add, Sub, Div, Mul, GTM /* greater than merge */ };
-enum class VctrImmOp { Add, Sub, Div, Mul,GTM/* greater than merge */ };
+enum class VctrImmOp { Add, Sub, Div, Mul,GTM,RSub/* greater than merge */ };
 const char* ToString(VctrBinaryOp value);
 const char* ToString(VctrImmOp value);
 struct VctrBinaryInsn

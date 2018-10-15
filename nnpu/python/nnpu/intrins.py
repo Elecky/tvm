@@ -127,6 +127,9 @@ class IntrinManager(object):
             elif (intrin_op == 'VGTMI'):
                 expr = expr_template(op_in, imm, lambda x, y: tvm.select(x > y, x, y))
                 extern_func = 'NNPU_VGTMI'
+            elif (intrin_op == 'ISubV'):
+                expr = expr_template(op_in,imm, lambda x, y: y-x)
+                extern_func = 'NNPU_ISubV'
             else:
                 raise ValueError('unsupported vctr Imm intrin op')
             out = tvm.compute(out_shape, expr,
@@ -160,7 +163,7 @@ class IntrinManager(object):
         self.intrin_ctors['VMulI'] = vctr_imm
         self.intrin_ctors['VDivI'] = vctr_imm
         self.intrin_ctors['VGTMI'] = vctr_imm
-
+        self.intrin_ctors['ISubV'] = vctr_imm
         def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
                  scope_out = 'uni', mode='inc', reduce=False):
             env = self.env

@@ -65,6 +65,8 @@ void NNPU_VMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t si
 
 void NNPU_VSubI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
 
+void NNPU_ISubV(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
+
 void NNPU_VDivI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
 
 void NNPU_VGTMI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
