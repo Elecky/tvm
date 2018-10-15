@@ -17,7 +17,7 @@ namespace nnpu
 */
 enum class InsnType
 {
-    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm, MatImm
+    VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm, MatImm,MatBinary
 };
 
 /*!
@@ -313,6 +313,30 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+enum class MatBinaryOp { Add, Sub, Mul };
+const char* ToString(MatBinaryOp value);
+
+struct MatBinaryInsn
+{
+public:
+    MatBinaryInsn() = default;
+
+    MatBinaryInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg,
+                  uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
+        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
+        NRow(_nRow), NCol(_nCol), Mode(_mode)
+    {}
+
+    uint32_t OutAddrReg;
+    uint32_t In1AddrReg;
+    uint32_t In2AddrReg;
+
+    // the following fileds are part of insn encoding.
+    uint32_t NRow;
+    uint32_t NCol;
+    ModeCode Mode;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -346,6 +370,8 @@ public:
         VctrDotProdInsn VctrDotProd;
 
         VctrReduceInsn VctrReduce;
+
+        MatBinaryInsn MatBinary;
     };
 
     /* dispatch a call depends on the instruction type
@@ -410,6 +436,9 @@ public:
 
         case InsnType::VctrReduce:
             return functor(this->VctrReduce, std::forward<TArgs>(args)...);
+        
+        case InsnType::MatBinary:
+            return functor(this->MatBinary, std::forward<TArgs>(args)...);
 
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
@@ -452,6 +481,9 @@ public:
     {}
 
     NNPUInsn(const VctrReduceInsn &_insn) : Type(InsnType::VctrReduce), VctrReduce(_insn)
+    {}
+
+    NNPUInsn(const MatBinaryInsn &_insn) : Type(InsnType::MatBinary), MatBinary(_insn)
     {}
 };
 
