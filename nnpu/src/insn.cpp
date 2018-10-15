@@ -221,4 +221,22 @@ const char* ToString(VctrImmOp value)
     }
 }
 
+const char* ToString(MatBinaryOp value)
+{
+    switch (value)
+    {
+    case MatBinaryOp::Add:
+        return "Add";
+    
+    case MatBinaryOp::Sub:
+        return "Sub";
+    
+    case MatBinaryOp::Mul:
+        return "Mul";
+    
+    default:
+        return "Unknown";
+    }
+}
+
 }  // namespace nnpu
