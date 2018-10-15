@@ -92,30 +92,40 @@ class IntrinManager(object):
             scope_in = self.get_scope(scope_in)
             scope_out = self.get_scope(scope_out)
             dtype_in, dtype_out = self.mode2dtype(mode)
-            imm = tvm.const(imm_value, dtype_out)
+            imm = tvm.const(imm_value, dtype_in)
             print ('ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ')
             print (imm)
             name = intrin_op + ';' + scope_in + ';' + scope_out + ';' +str(imm_value)+';'+ mode
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
+
             in_shape = (cfg['vector_unit']['size'], )
             out_shape = (cfg['vector_unit']['size'], )
             op_in = tvm.placeholder(in_shape, dtype=dtype_in,
                                     name='in')
+
+            def expr_template(in1, imm, func):
+                if (mode == 'inc'):
+                    return lambda i: func(in1[i].astype(dtype_out), imm.astype(dtype_out))
+                elif (mode == 'dec'):
+                    return lambda i: func(in1[i], imm).astype(dtype_out)
+                else:
+                    return lambda i: func(in1[i], imm)
+
             if (intrin_op == 'VAddI'):
-                expr = lambda i: (op_in[i] + imm).astype(dtype_out)
+                expr = expr_template(op_in, imm, lambda x, y: x + y)
                 extern_func = 'NNPU_VAddI'
             elif (intrin_op == 'VSubI'):
-                expr = lambda i: (op_in[i] - imm).astype(dtype_out)
+                expr = expr_template(op_in, imm, lambda x, y: x - y)
                 extern_func = 'NNPU_VSubI'
             elif (intrin_op == 'VMulI'):
-                expr = lambda i: (op_in[i] * imm).astype(dtype_out)
+                expr = expr_template(op_in, imm, lambda x, y: x * y)
                 extern_func = 'NNPU_VMulI'
             elif (intrin_op == 'VDivI'):
-                expr = lambda i: (op_in[i] / imm).astype(dtype_out)
+                expr = expr_template(op_in, imm, lambda x, y: x / y)
                 extern_func = 'NNPU_VDivI'
             elif (intrin_op == 'VGTMI'):
-                expr = lambda i: tvm.select(op_in[i] > imm, op_in[i], imm)
+                expr = expr_template(op_in, imm, lambda x, y: tvm.select(x > y, x, y))
                 extern_func = 'NNPU_VGTMI'
             else:
                 raise ValueError('unsupported vctr Imm intrin op')
@@ -150,6 +160,7 @@ class IntrinManager(object):
         self.intrin_ctors['VMulI'] = vctr_imm
         self.intrin_ctors['VDivI'] = vctr_imm
         self.intrin_ctors['VGTMI'] = vctr_imm
+
         def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
                  scope_out = 'uni', mode='inc', reduce=False):
             env = self.env
@@ -261,26 +272,26 @@ class IntrinManager(object):
 
             def expr_template(x, y, func):
                 if (mode == 'inc'):
-                    return func(x.astype(dtype_out), y.astype(dtype_out))
+                    return lambda i: func(x[i].astype(dtype_out), y[i].astype(dtype_out))
                 elif (mode == 'dec'):
-                    return func(x, y).astype(dtype_out)
+                    return lambda i: func(x[i], y[i]).astype(dtype_out)
                 else:
-                    return func(x, y)
+                    return lambda i: func(x[i], y[i])
 
             if (intrin_op == 'VAddV'):
-                expr = lambda i: expr_template(in1[i], in2[i], lambda x, y: x + y)
+                expr = expr_template(in1, in2, lambda x, y: x + y)
                 extern_func = 'NNPU_VAddV'
             elif (intrin_op == 'VSubV'):
-                expr = lambda i: expr_template(in1[i], in2[i], lambda x, y: x - y)
+                expr = expr_template(in1, in2, lambda x, y: x - y)
                 extern_func = 'NNPU_VSubV'
             elif (intrin_op == 'VMulV'):
-                expr = lambda i: expr_template(in1[i], in2[i], lambda x, y: x * y)
+                expr = expr_template(in1, in2, lambda x, y: x * y)
                 extern_func = 'NNPU_VMulV'
             elif (intrin_op == 'VDivV'):
-                expr = lambda i: expr_template(in1[i], in2[i], lambda x, y: x / y)
+                expr = expr_template(in1, in2, lambda x, y: x / y)
                 extern_func = 'NNPU_VDivV'
             elif (intrin_op == 'VGTMV'):
-                expr = lambda i: expr_template(in1[i], in2[i], 
+                expr = expr_template(in1, in2, 
                                     lambda x, y: tvm.select(x > y, x, y))
                 extern_func = 'NNPU_VGTMV'
             else:

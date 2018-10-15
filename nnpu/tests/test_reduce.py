@@ -8,7 +8,7 @@ def test():
     env = nnpu.get_env()
     nnpu.set_device(env)
 
-    a = tvm.placeholder((4, 16), 'int16', 'a')
+    a = tvm.placeholder((4, 16), env.cfg['dtype_w'], 'a')
     
     sph = ScheduleProcHelper()
 
