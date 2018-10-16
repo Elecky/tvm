@@ -741,6 +741,67 @@ class IntrinManager(object):
         self.intrin_ctors['MSubV'] = mat_vctr_row
         self.intrin_ctors['MMulV'] = mat_vctr_row
 
+        def mat_row_dot(intrin_op, shape, scope_in1='uni', scope_in2='uni', scope_out='uni',
+                       mode='inc'):
+            env = self.env
+            cfg = self.env.cfg
+
+            scope_in1 = self.get_scope(scope_in1)
+            scope_in2 = self.get_scope(scope_in2)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+
+            # TODO: validate shape with cfg
+            assert len(shape) == 2, 'the length of shape should be 2'
+            nRow, nCol = shape
+            
+            # the name should contain all parameters
+            name = intrin_op + ';' + str(nRow) + '_' + str(nCol) + '_' \
+                    + scope_in1 + ';' + scope_in2 + ';' + scope_out + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+            
+            in1 = tvm.placeholder(shape, dtype_in, 'in1')
+            in2 = tvm.placeholder(shape, dtype_in, 'in2')
+            
+            k = tvm.reduce_axis((0, nCol), 'k')
+            if (mode == 'inc'):
+                expr = lambda i: tvm.sum(in1[i, k].astype(dtype_out) * in2[i, k].astype(dtype_out), k)
+            elif (mode == 'dec'):
+                expr = lambda i: tvm.sum(in1[i, k] * in2[i, k], k).astype(dtype_out)
+            else:
+                expr = lambda i: tvm.sum(in1[i, k] * in2[i, k], k)
+            out = tvm.compute((nRow, ), expr, 'out')
+
+            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf')
+            in2_buf = self.decl_buffer(in2, scope_in2, 'in2_buf')
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+            
+            def lower_func(ins, outs):
+                din1, din2 = ins[0], ins[1]
+                dout = outs[0]
+
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", 'NNPU_MRowDot',
+                            dout.access_ptr('w', 'uint32'),
+                            din1.access_ptr('r', 'uint32'),
+                            din2.access_ptr('r', 'uint32'),
+                            shape[0], shape[1],
+                            self.get_mode_code(mode)
+                            ))
+                
+                return irb.get()
+
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                          name=name,
+                                          binds={in1: in1_buf,
+                                                 in2: in2_buf,
+                                                 out: out_buf})
+        self.intrin_ctors['MRowDot'] = mat_row_dot
+
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
             format(intrin_op)

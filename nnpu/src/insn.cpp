@@ -142,6 +142,12 @@ void MatVctrInsn::Dump(std::ostream &os) const
        << " $" << OutAddrReg << ", $" << MatAddrReg << ", $" << VctrAddrReg;
 }
 
+void MatRowDotInsn::Dump(std::ostream &os) const
+{
+    os << "MRowDot" << "_" << NRow << '_' << NCol << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)

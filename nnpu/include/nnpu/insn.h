@@ -18,7 +18,7 @@ namespace nnpu
 enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
-    MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr
+    MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot
 };
 
 /*!
@@ -412,6 +412,31 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+/*!
+ * \brief calc the dot product of two input matrix on every row.
+*/
+struct MatRowDotInsn
+{
+public:
+    MatRowDotInsn() = default;
+
+    MatRowDotInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg,
+                  uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
+        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
+        NRow(_nRow), NCol(_nCol), Mode(_mode)
+    {}
+
+    uint32_t OutAddrReg;
+    uint32_t In1AddrReg;
+    uint32_t In2AddrReg;
+
+    // the following fileds are part of insn encoding.
+    uint32_t NRow, NCol;  // the total elements in both matrix.
+    ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -453,6 +478,8 @@ public:
         MatReduceColInsn MatReduceCol;
 
         MatVctrInsn MatVctr;
+
+        MatRowDotInsn MatRowDot;
     };
 
     /* dispatch a call depends on the instruction type
@@ -530,6 +557,9 @@ public:
         case InsnType::MatVctr:
             return functor(this->MatVctr, std::forward<TArgs>(args)...);
 
+        case InsnType::MatRowDot:
+            return functor(this->MatRowDot, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -583,6 +613,9 @@ public:
     {}
 
     NNPUInsn(const MatVctrInsn &_insn) : Type(InsnType::MatVctr), MatVctr(_insn)
+    {}
+
+    NNPUInsn(const MatRowDotInsn &_insn) : Type(InsnType::MatRowDot), MatRowDot(_insn)
     {}
 };
 
