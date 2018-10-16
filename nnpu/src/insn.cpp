@@ -99,6 +99,13 @@ void VctrImmInsn::Dump(ostream& os) const
     os << 'V' << ToString(Op) << "I_" << Size << '.' << mode2str(Mode) << " $"
        << OutAddrReg << ", $" << InAddrReg << ", (IMM)"<< Imm;
 }
+
+void MatImmInsn::Dump(ostream& os) const
+{
+    os << 'M' << ToString(Op) << "I_" << nRow << "_" << nCol << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << InAddrReg << ", (IMM)"<< Imm;
+}
+
 void VctrDotProdInsn::Dump(ostream &os) const
 {
     os << "VDotV_" << Size << '.' << mode2str(Mode) << " $"
@@ -234,6 +241,27 @@ const char* ToString(VctrImmOp value)
     case VctrImmOp::GTM:
         return "GTM";
     
+    case VctrImmOp::RSub:
+        return "RSub";
+
+    default:
+        return "Unknown";
+    }
+}
+
+const char* ToString(MatImmOp value)
+{
+    switch (value)
+    {
+    case MatImmOp::Add:
+        return "Add";
+
+    case MatImmOp::Mul:
+        return "Mul";
+    
+    case MatImmOp::RSub:
+        return "RSub";
+
     default:
         return "Unknown";
     }

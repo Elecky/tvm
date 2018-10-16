@@ -439,6 +439,47 @@ void NNPU_VctrImm(uint32_t outAddr, uint32_t inAddr, double Imm,
     nnpu::VctrImmInsn insn(op, 0, 1, Imm, size, nnpu::ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
+void NNPU_MatImm(uint32_t outAddr, uint32_t inAddr, double Imm, 
+                    uint32_t nRow,uint32_t nCol, uint32_t mode, nnpu::MatImmOp op)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // assign 3 addresses
+    Li li1(0, outAddr);
+    queue->EmplaceBack(li1);
+    Li li2(1, inAddr);
+    queue->EmplaceBack(li2);
+    nnpu::MatImmInsn insn(op, 0, 1, Imm, nRow, nCol , nnpu::ModeFromInt(mode));
+    queue->EmplaceBack(insn);
+}
+void NNPU_MAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::Add);
+}
+
+void NNPU_MMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::Mul);
+}
+
+void NNPU_ISubM(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
+{
+    std::stringstream st;
+    st<<ImmS;
+    double Imm = 0;
+    st>>Imm;
+    NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::RSub);
+}
+
 void NNPU_VAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
     std::stringstream st;
