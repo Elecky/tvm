@@ -95,6 +95,15 @@ void NNPU_MMulM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t S
 void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t nRow, uint32_t nCol, 
                         uint32_t mode);
 
+void NNPU_MAddV(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
+                uint32_t nRow, uint32_t nCol, uint32_t mode);
+
+void NNPU_MSubV(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
+                uint32_t nRow, uint32_t nCol, uint32_t mode);
+
+void NNPU_MMulV(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
+                uint32_t nRow, uint32_t nCol, uint32_t mode);
+
 void NNPUSynchronize(uint32_t timeout);
 
 #ifdef __cplusplus

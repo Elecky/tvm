@@ -136,6 +136,12 @@ void MatReduceColInsn::Dump(std::ostream &os) const
        << " $" << OutAddrReg << ", $" << InAddrReg;
 }
 
+void MatVctrInsn::Dump(std::ostream &os) const
+{
+    os << "M" << ToString(Op) << "V_" << NRow << '_' << NCol << '.' << mode2str(Mode) 
+       << " $" << OutAddrReg << ", $" << MatAddrReg << ", $" << VctrAddrReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)
@@ -278,6 +284,24 @@ const char* ToString(MatBinaryOp value)
         return "Sub";
     
     case MatBinaryOp::Mul:
+        return "Mul";
+    
+    default:
+        return "Unknown";
+    }
+}
+
+const char* ToString(MatVctrOp value)
+{
+    switch (value)
+    {
+    case MatVctrOp::Add:
+        return "Add";
+    
+    case MatVctrOp::Sub:
+        return "Sub";
+    
+    case MatVctrOp::Mul:
         return "Mul";
     
     default:
