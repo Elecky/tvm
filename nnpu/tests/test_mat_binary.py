@@ -42,11 +42,11 @@ def test():
 
     ctx = tvm.nd.TVMContext(13, 0)
 
-    a_np = np.random.randint(size=(8, 16), dtype=a.dtype, low = 0, high = 16)
+    a_np = np.random.randint(size=(8, 16), dtype=a.dtype, low = 0, high = 23)
     #a_np = np.random.random(size=shape).astype(a_host.dtype)
     a_nd = tvm.nd.array(a_np, ctx)
 
-    b_np = np.random.randint(size=(8, 16), dtype=b.dtype, low = 0, high = 16)    
+    b_np = np.random.randint(size=(8, 16), dtype=b.dtype, low = 0, high = 23)    
     b_nd = tvm.nd.array(b_np, ctx)
     c_nd = tvm.nd.array(np.zeros((8, 16)).astype(sum_host.dtype), ctx)
 
