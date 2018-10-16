@@ -24,9 +24,9 @@ def test():
     sph.MarkScope(mul_buf)
     mul_host, mul_dram = nnpu.utils.CopyBufToH(mul_buf, 'mul', sph)
 
-    div_buf = tvm.compute((16, ), lambda i: a_buf[i] / Imm, 'div_buf')
+    div_buf = tvm.compute((16, ), lambda i: Imm/a_buf[i], 'rdiv_buf')
     sph.MarkScope(div_buf)
-    div_host, div_dram = nnpu.utils.CopyBufToH(div_buf, 'div', sph)
+    div_host, div_dram = nnpu.utils.CopyBufToH(div_buf, 'rdiv', sph)
 
     gtm_buf = tvm.compute((16, ), lambda i: tvm.select(a_buf[i] > Imm, a_buf[i], Imm), 'gtm_buf')
     sph.MarkScope(gtm_buf)
@@ -42,7 +42,7 @@ def test():
     s[c_buf].tensorize(s[c_buf].op.axis[0], env.intrins.get('VAddI', imm_value=Imm.value,mode='w'))
     s[sub_buf].tensorize(s[sub_buf].op.axis[0], env.intrins.get('VSubI', imm_value=Imm.value,mode='w'))
     s[mul_buf].tensorize(s[mul_buf].op.axis[0], env.intrins.get('VMulI', imm_value=Imm.value,mode='w'))
-    s[div_buf].tensorize(s[div_buf].op.axis[0], env.intrins.get('VDivI', imm_value=Imm.value,mode='w'))
+    s[div_buf].tensorize(s[div_buf].op.axis[0], env.intrins.get('IDivV', imm_value=Imm.value,mode='w'))
     s[gtm_buf].tensorize(s[gtm_buf].op.axis[0], env.intrins.get('VGTMI', imm_value=Imm.value,mode='w'))
     s[rsub_buf].tensorize(s[rsub_buf].op.axis[0], env.intrins.get('ISubV', imm_value=Imm.value,mode='w'))
     print(nnpu.lower(s, [a,c_host,sub_host,mul_host,div_host,gtm_host,rsub_host], simple_mode=True))
@@ -80,7 +80,7 @@ def test():
 
     print('div result is: ')
     print(div_nd.asnumpy())
-    np.testing.assert_allclose(div_nd.asnumpy(), a_np / Imm.value)
+    np.testing.assert_allclose(div_nd.asnumpy(), Imm.value / a_np)
 
     print('gtm result is: ')
     print(gtm_nd.asnumpy())

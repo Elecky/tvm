@@ -219,7 +219,7 @@ public:
     void Dump(std::ostream& os) const;
 };
 
-enum class VctrImmOp { Add, Sub, Div, Mul,GTM/* greater than merge */,RSub };
+enum class VctrImmOp { Add, Sub, Div, Mul,GTM/* greater than merge */, RSub , RDiv };
 const char* ToString(VctrImmOp value);
 
 struct VctrImmInsn
