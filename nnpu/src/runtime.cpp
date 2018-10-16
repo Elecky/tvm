@@ -565,3 +565,66 @@ void NNPU_VctrReduceMin(uint32_t outAddr, uint32_t inAddr, uint32_t size, uint32
 {
     NNPU_VctrReduce(outAddr, inAddr, nnpu::ReduceOp::Min, size, mode);
 }
+
+void NNPU_MatBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
+                    nnpu::MatBinaryOp op, uint32_t Size, uint32_t mode)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // assign 3 addresses
+    Li li1(0, outAddr);
+    queue->EmplaceBack(li1);
+    Li li2(1, in1Addr);
+    queue->EmplaceBack(li2);
+    Li li3(2, in2Addr);
+    queue->EmplaceBack(li3);
+
+    nnpu::MatBinaryInsn insn(0, 1, 2, op, Size, nnpu::ModeFromInt(mode));
+    queue->EmplaceBack(insn);
+}
+
+void NNPU_MAddM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode)
+{
+    NNPU_MatBinary(outAddr, in1Addr, in2Addr, nnpu::MatBinaryOp::Add, Size, mode);
+}
+
+void NNPU_MSubM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode)
+{
+    NNPU_MatBinary(outAddr, in1Addr, in2Addr, nnpu::MatBinaryOp::Sub, Size, mode);
+}
+
+void NNPU_MMulM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode)
+{
+    NNPU_MatBinary(outAddr, in1Addr, in2Addr, nnpu::MatBinaryOp::Mul, Size, mode);
+}
+
+void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, nnpu::ReduceOp op, 
+                  uint32_t nRow, uint32_t nCol, uint32_t mode, bool isRow)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // assign 3 addresses
+    Li li1(0, outAddr);
+    queue->EmplaceBack(li1);
+    Li li2(1, inAddr);
+    queue->EmplaceBack(li2);
+
+    if (isRow)
+    {
+        nnpu::MatReduceRowInsn insn(0, 1, op, nRow, nCol, nnpu::ModeFromInt(mode));
+        queue->EmplaceBack(insn);
+    }
+    else
+    {
+        nnpu::MatReduceColInsn insn(0, 1, op, nRow, nCol, nnpu::ModeFromInt(mode));
+        queue->EmplaceBack(insn);
+    }
+}
+
+void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t nRow, uint32_t nCol, 
+                        uint32_t mode)
+{
+    NNPU_MReduce(outAddr, inAddr, nnpu::ReduceOp::Sum, nRow, nCol, mode, true);
+}

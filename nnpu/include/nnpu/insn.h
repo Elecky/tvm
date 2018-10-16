@@ -18,7 +18,7 @@ namespace nnpu
 enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
-    MatBinary
+    MatBinary, MatReduceRow, MatReduceCol
 };
 
 /*!
@@ -193,7 +193,7 @@ public:
 };
 
 enum class VctrBinaryOp { Add, Sub, Div, Mul, GTM /* greater than merge */ };
-enum class VctrImmOp { Add, Sub, Div, Mul,GTM,RSub/* greater than merge */ };
+enum class VctrImmOp { Add, Sub, Div, Mul,GTM/* greater than merge */,RSub };
 const char* ToString(VctrBinaryOp value);
 const char* ToString(VctrImmOp value);
 struct VctrBinaryInsn
@@ -297,9 +297,9 @@ public:
     MatBinaryInsn() = default;
 
     MatBinaryInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg,
-                  uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
+                  MatBinaryOp _op, uint32_t _size, ModeCode _mode) :
         OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
-        NRow(_nRow), NCol(_nCol), Mode(_mode)
+        Op(_op), Size(_size), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
@@ -307,9 +307,55 @@ public:
     uint32_t In2AddrReg;
 
     // the following fileds are part of insn encoding.
-    uint32_t NRow;
-    uint32_t NCol;
+    MatBinaryOp Op;
+    uint32_t Size;  // the total elements in both matrix.
     ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
+
+struct MatReduceRowInsn
+{
+public:
+    MatReduceRowInsn() = default;
+
+    MatReduceRowInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, ReduceOp _op,
+        uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
+        OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Op(_op),
+        NRow(_nRow), NCol(_nCol), Mode(_mode)
+    {}
+
+    uint32_t OutAddrReg;
+    uint32_t InAddrReg;
+
+    // the following fileds are part of insn encoding.
+    ReduceOp Op;
+    uint32_t NRow, NCol;
+    ModeCode Mode;
+
+    void Dump(std::ostream &os) const;
+};
+
+struct MatReduceColInsn
+{
+public:
+    MatReduceColInsn() = default;
+
+    MatReduceColInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, ReduceOp _op,
+        uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
+        OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Op(_op),
+        NRow(_nRow), NCol(_nCol), Mode(_mode)
+    {}
+
+    uint32_t OutAddrReg;
+    uint32_t InAddrReg;
+
+    // the following fileds are part of insn encoding.
+    ReduceOp Op;
+    uint32_t NRow, NCol;
+    ModeCode Mode;
+
+    void Dump(std::ostream &os) const;
 };
 
 /*
@@ -345,6 +391,10 @@ public:
         VctrReduceInsn VctrReduce;
 
         MatBinaryInsn MatBinary;
+
+        MatReduceRowInsn MatReduceRow;
+
+        MatReduceColInsn MatReduceCol;
     };
 
     /* dispatch a call depends on the instruction type
@@ -410,6 +460,12 @@ public:
         case InsnType::MatBinary:
             return functor(this->MatBinary, std::forward<TArgs>(args)...);
 
+        case InsnType::MatReduceRow:
+            return functor(this->MatReduceRow, std::forward<TArgs>(args)...);
+
+        case InsnType::MatReduceCol:
+            return functor(this->MatReduceCol, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -451,6 +507,12 @@ public:
     {}
 
     NNPUInsn(const MatBinaryInsn &_insn) : Type(InsnType::MatBinary), MatBinary(_insn)
+    {}
+
+    NNPUInsn(const MatReduceRowInsn &_insn) : Type(InsnType::MatReduceRow), MatReduceRow(_insn)
+    {}
+
+    NNPUInsn(const MatReduceColInsn &_insn) : Type(InsnType::MatReduceCol), MatReduceCol(_insn)
     {}
 };
 

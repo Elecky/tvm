@@ -105,10 +105,28 @@ void VctrDotProdInsn::Dump(ostream &os) const
        << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
-void VctrReduceInsn::Dump(std::ostream& os) const
+void VctrReduceInsn::Dump(std::ostream &os) const
 {
-    os << "VReduce" << ToString(Op) << "_" << '.' << mode2str(Mode) << " $"
+    os << "VReduce" << ToString(Op) << "_" << Size << '.' << mode2str(Mode) << " $"
        << OutAddrReg << ", $" << InAddrReg;
+}
+
+void MatBinaryInsn::Dump(std::ostream &os) const
+{
+    os << "M" << ToString(Op) << "M" << "_" << Size << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+}
+
+void MatReduceRowInsn::Dump(std::ostream &os) const
+{
+    os << "MReduce" << ToString(Op) << "Row_" << NRow << '_' << NCol << '.' << mode2str(Mode) 
+       << " $" << OutAddrReg << ", $" << InAddrReg;
+}
+
+void MatReduceColInsn::Dump(std::ostream &os) const
+{
+    os << "MReduce" << ToString(Op) << "Col_" << NRow << '_' << NCol << '.' << mode2str(Mode) 
+       << " $" << OutAddrReg << ", $" << InAddrReg;
 }
 
 // ToString functions starts from here

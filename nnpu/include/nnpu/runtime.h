@@ -70,6 +70,7 @@ void NNPU_ISubV(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t si
 void NNPU_VDivI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
 
 void NNPU_VGTMI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
+
 void NNPU_VctrDotProd(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, 
                       uint32_t mode);
 
@@ -81,6 +82,15 @@ void NNPU_VctrReduceMax(uint32_t outAddr, uint32_t inAddr, uint32_t size,
 
 void NNPU_VctrReduceMin(uint32_t outAddr, uint32_t inAddr, uint32_t size, 
                       uint32_t mode);
+
+void NNPU_MAddM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode);
+
+void NNPU_MSubM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode);
+
+void NNPU_MMulM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode);
+
+void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t nRow, uint32_t nCol, 
+                        uint32_t mode);
 
 void NNPUSynchronize(uint32_t timeout);
 

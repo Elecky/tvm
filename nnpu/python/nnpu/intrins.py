@@ -412,10 +412,9 @@ class IntrinManager(object):
             
             def expr_template(x, func, k):
                 if (mode == 'inc'):
-                    return lambda i: func(x, k).astype(dtype_out)
+                    return lambda i: func(x.astype(dtype_out), k)
                 elif (mode == 'dec'):
-                    x = x.astype(dtype_out)
-                    return lambda i: func(x, k)
+                    return lambda i: func(x, k).astype(dtype_out)
                 else:
                     return lambda i: func(x, k)
 
@@ -461,6 +460,145 @@ class IntrinManager(object):
         self.intrin_ctors['VReduceSum'] = vctr_reduce
         self.intrin_ctors['VReduceMax'] = vctr_reduce
         self.intrin_ctors['VReduceMin'] = vctr_reduce
+
+        def mat_binary(intrin_op, shape, scope_in1='uni', scope_in2='uni', scope_out='uni',
+                       mode='n'):
+            env = self.env
+            cfg = self.env.cfg
+
+            scope_in1 = self.get_scope(scope_in1)
+            scope_in2 = self.get_scope(scope_in2)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+
+            # TODO: validate shape with cfg
+            assert len(shape) == 2, 'the length of shape should be 2'
+            nRow, nCol = shape
+            
+            # the name should contain all parameters
+            name = intrin_op + ';' + str(nRow) + '_' + str(nCol) + '_' \
+                    + scope_in1 + ';' + scope_in2 + ';' + scope_out + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+            
+            in1 = tvm.placeholder(shape, dtype_in, 'in1')
+            in2 = tvm.placeholder(shape, dtype_in, 'in2')
+
+            def expr_template(x, y, func):
+                if (mode == 'inc'):
+                    return lambda *i: func(x(*i).astype(dtype_out), y(*i).astype(dtype_out))
+                elif (mode == 'dec'):
+                    return lambda *i: func(x(*i), y(*i)).astype(dtype_out)
+                else:
+                    return lambda *i: func(x(*i), y(*i))
+
+            if (intrin_op == 'MAddM'):
+                expr = expr_template(in1, in2, lambda x, y: x + y)
+                extern_func = 'NNPU_MAddM'
+            elif (intrin_op == 'MSubM'):
+                expr = expr_template(in1, in2, lambda x, y: x - y)
+                extern_func = 'NNPU_MSubM'
+            elif (intrin_op == 'MMulM'):
+                expr = expr_template(in1, in2, lambda x, y: x * y)
+                extern_func = 'NNPU_MMulM'
+            else:
+                raise ValueError('unsupported mat binary op')
+            out = tvm.compute(shape, expr, 'out')
+
+            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf')
+            in2_buf = self.decl_buffer(in2, scope_in2, 'in2_buf')
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+            
+            def lower_func(ins, outs):
+                din1, din2 = ins[0], ins[1]
+                dout = outs[0]
+
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", extern_func,
+                            dout.access_ptr('w', 'uint32'),
+                            din1.access_ptr('r', 'uint32'),
+                            din2.access_ptr('r', 'uint32'),
+                            shape[0] * shape[1],
+                            self.get_mode_code(mode)
+                            ))
+                
+                return irb.get()
+
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                          name=name,
+                                          binds={in1: in1_buf,
+                                                 in2: in2_buf,
+                                                 out: out_buf})
+        self.intrin_ctors['MAddM'] = mat_binary
+        self.intrin_ctors['MSubM'] = mat_binary
+        self.intrin_ctors['MMulM'] = mat_binary
+
+        def mat_reduce_row(intrin_op, shape, scope_in='uni', scope_out='uni', mode='inc'):
+            env = self.env
+            cfg = self.env.cfg
+
+            scope_in = self.get_scope(scope_in)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+
+            # TODO: validate shape with cfg
+            assert len(shape) == 2, 'the length of shape should be 2'
+            nRow, nCol = shape
+            
+            # the name should contain all parameters
+            name = intrin_op + ';' + str(nRow) + '_' + str(nCol) + '_' \
+                    + scope_in + ';' + scope_out + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+
+            op_in = tvm.placeholder(shape, dtype_in, 'in')
+            
+            def expr_template(x, func, k):
+                if (mode == 'inc'):
+                    #x = x.
+                    return lambda i: func(x[i, k].astype(dtype_out), k)
+                elif (mode == 'dec'):
+                    return lambda i: func(x[i, k], k).astype(dtype_out)
+                else:
+                    return lambda i: func(x[i, k], k)
+            
+            k = tvm.reduce_axis((0, nCol), 'k')
+            if (intrin_op == 'MReduceSumRow'):
+                expr = expr_template(op_in, tvm.sum, k)
+                extern_func = 'NNPU_MReduceSumRow'
+            else:
+                raise ValueError('unsupported mat reduce row op')
+            
+            out = tvm.compute((nRow, ), expr, 'out')
+
+            in_buf = self.decl_buffer(op_in, scope_in, 'in_buf')
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+            
+            def lower_func(ins, outs):
+                din1 = ins[0]
+                dout = outs[0]
+
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", extern_func,
+                            dout.access_ptr('w', 'uint32'),
+                            din1.access_ptr('r', 'uint32'),
+                            shape[0], shape[1],
+                            self.get_mode_code(mode)
+                            ))
+                
+                return irb.get()
+
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                          name=name,
+                                          binds={op_in: in_buf,
+                                                 out: out_buf})
+        self.intrin_ctors['MReduceSumRow'] = mat_reduce_row
 
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
