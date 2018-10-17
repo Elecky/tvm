@@ -51,7 +51,7 @@ def test():
 
     ctx = tvm.nd.TVMContext(13, 0)
 
-    a_np = np.random.randint(size=(16, ), dtype=a.dtype, low = 3, high = 23)
+    a_np = np.random.randint(size=(16, ), dtype=a.dtype, low = 3, high = 122)
     #a_np = np.random.random(size=shape).astype(a_host.dtype)
     a_nd = tvm.nd.array(a_np, ctx)
 
@@ -62,30 +62,31 @@ def test():
     gtm_nd = tvm.nd.array(np.zeros((16, )).astype(c_host.dtype), ctx)
     rsub_nd = tvm.nd.array(np.zeros((16, )).astype(c_host.dtype), ctx)
     func(a_nd, c_nd, sub_nd, mul_nd, div_nd, gtm_nd,rsub_nd)
+    print('a = ')
     print(a_nd.asnumpy())
-    print('add result is: ')
+    print('a + {0} = '.format(Imm.value))
     print(c_nd.asnumpy())
-    print('numpy ground truth is: ')
+    print('numpy ground truth =')
     gt = a_np + Imm.value
     print(gt)
     np.testing.assert_allclose(c_nd.asnumpy(), gt)
 
-    print('sub result is: ')
+    print('a - {0} = '.format(Imm.value))
     print(sub_nd.asnumpy())
     np.testing.assert_allclose(sub_nd.asnumpy(), a_np - Imm.value)
 
-    print('mul result is: ')
+    print('a * {0} = '.format(Imm.value))
     print(mul_nd.asnumpy())
     np.testing.assert_allclose(mul_nd.asnumpy(), a_np * Imm.value)
 
-    print('div result is: ')
+    print('a / {0} = '.format(Imm.value))
     print(div_nd.asnumpy())
     np.testing.assert_allclose(div_nd.asnumpy(), a_np / Imm.value)
 
-    print('gtm result is: ')
+    print('a > {0} ? a : {0} = '.format(Imm.value))
     print(gtm_nd.asnumpy())
     #np.testing.assert_allclose(gtm_nd.asnumpy(), a_np  Imm.value)
-    print('rsub result is: ')
+    print('{0} - a = '.format(Imm.value))
     print(rsub_nd.asnumpy())
     np.testing.assert_allclose(rsub_nd.asnumpy(), Imm.value-a_np)
 if __name__ == '__main__':
