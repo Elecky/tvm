@@ -390,6 +390,7 @@ class IntrinManager(object):
                                           binds={in1: in1_buf,
                                                  in2: in2_buf,
                                                  out: out_buf})
+
         self.intrin_ctors['VAddV'] = vctr_binary
         self.intrin_ctors['VSubV'] = vctr_binary
         self.intrin_ctors['VMulV'] = vctr_binary
@@ -802,6 +803,98 @@ class IntrinManager(object):
                                                  out: out_buf})
         self.intrin_ctors['MRowDot'] = mat_row_dot
 
+        def vctr_sclr(intrin_op, scope_vctr='uni', scope_sclr='uni',
+                      scope_out='uni', mode='n'):
+            env = self.env
+            cfg = self.env.cfg
+
+            scope_vctr = self.get_scope(scope_vctr)
+            scope_sclr = self.get_scope(scope_sclr)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+
+            # the name should contain all parameters
+            name = intrin_op + scope_vctr + ';' + scope_sclr + ';' + scope_out + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+
+            shape = (cfg['vector_unit']['size'], )
+
+            in1 = tvm.placeholder(shape, dtype_in, 'in1')
+            in2 = tvm.placeholder((1, ), dtype_in, 'in2')
+
+            def expr_template(x, y, func):
+                if (mode == 'inc'):
+                    return lambda i: func(x[i].astype(dtype_out), y[0].astype(dtype_out))
+                elif (mode == 'dec'):
+                    return lambda i: func(x[i], y[0]).astype(dtype_out)
+                else:
+                    return lambda i: func(x[i], y[0])
+
+            if (intrin_op == 'VAddS'):
+                expr = expr_template(in1, in2, lambda x, y: x + y)
+                extern_func = 'NNPU_VAddS'
+            elif (intrin_op == 'VSubS'):
+                expr = expr_template(in1, in2, lambda x, y: x - y)
+                extern_func = 'NNPU_VSubS'
+            elif (intrin_op == 'VMulS'):
+                expr = expr_template(in1, in2, lambda x, y: x * y)
+                extern_func = 'NNPU_VMulS'
+            elif (intrin_op == 'VDivS'):
+                expr = expr_template(in1, in2, lambda x, y: x / y)
+                extern_func = 'NNPU_VDivS'
+            elif (intrin_op == 'VGTMS'):
+                expr = expr_template(in1, in2, 
+                                    lambda x, y: tvm.select(x > y, x, y))
+                extern_func = 'NNPU_VGTMS'
+            elif (intrin_op == 'SSubV'):
+                expr = expr_template(in1, in2, lambda x, y: y - x)
+                extern_func = 'NNPU_SSubV'
+            elif (intrin_op == 'SDivV'):
+                expr = expr_template(in1, in2, lambda x, y: y / x)
+                extern_func = 'NNPU_SDivV'
+            else:
+                raise ValueError('unhandled intrin_op in vctr_binary')
+
+            out = tvm.compute(shape, expr, 'out')
+            in1_buf = self.decl_buffer(in1, scope_vctr, 'in1_buf')
+            in2_buf = tvm.decl_buffer(in2.shape, in2.dtype, 'in2_buf',
+                                      scope=scope_sclr, 
+                                      data_alignment=dtype_bytes(in2.dtype), 
+                                      offset_factor=1)
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+            
+            def lower_func(ins, outs):
+                ins = self.get_ins(ins, 'in1_buf', 'in2_buf')
+                din1, din2 = ins[0], ins[1]
+                dout = outs[0]
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", extern_func,
+                            dout.access_ptr('w', 'uint32'),
+                            din1.access_ptr('r', 'uint32'),
+                            din2.access_ptr('r', 'uint32'),
+                            shape[0],
+                            self.get_mode_code(mode)
+                            ))
+                
+                return irb.get()
+
+            return tvm.decl_tensor_intrin(out.op, lower_func,
+                                          name=name,
+                                          binds={in1: in1_buf,
+                                                 in2: in2_buf,
+                                                 out: out_buf})
+        self.intrin_ctors['VAddS'] = vctr_sclr
+        self.intrin_ctors['VSubS'] = vctr_sclr
+        self.intrin_ctors['VMulS'] = vctr_sclr
+        self.intrin_ctors['VDivS'] = vctr_sclr
+        self.intrin_ctors['VGTMS'] = vctr_sclr
+        self.intrin_ctors['SDivV'] = vctr_sclr
+        self.intrin_ctors['SSubV'] = vctr_sclr
+
     def get(self, intrin_op, **kwargs):
         assert intrin_op in self.intrin_ctors, 'can not find constructor for intrin {0}'.\
             format(intrin_op)
@@ -832,3 +925,11 @@ class IntrinManager(object):
     def get_mode_code(self, mode_str):
         return self.mode2code[mode_str]
 
+    def get_ins(self, ins, *args):
+        res = []
+        for name in args:
+            print(name)
+            for din in ins:
+                if (din.name == name):
+                    res.append(din)
+        return res

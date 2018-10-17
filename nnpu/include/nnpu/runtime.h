@@ -109,6 +109,27 @@ void NNPU_MMulV(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr,
 void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
                   uint32_t nRow, uint32_t nCol, uint32_t mode); 
 
+void NNPU_VAddS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode);
+
+void NNPU_VSubS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode);
+
+void NNPU_VMulS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode);
+
+void NNPU_VDivS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode);
+
+void NNPU_VGTMS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode);
+
+void NNPU_SSubV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode);
+
+void NNPU_SDivV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode);
+
 void NNPUSynchronize(uint32_t timeout);
 
 #ifdef __cplusplus

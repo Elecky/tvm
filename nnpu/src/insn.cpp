@@ -161,6 +161,19 @@ void MatRowDotInsn::Dump(std::ostream &os) const
        << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
+void VctrSclrInsn::Dump(std::ostream& os) const
+{
+    string s(ToString(Op));
+    char m='V',i='S';
+    if(s[0]=='R')
+    {
+        s=s.substr(1,s.size()-1);
+        std::swap(i,m);
+    }
+    os << m << s << i <<"_" << Size << '.' << mode2str(Mode) << " $"
+       << OutAddrReg << ", $" << VctrAddrReg << ", $" << SclrAddrReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)
@@ -276,6 +289,37 @@ const char* ToString(VctrImmOp value)
         return "Unknown";
     }
 }
+
+const char* ToString(VctrSclrOp value)
+{
+    switch (value)
+    {
+    case VctrSclrOp::Add:
+        return "Add";
+
+    case VctrSclrOp::Sub:
+        return "Sub";
+
+    case VctrSclrOp::Mul:
+        return "Mul";
+
+    case VctrSclrOp::Div:
+        return "Div";
+
+    case VctrSclrOp::GTM:
+        return "GTM";
+    
+    case VctrSclrOp::RSub:
+        return "RSub";
+
+    case VctrSclrOp::RDiv:
+        return "RDiv";
+    
+    default:
+        return "Unknown";
+    }
+}
+
 
 const char* ToString(MatImmOp value)
 {

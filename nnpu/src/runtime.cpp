@@ -164,6 +164,8 @@ private:
 
 } // namespace nnpu
 
+using nnpu::ModeFromInt;
+
 // the following 3 functions are from tvm.vta, used for managing driver buffers.
 void *NNPUBufferAlloc(size_t size)
 {
@@ -226,7 +228,7 @@ void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint
     queue->EmplaceBack(li3);
 
     // create a vctr exp instruction: VEXP $0, $1, $2
-    nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, 2, nnpu::ModeFromInt(mode));
+    nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, 2, ModeFromInt(mode));
     queue->EmplaceBack(exp);
 }
 void NNPU_VLOG(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode)
@@ -246,7 +248,7 @@ void NNPU_VLOG(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint
     queue->EmplaceBack(li3);
 
     // create a vctr log instruction: VLOG $0, $1, $2
-    nnpu::VctrUnaryInsn log(nnpu::VctrUnaryOp::Log, 0, 1, 2, nnpu::ModeFromInt(mode));
+    nnpu::VctrUnaryInsn log(nnpu::VctrUnaryOp::Log, 0, 1, 2, ModeFromInt(mode));
     queue->EmplaceBack(log);
 }
 
@@ -387,7 +389,7 @@ void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut,
     queue->EmplaceBack(li3);
 
     // create a gemm instruction
-    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, nnpu::ModeFromInt(mode));
+    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, ModeFromInt(mode));
     queue->EmplaceBack(gemm);
 }
 
@@ -421,7 +423,7 @@ void NNPU_VctrBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     Li li3(2, in2Addr);
     queue->EmplaceBack(li3);
 
-    nnpu::VctrBinaryInsn insn(op, 0, 1, 2, size, nnpu::ModeFromInt(mode));
+    nnpu::VctrBinaryInsn insn(op, 0, 1, 2, size, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 
@@ -434,7 +436,7 @@ void NNPU_VctrImm(uint32_t outAddr, uint32_t inAddr, double Imm,
     queue->EmplaceBack(li1);
     Li li2(1, inAddr);
     queue->EmplaceBack(li2);
-    nnpu::VctrImmInsn insn(op, 0, 1, Imm, size, nnpu::ModeFromInt(mode));
+    nnpu::VctrImmInsn insn(op, 0, 1, Imm, size, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 void NNPU_MatImm(uint32_t outAddr, uint32_t inAddr, double Imm, 
@@ -448,7 +450,7 @@ void NNPU_MatImm(uint32_t outAddr, uint32_t inAddr, double Imm,
     queue->EmplaceBack(li1);
     Li li2(1, inAddr);
     queue->EmplaceBack(li2);
-    nnpu::MatImmInsn insn(op, 0, 1, Imm, nRow, nCol , nnpu::ModeFromInt(mode));
+    nnpu::MatImmInsn insn(op, 0, 1, Imm, nRow, nCol , ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 void NNPU_MAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
@@ -580,7 +582,7 @@ void NNPU_VctrDotProd(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     Li li3(2, in2Addr);
     queue->EmplaceBack(li3);
 
-    nnpu::VctrDotProdInsn insn(0, 1, 2, size, nnpu::ModeFromInt(mode));
+    nnpu::VctrDotProdInsn insn(0, 1, 2, size, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 
@@ -595,7 +597,7 @@ void NNPU_VctrReduce(uint32_t outAddr, uint32_t inAddr, nnpu::ReduceOp op, uint3
     Li li2(1, inAddr);
     queue->EmplaceBack(li2);
     
-    nnpu::VctrReduceInsn insn(0, 1, op, size, nnpu::ModeFromInt(mode));
+    nnpu::VctrReduceInsn insn(0, 1, op, size, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 
@@ -628,7 +630,7 @@ void NNPU_MatBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     Li li3(2, in2Addr);
     queue->EmplaceBack(li3);
 
-    nnpu::MatBinaryInsn insn(0, 1, 2, op, Size, nnpu::ModeFromInt(mode));
+    nnpu::MatBinaryInsn insn(0, 1, 2, op, Size, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 
@@ -661,12 +663,12 @@ void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, nnpu::ReduceOp op,
 
     if (isRow)
     {
-        nnpu::MatReduceRowInsn insn(0, 1, op, nRow, nCol, nnpu::ModeFromInt(mode));
+        nnpu::MatReduceRowInsn insn(0, 1, op, nRow, nCol, ModeFromInt(mode));
         queue->EmplaceBack(insn);
     }
     else
     {
-        nnpu::MatReduceColInsn insn(0, 1, op, nRow, nCol, nnpu::ModeFromInt(mode));
+        nnpu::MatReduceColInsn insn(0, 1, op, nRow, nCol, ModeFromInt(mode));
         queue->EmplaceBack(insn);
     }
 }
@@ -691,7 +693,7 @@ void NNPU_MatVctrRow(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr,
     Li li3(2, vctrAddr);
     queue->EmplaceBack(li3);
 
-    nnpu::MatVctrInsn insn(0, 1, 2, op, nRow, nCol, nnpu::ModeFromInt(mode));
+    nnpu::MatVctrInsn insn(0, 1, 2, op, nRow, nCol, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 
@@ -727,6 +729,66 @@ void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     Li li3(2, in2Addr);
     queue->EmplaceBack(li3);
 
-    nnpu::MatRowDotInsn insn(0, 1, 2, nRow, nCol, nnpu::ModeFromInt(mode));
+    nnpu::MatRowDotInsn insn(0, 1, 2, nRow, nCol, ModeFromInt(mode));
     queue->EmplaceBack(insn);
+}
+
+void NNPU_VctrSclr(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                   nnpu::VctrSclrOp op, uint32_t size, uint32_t mode)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // assign 3 addresses
+    Li li1(0, outAddr);
+    queue->EmplaceBack(li1);
+    Li li2(1, vctrAddr);
+    queue->EmplaceBack(li2);
+    Li li3(2, sclrAddr);
+    queue->EmplaceBack(li3);
+
+    nnpu::VctrSclrInsn insn(0, 1, 2, size, op, ModeFromInt(mode));
+    queue->EmplaceBack(insn);
+}
+
+void NNPU_VAddS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode)
+{
+    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::Add, size, mode);
+}
+
+void NNPU_VSubS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode)
+{
+    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::Sub, size, mode);
+}
+
+void NNPU_VMulS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode)
+{
+    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::Mul, size, mode);
+}
+
+void NNPU_VDivS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode)
+{
+    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::Div, size, mode);
+}
+
+void NNPU_VGTMS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode)
+{
+    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::GTM, size, mode);
+}
+
+void NNPU_SSubV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode)
+{
+    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::RSub, size, mode);
+}
+
+void NNPU_SDivV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
+                uint32_t size, uint32_t mode)
+{
+    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::RDiv, size, mode);
 }

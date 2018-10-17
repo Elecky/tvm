@@ -18,7 +18,7 @@ namespace nnpu
 enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
-    MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot
+    MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr
 };
 
 /*!
@@ -437,6 +437,32 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+enum class VctrSclrOp { Add, Sub, Div, Mul,GTM/* greater than merge */, RSub , RDiv };
+const char* ToString(VctrSclrOp value);
+
+struct VctrSclrInsn
+{
+public:
+    VctrSclrInsn() = default;
+
+    VctrSclrInsn(uint32_t _outAddrReg, uint32_t _vctrAddrReg, uint32_t _sclrAddrReg,
+                 uint32_t _size, VctrSclrOp _op, ModeCode _mode) :
+        OutAddrReg(_outAddrReg), VctrAddrReg(_vctrAddrReg), SclrAddrReg(_sclrAddrReg),
+        Op(_op), Size(_size), Mode(_mode)
+    {}
+
+    uint32_t OutAddrReg;
+    uint32_t VctrAddrReg;
+    uint32_t SclrAddrReg;
+
+    // the following fileds are part of insn encoding.
+    VctrSclrOp Op;
+    uint32_t Size;  // the total elements in both matrix.
+    ModeCode Mode;
+
+    void Dump(std::ostream& os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -480,6 +506,8 @@ public:
         MatVctrInsn MatVctr;
 
         MatRowDotInsn MatRowDot;
+
+        VctrSclrInsn VctrSclr;
     };
 
     /* dispatch a call depends on the instruction type
@@ -560,6 +588,9 @@ public:
         case InsnType::MatRowDot:
             return functor(this->MatRowDot, std::forward<TArgs>(args)...);
 
+        case InsnType::VctrSclr:
+            return functor(this->VctrSclr, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -616,6 +647,9 @@ public:
     {}
 
     NNPUInsn(const MatRowDotInsn &_insn) : Type(InsnType::MatRowDot), MatRowDot(_insn)
+    {}
+
+    NNPUInsn(const VctrSclrInsn &_insn) : Type(InsnType::VctrSclr), VctrSclr(_insn)
     {}
 };
 
