@@ -74,6 +74,8 @@ void NNPU_VDivI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t si
 
 void NNPU_VGTMI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t size, uint32_t mode);
 
+void NNPU_IDivV(uint32_t outAddr, uint32_t inAddr, const char* Imms ,uint32_t size, uint32_t mode);
+
 void NNPU_VctrDotProd(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, 
                       uint32_t mode);
 

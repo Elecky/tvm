@@ -93,16 +93,29 @@ void VctrBinaryInsn::Dump(ostream& os) const
        << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
 }
 
-// some ploblem
 void VctrImmInsn::Dump(ostream& os) const
 {
-    os << 'V' << ToString(Op) << "I_" << Size << '.' << mode2str(Mode) << " $"
+    string s= ToString(Op);
+    char v='V',i='I';
+    if(s[0]=='R')
+    {
+        s=s.substr(1,s.size()-1);
+        std::swap(i,v);
+    }
+    os << v << s << i <<"_" << Size << '.' << mode2str(Mode) << " $"
        << OutAddrReg << ", $" << InAddrReg << ", (IMM)"<< Imm;
 }
 
 void MatImmInsn::Dump(ostream& os) const
 {
-    os << 'M' << ToString(Op) << "I_" << nRow << "_" << nCol << '.' << mode2str(Mode) << " $"
+    string s(ToString(Op));
+    char m='M',i='I';
+    if(s[0]=='R')
+    {
+        s=s.substr(1,s.size()-1);
+        std::swap(i,m);
+    }
+    os << m << s << i <<"_" << nRow << "_" << nCol << '.' << mode2str(Mode) << " $"
        << OutAddrReg << ", $" << InAddrReg << ", (IMM)"<< Imm;
 }
 
@@ -256,6 +269,9 @@ const char* ToString(VctrImmOp value)
     case VctrImmOp::RSub:
         return "RSub";
 
+    case VctrImmOp::RDiv:
+        return "RDiv";
+    
     default:
         return "Unknown";
     }

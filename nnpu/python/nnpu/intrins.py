@@ -93,8 +93,6 @@ class IntrinManager(object):
             scope_out = self.get_scope(scope_out)
             dtype_in, dtype_out = self.mode2dtype(mode)
             imm = tvm.const(imm_value, dtype_in)
-            print ('ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ')
-            print (imm)
             name = intrin_op + ';' + scope_in + ';' + scope_out + ';' +str(imm_value)+';'+ mode
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
@@ -128,8 +126,11 @@ class IntrinManager(object):
                 expr = expr_template(op_in, imm, lambda x, y: tvm.select(x > y, x, y))
                 extern_func = 'NNPU_VGTMI'
             elif (intrin_op == 'ISubV'):
-                expr = expr_template(op_in,imm, lambda x, y: y-x)
+                expr = expr_template(op_in,imm, lambda x, y: y - x)
                 extern_func = 'NNPU_ISubV'
+            elif (intrin_op == 'IDivV'):
+                expr = expr_template(op_in,imm,lambda x , y : y / x)
+                extern_func = 'NNPU_IDivV'
             else:
                 raise ValueError('unsupported vctr Imm intrin op')
             out = tvm.compute(out_shape, expr,
@@ -140,8 +141,6 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                print('try call_ex fun #############################################')
-                print(float(imm_value))
                 irb.emit(tvm.call_extern("int32", extern_func,
                             dout.access_ptr("w", 'uint32'),
                             din.access_ptr("r", 'uint32'),
@@ -164,6 +163,7 @@ class IntrinManager(object):
         self.intrin_ctors['VDivI'] = vctr_imm
         self.intrin_ctors['VGTMI'] = vctr_imm
         self.intrin_ctors['ISubV'] = vctr_imm
+        self.intrin_ctors['IDivV'] = vctr_imm
         def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
                  scope_out = 'uni', mode='inc', reduce=False):
             env = self.env
