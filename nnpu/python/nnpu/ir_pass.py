@@ -29,10 +29,10 @@ def _fold(src_shape, src_strides, dst_shape, dst_strides, pad_before = None, pad
         if (pad_after and pad_after):
             assert util.equal_const_int(
                 dst_shape[i] - src_shape[i] - pad_before[i] - pad_after[i], 0), \
-                'shape of copying source and destination not matching, or any padding is required'
+                'shape of copying source and destination not matching even with padding'
         else:
             assert util.equal_const_int(dst_shape[i] - src_shape[i], 0), \
-                'shape of copying source and destination not matching, or any padding is required'
+                'shape of copying source and destination not matching'
     # now fold dimensions
     s_shape = []
     s_strides = []
@@ -61,11 +61,13 @@ def _fold(src_shape, src_strides, dst_shape, dst_strides, pad_before = None, pad
             util.equal_const_int(
                 dst_shape[index] * dst_strides[index] - dst_strides[index - 1], 0)
             ):
-            # the condition check:
-            # whether index is the highest dimension,
-            # whether current dimension will be padded,
-            # whether next dimension will be padded,
-            # whether current dimension is continous with next dimension and could be folded
+            # the conditions check:
+            # index is not the highest dimension,
+            # current dimension will not be padded,
+            # next higher dimension will not be padded,
+            # current dimension is continous with next higher dimension in both 
+            # source and destination and could be folded.
+
             t_size = t_size * src_shape[index]
         else:
             # append current group
@@ -78,8 +80,8 @@ def _fold(src_shape, src_strides, dst_shape, dst_strides, pad_before = None, pad
             if (pad_after):
                 p_after.append(pad_after[index])
             
+            # next group initial value
             if (index > 0):
-                # next group initial value
                 t_size = 1
                 ts_stride = src_strides[index - 1]
                 td_stride = dst_strides[index - 1]
@@ -100,6 +102,7 @@ def inject_dma_intrin(stmt_in):
     env = get_env()
 
     def _inject_copy(src, dst, pad_before, pad_after, pad_value):
+        #print('inject_copy called')
         if (pad_after or pad_before):
             raise NotImplementedError('padding is not supported right now')
         
@@ -150,7 +153,7 @@ def inject_dma_intrin(stmt_in):
             dst_index = dst_index # access_ptr includes elem_offset already
             # NNPU_DMALoad(src_buf_addr, src_buf_offset, dst_phy_addr, dst_phy_offset, bytes)
             body = tvm.call_extern('int32', 'NNPU_DMALoad', 
-                        src.data, util.simplify(src_index * dtype_bytes - src_pad_offset),
+                        src.data, util.simplify(src_index - src_pad_offset) * dtype_bytes,
                         dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
@@ -202,7 +205,7 @@ def inject_dma_intrin(stmt_in):
             body = tvm.call_extern('int32', 'NNPU_DMAStore', 
                         dst.data, dst_index * dtype_bytes,
                         src.access_ptr('r', 'uint32'), 
-                        util.simplify(src_index * dtype_bytes - src_pad_offset),
+                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
             # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
@@ -288,7 +291,7 @@ def inject_scratchpad_ls(stmt_in):
             # NNPU_ScratchpadLoad(dram_phy_addr, dram_phy_offset, dst_phy_addr, dst_phy_offset, length)
             body = tvm.call_extern('int32', 'NNPU_ScratchpadLoad', 
                         src.access_ptr('r', 'uint32'), 
-                        util.simplify(src_index * dtype_bytes - src_pad_offset),
+                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
                         dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
@@ -340,7 +343,7 @@ def inject_scratchpad_ls(stmt_in):
             body = tvm.call_extern('int32', 'NNPU_ScratchpadStore', 
                         dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
                         src.access_ptr('r', 'uint32'), 
-                        util.simplify(src_index * dtype_bytes - src_pad_offset),
+                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
             # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
@@ -364,3 +367,66 @@ def inject_scratchpad_ls(stmt_in):
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.scratchpad_ls, _inject_copy)
     #src_shape = [2, 2, 16]
 
+def inject_scratchpad_copy(stmt_in):
+    env = get_env()
+
+    def _inject_copy(src, dst, pad_before, pad_after, pad_value):
+        if ((pad_before and not util.equal_const_int(pad_before[-1], 0)) or 
+            (pad_after and not util.equal_const_int(pad_after[-1], 0))):
+            raise ValueError('can not pad last dimension')
+        
+        assert src.dtype == dst.dtype, 'dtype of copying source and destination does not match, \
+            {0} vs {1}'.format(src.dtype, dst.dtype)
+        
+        # check memory scope
+        scopes = [env.uni_scratchpad_scope, env.vctr_scratch_scope, env.mat_scratch_scope]
+        assert src.scope in scopes, 'source buffer scope is not scratchpad'
+        assert dst.scope in scopes, 'dst buffer scope is not scratchpad'
+
+        dtype_bytes = get_dtype_bytes(src.dtype)
+        
+        src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
+                _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
+        ndim = len(src_shape)
+
+        # create loop vars and index
+        loop_vars = []
+        acc_indexes = [0, ]
+        src_index = None
+        dst_index = None
+        src_pad_offset = 0
+        for i in range(ndim - 1):
+            var = tvm.var('i{0}'.format(i))
+            loop_vars.append(var)
+            src_index = var * src_strides[i] if (src_index is None) else \
+                        src_index + var * src_strides[i]
+            dst_index = var * dst_strides[i] if (dst_index is None) else \
+                        dst_index + var * dst_strides[i]
+            acc_indexes.append(dst_index)
+            # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
+            src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
+                                if pad_before else \
+                             src_pad_offset
+        # src_index and dst_index are index by element number
+        src_index = 0 if (src_index is None) else src_index
+        dst_index = 0 if (dst_index is None) else dst_index
+
+        # use the last loop as inner body
+        body = tvm.call_extern('int32', 'NNPU_ScratchpadCopy', 
+                    dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
+                    dst_strides[-1] * dtype_bytes,
+                    src.access_ptr('r', 'uint32'), 
+                    util.simplify(src_index - src_pad_offset) * dtype_bytes,
+                    src_strides[-1] * dtype_bytes,
+                    dtype_bytes, dst_shape[-1])
+        # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
+        body = tvm.make.Evaluate(body)
+
+        for i in reversed(range(ndim - 1)):
+            # TODO: add padding code, use memset or something.
+            body = tvm.make.For(loop_vars[i], 0 if (not pad_before) else pad_before[i], 
+                    src_shape[i], 0, 0, body)  # fortype = serial)
+        body = mark_coproc_scope(body)
+        return body
+    
+    return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.scratchpad_copy, _inject_copy)

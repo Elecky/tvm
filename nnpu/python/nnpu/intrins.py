@@ -229,6 +229,7 @@ class IntrinManager(object):
             out_buf = self.decl_buffer(out, scope_out, 'out')
 
             def lower_func(ins, outs):
+                ins = self.get_ins(ins, 'in1', 'in2')
                 din1, din2 = ins[0], ins[1]
                 dout = outs[0]
 

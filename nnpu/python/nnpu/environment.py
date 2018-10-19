@@ -42,6 +42,7 @@ class Environment(object):
     # compiler pragmas
     dma_copy_pragma = 'nnpu_dma_copy'
     scratchpad_ls = 'nnpu_scratchpad_ls'
+    scratchpad_copy = 'nnpu_scratchpad_copy'
 
     def __init__(self, cfg_path):
         self.cfg = {}

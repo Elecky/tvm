@@ -43,7 +43,8 @@ def build_config(debug_flag=0, **kwargs):
     pass_list = [(1, early_rewrite),
                  (1, ir_pass.inject_dma_intrin),
                  (1, ir_pass.inject_scratchpad_ls),
-                 (1, tvm.ir_pass.CoProcSync)
+                 (1, ir_pass.inject_scratchpad_copy),
+                 (1, tvm.ir_pass.CoProcSync),
                 ]
 
     return tvm.build_config(add_lower_pass=pass_list, **kwargs)

@@ -18,7 +18,7 @@ namespace nnpu
 enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
-    MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr
+    MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy
 };
 
 /*!
@@ -120,6 +120,34 @@ public:
     BufferLSInsn(LSDIR _dir, uint32_t _dramAddrReg, uint32_t _bufAddrReg, uint32_t _sizeReg) :
         Dir(_dir), DramAddrReg(_dramAddrReg), BufAddrReg(_bufAddrReg), SizeReg(_sizeReg)
     {}
+
+    /*!
+    * \brief dump the string representation of this instruction into ostream
+    * \param os: the stream to which to dump.
+    */
+    void Dump(std::ostream& os) const;
+};
+
+struct BufferCopyInsn
+{
+public:
+    BufferCopyInsn() = default;
+
+    BufferCopyInsn(uint32_t _dstAddrReg, uint32_t _dstStrideReg, 
+                   uint32_t _srcAddrReg, uint32_t _srcStrideReg,
+                   uint32_t _nElemReg, uint32_t _elemBytes) :
+        DstAddrReg(_dstAddrReg), DstStrideReg(_dstStrideReg),
+        SrcAddrReg(_srcAddrReg), SrcStrideReg(_srcStrideReg),
+        NElemReg(_nElemReg), ElemBytes(_elemBytes)
+    {}
+
+    uint32_t DstAddrReg;
+    uint32_t DstStrideReg;
+    uint32_t SrcAddrReg;
+    uint32_t SrcStrideReg;
+    uint32_t NElemReg;
+
+    uint32_t ElemBytes;
 
     /*!
     * \brief dump the string representation of this instruction into ostream
@@ -508,6 +536,8 @@ public:
         MatRowDotInsn MatRowDot;
 
         VctrSclrInsn VctrSclr;
+
+        BufferCopyInsn BufferCopy;
     };
 
     /* dispatch a call depends on the instruction type
@@ -591,6 +621,9 @@ public:
         case InsnType::VctrSclr:
             return functor(this->VctrSclr, std::forward<TArgs>(args)...);
 
+        case InsnType::BufferCopy:
+            return functor(this->BufferCopy, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -650,6 +683,9 @@ public:
     {}
 
     NNPUInsn(const VctrSclrInsn &_insn) : Type(InsnType::VctrSclr), VctrSclr(_insn)
+    {}
+
+    NNPUInsn(const BufferCopyInsn &_insn) : Type(InsnType::BufferCopy), BufferCopy(_insn)
     {}
 };
 

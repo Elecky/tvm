@@ -130,6 +130,10 @@ void NNPU_SSubV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr,
 void NNPU_SDivV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
                 uint32_t size, uint32_t mode);
 
+void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride,
+                         uint32_t srcAddr, int32_t srcOffset, uint32_t dsrStride,
+                         uint32_t elemBytes, uint32_t nElem);
+
 void NNPUSynchronize(uint32_t timeout);
 
 #ifdef __cplusplus

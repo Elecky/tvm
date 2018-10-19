@@ -792,3 +792,34 @@ void NNPU_SDivV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr,
 {
     NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::RDiv, size, mode);
 }
+
+void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride,
+                         uint32_t srcAddr, int32_t srcOffset, uint32_t srcStride,
+                         uint32_t elemBytes, uint32_t nElem)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    if (dstStride == elemBytes && srcStride == elemBytes)
+    {
+        elemBytes = elemBytes * nElem;
+        nElem = 1;
+        dstStride = elemBytes;
+        srcStride = elemBytes;
+    }
+
+    // assign 3 addresses
+    Li li1(0, dstAddr + dstOffset);
+    queue->EmplaceBack(li1);
+    Li li2(1, dstStride);
+    queue->EmplaceBack(li2);
+    Li li3(2, srcAddr + srcOffset);
+    queue->EmplaceBack(li3);
+    Li li4(3, dstStride);
+    queue->EmplaceBack(li4);
+    Li li5(4, nElem);
+    queue->EmplaceBack(li5);
+
+    nnpu::BufferCopyInsn insn(0, 1, 2, 3, 4, elemBytes);
+    queue->EmplaceBack(insn);
+}

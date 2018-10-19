@@ -174,6 +174,12 @@ void VctrSclrInsn::Dump(std::ostream& os) const
        << OutAddrReg << ", $" << VctrAddrReg << ", $" << SclrAddrReg;
 }
 
+void BufferCopyInsn::Dump(ostream &os) const
+{
+    os << "Copy.b_" << ElemBytes << " $" << DstAddrReg << ", $" << DstStrideReg
+       << ", $" << SrcAddrReg << ", $" << SrcStrideReg << ", $" << NElemReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)
