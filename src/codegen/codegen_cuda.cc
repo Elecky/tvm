@@ -42,7 +42,7 @@ std::string CodeGenCUDA::Finish() {
 }
 
 void CodeGenCUDA::VisitStmt_(const ir::For* op) {
-  CHECK(is_zero(op->min));
+  CHECK(is_const_int(op->min, 0));
   if (op->for_type == ir::ForType::Unrolled) {
     PrintIndent();
     stream << "#pragma unroll\n";
@@ -77,6 +77,8 @@ void CodeGenCUDA::PrintType(Type t, std::ostream& os) {  // NOLINT(*)
     if (!fail && (lanes >= 2 && lanes <= 4)) {
       os << lanes; return;
     }
+  } else if (t == Bool()) {
+    os << "bool"; return;
   } else if (t.is_uint() || t.is_int()) {
     if (t.is_uint()) {
       if (t.lanes() != 1) {

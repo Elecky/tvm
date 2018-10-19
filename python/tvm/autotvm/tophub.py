@@ -20,12 +20,12 @@ AUTOTVM_TOPHUB_ROOT_PATH = os.path.join(os.path.expanduser('~'), ".tvm", "tophub
 
 # the version of each package
 PACKAGE_VERSION = {
-    'arm_cpu': "v0.01",
+    'arm_cpu': "v0.03",
 
-    'cuda':    "v0.02",
+    'cuda':    "v0.03",
     'rocm':    "v0.01",
     'opencl':  "v0.01",
-    'mali':    "v0.01",
+    'mali':    "v0.03",
 
     'vta':     "v0.01",
 }
@@ -38,7 +38,7 @@ def _alias(name):
         'vtacpu': 'vta',
 
         'metal': 'opencl',
-        'nvptx': 'cuda'
+        'nvptx': 'cuda',
     }
     return table.get(name, name)
 
@@ -51,30 +51,35 @@ def context(target, extra_files=None):
 
     Parameters
     ----------
-    target: Target
+    target: Target or List of Target
         The compilation target
     extra_files: list of str, optional
         Extra log files to load
     """
     best_context = ApplyHistoryBest([])
 
-    if isinstance(target, str):
-        target = _target.create(target)
+    targets = target if isinstance(target, (list, tuple)) else [target]
 
-    possible_names = [str(target).split()[0]]
-    for opt in target.options:
-        if opt.startswith("-device"):
-            device = _alias(opt[8:])
-            possible_names.append(device)
+    for tgt in targets:
+        if isinstance(tgt, str):
+            tgt = _target.create(tgt)
 
-    all_packages = list(PACKAGE_VERSION.keys())
-    for name in possible_names:
-        name = _alias(name)
-        if name in all_packages:
-            check_backend(name)
+        possible_names = []
+        for opt in tgt.options:
+            if opt.startswith("-device"):
+                device = _alias(opt[8:])
+                possible_names.append(device)
+        possible_names.append(tgt.target_name)
 
-            filename = "%s_%s.log" % (name, PACKAGE_VERSION[name])
-            best_context.load(os.path.join(AUTOTVM_TOPHUB_ROOT_PATH, filename))
+        all_packages = list(PACKAGE_VERSION.keys())
+        for name in possible_names:
+            name = _alias(name)
+            if name in all_packages:
+                check_backend(name)
+
+                filename = "%s_%s.log" % (name, PACKAGE_VERSION[name])
+                best_context.load(os.path.join(AUTOTVM_TOPHUB_ROOT_PATH, filename))
+                break   # only load one file to avoid some fallback template mismatch problem
 
     if extra_files:
         for filename in extra_files:

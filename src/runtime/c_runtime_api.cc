@@ -38,7 +38,7 @@ inline std::string DeviceName(int type) {
     case kDLVPI: return "vpi";
     case kDLROCM: return "rocm";
     case kOpenGL: return "opengl";
-    case kExtDev: return "ext_dev";
+    case kDLExtDev: return "ext_dev";
     case kNNPU: return "nnpu";
     default: LOG(FATAL) << "unknown type =" << type; return "Unknown";
   }

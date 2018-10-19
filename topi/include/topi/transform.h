@@ -37,11 +37,18 @@ inline Tensor expand_dims(const Tensor& x,
                           int num_newaxis = 1,
                           std::string name = "tensor",
                           std::string tag = kBroadcast) {
+  int ndim = static_cast<int>(x->shape.size());
+  CHECK(-ndim - 1 <= axis && axis <= ndim)
+    << "expand_dims only accepts `axis` in [-data.ndim - 1, data.ndim]"
+    << ", but got axis = " << axis
+    << ", and data.ndim = " << ndim;
+  CHECK(num_newaxis >= 0)
+    << "expand_dims only accepts `num_newaxis >= 0`"
+    << ", but got num_newaxis = " << num_newaxis;
   if (axis < 0) {
     // Calculate offset from last dimension
-    axis = static_cast<int>(x->shape.size()) + axis + 1;
+    axis = ndim + axis + 1;
   }
-
   Array<Expr> new_shape;
   for (size_t i = 0; i < static_cast<size_t>(axis); ++i) {
     new_shape.push_back(x->shape[i]);
@@ -257,8 +264,13 @@ inline Tensor concatenate(const Array<Tensor>& inputs,
                           int axis = 0,
                           std::string name = "tensor",
                           std::string tag = kInjective) {
+  int ndim = static_cast<int>(inputs[0]->shape.size());
+  CHECK(-ndim <= axis && axis < ndim)
+    << "concatenate only accepts `axis` in [-ndim, ndim)"
+    << ", but got axis = " << axis
+    << ", and ndim = " << ndim;
   if (axis < 0) {
-    axis += static_cast<int>(inputs[0]->shape.size());
+    axis += ndim;
   }
   CHECK_LT(axis, inputs[0]->shape.size()) <<
     "axis out of bounds";
@@ -625,6 +637,37 @@ inline Tensor where(const Tensor& condition,
       }, name, tag);
   }
   return out;
+}
+
+/*!
+ * \brief Creates an operation that calculates a matrix multiplication
+ *  (row-major notation):
+ *      A(i, k) * B(k, j), if trans_a == trans_b
+ *          the usual transposed combinations, otherwise
+ *
+ * \param A The matrix A
+ * \param B The matrix B
+ * \param trans_a Is A's layout transposed?
+ * \param trans_b Is B's layout transposed?
+ * \param name The name of the operation
+ * \param tag The tag to mark the operation
+ *
+ * \return A Tensor whose op member is the matmul operation
+ */
+inline tvm::Tensor matmul(const tvm::Tensor& A,
+                           const tvm::Tensor& B,
+                           bool trans_a = false,
+                           bool trans_b = false,
+                           std::string name = "tensor",
+                           std::string tag = kMatMul) {
+  tvm::Array<tvm::Expr> output_shape{A->shape[trans_a ? 1 : 0],
+                                     B->shape[trans_b ? 0 : 1]};
+  auto k = tvm::reduce_axis(tvm::Range{0, A->shape[trans_a ? 0 : 1]}, "k");
+  auto l = [&](tvm::Var i, tvm::Var j) {
+    return tvm::sum((trans_a ? A[k][i] : A[i][k]) * (trans_b ? B[j][k] : B[k][j]),
+                    {k});
+  };
+  return tvm::compute(output_shape, l, name, tag);
 }
 
 

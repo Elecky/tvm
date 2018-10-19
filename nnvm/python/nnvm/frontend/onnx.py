@@ -597,6 +597,60 @@ class ArgMin(OnnxOpConverter):
         attr = {'axis':axis, 'keepdims':keepdims}
         return AttrCvt(op_name='argmin')(inputs, attr)
 
+class Softmax(OnnxOpConverter):
+    """ Operator converter for Softmax.
+    """
+    @classmethod
+    def _impl_v1(cls, inputs, attr, params):
+        # set default value when axis is not set in the model
+        if 'axis' not in attr:
+            attr['axis'] = 1
+        return AttrCvt(
+            op_name='softmax',
+            transforms={
+                'axis': ('axis', 1),
+            })(inputs, attr, params)
+
+class ConstantFill(OnnxOpConverter):
+    """ Operator converter for ConstantFill.
+    """
+    @classmethod
+    def _impl_v1(cls, inputs, attr, params):
+        is_full = True
+        num_inputs = len(inputs)
+        if 'shape' in attr:
+            if num_inputs > 0:
+                raise ImportError(
+                    "Can't set shape and input tensor at a time")
+            shape = attr.pop('shape')
+        else:
+            if num_inputs == 0:
+                raise ImportError(
+                    "Either shape attribute or input should be set")
+            if 'input_as_shape' in attr and attr['input_as_shape']:
+                shape = params[inputs[0].list_output_names()[0]].asnumpy()
+            else:
+                is_full = False
+
+        if not is_full:
+            if 'extra_shape' in attr:
+                raise ImportError(
+                    "Extra Shape not supported with fill_like")
+
+            out = AttrCvt(
+                op_name='full_like',
+                transforms={'value': 'fill_value'},
+                ignores=['dtype'])(inputs, attr)
+            return _sym.cast(out, dtype=attr['dtype'].decode("utf-8"))
+        else:
+            if 'extra_shape' in attr:
+                shape = shape + attr.pop('extra_shape')
+
+            return AttrCvt(
+                op_name='full',
+                transforms={'value': 'fill_value'},
+                extras={'shape':shape})(inputs, attr)
+
 # compatible operators that do NOT require any conversion.
 _identity_list = []
 
@@ -614,7 +668,7 @@ def _get_convert_map(opset):
         'ThresholdedRelu': ThresholdedRelu.get_converter(opset),
         'ScaledTanh': ScaledTanh.get_converter(opset),
         'ParametricSoftplus': ParametricSoftPlus.get_converter(opset),
-        # 'ConstantFill'
+        'ConstantFill': ConstantFill.get_converter(opset),
         # 'GivenTensorFill'
         'FC': AttrCvt('dense', ignores=['axis', 'axis_w']),
         'Scale': Scale.get_converter(opset),
@@ -664,7 +718,7 @@ def _get_convert_map(opset):
         'Mean': Mean.get_converter(opset),
         'Clip': AttrCvt('clip', transforms={'min': 'a_min', 'max': 'a_max'}),
         # softmax default axis is different in onnx
-        'Softmax': AttrCvt('softmax', {'axis': ('axis', 1)}),
+        'Softmax': Softmax.get_converter(opset),
         'LogSoftmax': AttrCvt('log_softmax', {'axis': ('axis', 1)}),
         # 'Hardmax'
         'Softsign': Softsign.get_converter(opset),

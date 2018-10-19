@@ -66,7 +66,7 @@ def get_caffe2_output(model, x, dtype='float32'):
 def verify_onnx_forward_impl(graph_file, data_shape, out_shape):
     dtype = 'float32'
     x = np.random.uniform(size=data_shape)
-    model = onnx.load(graph_file)
+    model = onnx.load_model(graph_file)
     c2_out = get_caffe2_output(model, x, dtype)
     for target, ctx in ctx_list():
         tvm_out = get_tvm_output(model, x, target, ctx, out_shape, dtype)
@@ -387,7 +387,7 @@ def _test_upsample_nearest():
     in_shape = (1, 1, 3, 3)
     out_shape = (1, 1, 3*scale, 3*scale)
     y = helper.make_node("Upsample", ['in'], ['out'], mode='nearest', scales=[1.0, 1.0, 2.0, 2.0])
-    
+
     in_array = np.random.uniform(size=in_shape).astype(np.float32)
     out_array = topi.testing.upsampling_python(in_array, scale, "NCHW")
 
@@ -407,7 +407,7 @@ def _test_upsample_bilinear():
     in_shape = (1, 1, 3, 3)
     out_shape = (1, 1, 3*scale, 3*scale)
     y = helper.make_node("Upsample", ['in'], ['out'], mode='linear', scales=[1.0, 1.0, 2.0, 2.0])
-    
+
     in_array = np.random.uniform(size=in_shape).astype(np.float32)
     out_array = topi.testing.bilinear_resize_python(in_array, (3*scale, 3*scale), "NCHW")
 
@@ -425,6 +425,33 @@ def _test_upsample_bilinear():
 def test_upsample():
     _test_upsample_nearest()
     _test_upsample_bilinear()
+
+def _test_softmax(inshape, axis):
+    opname = 'Softmax'
+    indata = np.random.uniform(size=inshape).astype(np.float32)
+    outshape = inshape
+    outdata = topi.testing.softmax_python(indata)
+    if isinstance(axis, int):
+        y = helper.make_node(opname, ['in'], ['out'], axis = axis)
+    elif axis is None:
+        y = helper.make_node(opname, ['in'], ['out'])
+
+    graph = helper.make_graph([y],
+                              opname+'_test',
+                              inputs = [helper.make_tensor_value_info("in",
+                                            TensorProto.FLOAT, list(indata.shape))],
+                              outputs = [helper.make_tensor_value_info("out",
+                                            TensorProto.FLOAT, list(outdata.shape))])
+
+    model = helper.make_model(graph, producer_name=opname+'_test')
+
+    for target, ctx in ctx_list():
+        tvm_out = get_tvm_output(model, indata, target, ctx, outshape, 'float32')
+        np.testing.assert_allclose(outdata, tvm_out, rtol=1e-5, atol=1e-5)
+
+def test_softmax():
+    _test_softmax((1, 10), None)
+    _test_softmax((1, 10), 1)
 
 def verify_min(input_dim):
     dtype = 'float32'
@@ -653,6 +680,38 @@ def test_forward_arg_min_max():
             verify_argmin([3,4,4], axis, keepdims)
             verify_argmax([3,4,4], axis, keepdims)
 
+def verify_constantfill(is_shape, input_dim, out_dim, value, dtype, **kwargs):
+    input_a = np.random.uniform(size=input_dim).astype(dtype)
+    out = np.empty(shape=out_dim, dtype=dtype)
+    out.fill(value)
+
+    if is_shape == True:
+        fill_node = helper.make_node("ConstantFill", [], ["out"], shape=input_dim, value=value, **kwargs)
+    else:
+        fill_node = helper.make_node("ConstantFill", ["input_a"], ["out"], value=value, dtype=dtype, **kwargs)
+
+    graph = helper.make_graph([fill_node],
+                              "fill_test",
+                              inputs = [helper.make_tensor_value_info("input_a",
+                                            TensorProto.FLOAT, list(input_dim))],
+                              outputs = [helper.make_tensor_value_info("out",
+                                            TensorProto.FLOAT, list(out.shape))])
+
+    model = helper.make_model(graph, producer_name='fill_test')
+
+    for target, ctx in ctx_list():
+        if is_shape == True:
+            tvm_out = get_tvm_output(model, [], target, ctx, out.shape)
+        else:
+            tvm_out = get_tvm_output(model, [input_a], target, ctx, out.shape)
+
+        np.testing.assert_allclose(out, tvm_out, rtol=1e-5, atol=1e-5)
+
+def test_constantfill():
+    verify_constantfill(True, (2, 3, 4, 5), (2, 3, 4, 5), 10, 'float32')
+    verify_constantfill(False, (2, 3, 4, 5), (2, 3, 4, 5), 10, 'float32')
+    verify_constantfill(True, (2, 3, 4, 5), (2, 3, 4, 5, 4, 5, 6), 10, 'float32', extra_shape=(4, 5, 6))
+
 if __name__ == '__main__':
     # verify_super_resolution_example()
     # verify_squeezenet1_1()
@@ -676,3 +735,5 @@ if __name__ == '__main__':
     test_forward_mean()
     test_forward_hardsigmoid()
     test_forward_arg_min_max()
+    test_softmax()
+    test_constantfill()

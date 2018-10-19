@@ -28,11 +28,17 @@ Build TVM with LLVM and CUDA enabled. [Help](https://docs.tvm.ai/install/from_so
 ```bash
 python3 gpu_imagenet_bench.py --model 1080ti
 python3 gpu_imagenet_bench.py --model titanx
+
+# For NVIDIA Jetson TX2, you can run the following command directly on the board,
+# or use cross compilation and RPC like what we do for ARM CPU.
+python3 gpu_imagenet_bench.py --model tx2
 ```
 
 ### ARM CPU & Mali GPU
-For embedded deivces, we use RPC infrastructure in TVM to make the management easy.
-So you need to use it for reproducing benchmark results.
+For embedded devices, we use RPC infrastructure in TVM to make the management easy.
+You need to use it for reproducing benchmark results.
+
+**Note**: We use llvm-4.0 in our tuning environment. Mismatch of the LLVM version during tuning and deployment can influence the performance, so you have to use a same version for reproduction.
 
 0. Build TVM with LLVM enabled. [Help](https://docs.tvm.ai/install/from_source.html)
 
@@ -85,9 +91,16 @@ python3 -m tvm.exec.rpc_tracker
   python3 arm_cpu_imagenet_bench.py --model pixel2 --rpc-key pixel2
   python3 arm_cpu_imagenet_bench.py --model p20pro --rpc-key p20pro
   python3 arm_cpu_imagenet_bench.py --model mate10pro --rpc-key mate10pro  
+  ```
 
+  ```bash
   # Mali GPU
+  # NOTE: To make the test environment more stable, we close GUI and lock the frequency
+  sudo /etc/init.d/lightdm stop
+  sudo -i
+  echo performance > /sys/class/misc/mali0/device/devfreq/ff9a0000.gpu/governor
   python3 mobile_gpu_imagenet_bench.py --model rk3399 --rpc-key rk3399
+  python3 mobile_gpu_imagenet_bench.py --model rk3399 --rpc-key rk3399 --dtype float16
   ```
 
 ### AMD GPU
