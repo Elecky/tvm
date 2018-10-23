@@ -2,7 +2,6 @@ import struct
 import tvm
 from helper import dtype_bytes, convert_scope
 
-
 class IntrinManager(object):
 
     def __init__(self, env):
@@ -397,6 +396,67 @@ class IntrinManager(object):
         self.intrin_ctors['VMulV'] = vctr_binary
         self.intrin_ctors['VDivV'] = vctr_binary
         self.intrin_ctors['VGTMV'] = vctr_binary
+
+        def vctr_merge(intrin_op, scope_in = 'uni', scope_out = 'uni', mode='n'):
+            env = self.env
+            cfg = self.env.cfg
+
+            assert mode in ['n', 'w'], 'merge intrin can only have mode n or w'
+
+            scope_in = self.get_scope(scope_in)
+            scope_out = self.get_scope(scope_out)
+
+            dtype_in, dtype_out = self.mode2dtype(mode)
+
+            # the name should contain all parameters
+            name = intrin_op + scope_in + ';' + scope_out + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+
+            shape_in = (1, cfg['vector_unit']['size'])
+            shape_out = (cfg['vector_unit']['size'], )
+
+            in1 = tvm.placeholder(shape_in, dtype_in, 'in1')
+            k = tvm.reduce_axis((0, 1), 'k_d')
+
+            if (intrin_op == 'VAddMerge'):
+                expr = lambda i: tvm.sum(in1[k, i], axis=k)
+                extern_func = 'NNPU_VAddV'
+            else:
+                raise ValueError('unsupported op in vctr_merge: ' + intrin_op)
+            
+            out = tvm.compute(shape_out, expr, 'out')
+
+            in_buf = self.decl_buffer(in1, scope_in, 'in_buf')
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+
+            def lower_func(ins, outs):
+                din = ins[0]
+                dout = outs[0]
+
+                init = self.emit_memset(dout.access_ptr('w', 'uint32'), shape_out[0], 
+                            dtype_bytes(dtype_out), 0, mode)
+
+                def comp():
+                    irb = tvm.ir_builder.create()
+                    irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                    irb.emit(tvm.call_extern("int32", extern_func,
+                            dout.access_ptr('w', 'uint32'),
+                            din.access_ptr('r', 'uint32'),
+                            dout.access_ptr('r', 'uint32'),
+                            shape_out[0],
+                            self.get_mode_code(mode)
+                            ))
+                
+                    return irb.get()
+                return None, init, comp()
+            
+            return tvm.decl_tensor_intrin(out.op, lower_func, name=name, 
+                                          binds={in1: in_buf,
+                                                 out: out_buf})
+        self.intrin_ctors['VAddMerge'] = vctr_merge
+
 
         def vctr_dot_product(intrin_op, scope_in1 = 'uni', scope_in2 = 'uni', scope_out = 'uni',
                              mode='n'):
@@ -934,3 +994,12 @@ class IntrinManager(object):
                 if (din.name == name):
                     res.append(din)
         return res
+    
+    def emit_memset(self, addr, nUnit, stride, val, mode):
+        irb = tvm.ir_builder.create()
+        irb.scope_attr(self.env.nnpu_axis, "coproc_scope", 0)
+        irb.emit(tvm.call_extern("int32", 'NNPU_Memset',
+                                addr, nUnit, stride,
+                                str(val), self.get_mode_code(mode)
+                    ))
+        return irb.get()

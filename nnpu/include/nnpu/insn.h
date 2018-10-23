@@ -18,7 +18,8 @@ namespace nnpu
 enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
-    MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy
+    MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy,
+    Memset
 };
 
 /*!
@@ -153,6 +154,27 @@ public:
     * \brief dump the string representation of this instruction into ostream
     * \param os: the stream to which to dump.
     */
+    void Dump(std::ostream& os) const;
+};
+
+struct MemsetInsn
+{
+public:
+    MemsetInsn() = default;
+
+    MemsetInsn(uint32_t _addrReg, uint32_t _nUnitReg, uint32_t _strideReg,
+               ModeCode _mode, double _imm) :
+        AddrReg(_addrReg), NUnitReg(_nUnitReg), StrideReg(_strideReg),
+        Mode(_mode), Imm(_imm)
+    {}
+
+    uint32_t AddrReg;
+    uint32_t NUnitReg;
+    uint32_t StrideReg;
+
+    ModeCode Mode;  // can only be n or w.
+    double Imm;
+    
     void Dump(std::ostream& os) const;
 };
 
@@ -538,6 +560,8 @@ public:
         VctrSclrInsn VctrSclr;
 
         BufferCopyInsn BufferCopy;
+
+        MemsetInsn Memset;
     };
 
     /* dispatch a call depends on the instruction type
@@ -624,6 +648,9 @@ public:
         case InsnType::BufferCopy:
             return functor(this->BufferCopy, std::forward<TArgs>(args)...);
 
+        case InsnType::Memset:
+            return functor(this->Memset, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -686,6 +713,9 @@ public:
     {}
 
     NNPUInsn(const BufferCopyInsn &_insn) : Type(InsnType::BufferCopy), BufferCopy(_insn)
+    {}
+
+    NNPUInsn(const MemsetInsn &_insn) : Type(InsnType::Memset), Memset(_insn)
     {}
 };
 

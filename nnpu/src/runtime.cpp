@@ -802,13 +802,14 @@ void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride
 
     if (dstStride == elemBytes && srcStride == elemBytes)
     {
-        elemBytes = elemBytes * nElem;
-        nElem = 1;
-        dstStride = elemBytes;
-        srcStride = elemBytes;
+        // if this is a compact copy.
+        elemBytes = 1;
+        nElem = elemBytes * nElem;
+        dstStride = 1;
+        srcStride = 1;
     }
 
-    // assign 3 addresses
+    // assign 5 addresses and strides
     Li li1(0, dstAddr + dstOffset);
     queue->EmplaceBack(li1);
     Li li2(1, dstStride);
@@ -821,5 +822,24 @@ void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride
     queue->EmplaceBack(li5);
 
     nnpu::BufferCopyInsn insn(0, 1, 2, 3, 4, elemBytes);
+    queue->EmplaceBack(insn);
+}
+
+void NNPU_Memset(uint32_t addr, uint32_t nUnit, uint32_t stride, const char *val, uint32_t mode)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+    Li li1(0, addr);
+    queue->EmplaceBack(li1);
+    Li li2(1, nUnit);
+    queue->EmplaceBack(li2);
+    Li li3(2, stride);
+    queue->EmplaceBack(li3);
+
+    std::stringstream ss(val);
+    double imm;
+    ss >> imm;
+
+    nnpu::MemsetInsn insn(0, 1, 2, ModeFromInt(mode), imm);
     queue->EmplaceBack(insn);
 }

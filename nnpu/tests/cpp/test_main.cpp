@@ -1,50 +1,69 @@
-#include <nnpusim/bit_packer_factory.h>
+#include <nnpusim/common/bit_packer_factory.h>
 #include <memory>
 #include <iostream>
-#include <nnpusim/bit_wrapper.h>
+#include <nnpusim/common/bit_wrapper.h>
+#include <nnpusim/common/wire.h>
 
 using namespace nnpu;
-using std::unique_ptr;
-using Byte = typename BitPacker::Byte;
-using std::cout;
-using std::endl;
+using namespace std;
+
+class A
+{
+public:
+    A() : outIndex(0)
+    {}
+
+    void set_out(std::size_t index)
+    {
+        outIndex = index;
+    }
+
+    std::unique_ptr<int> get(int index)
+    {
+        if (index == outIndex)
+            return unique_ptr<int>(new int(arr[index]));
+        else
+            return nullptr;
+    }
+
+    void set(std::size_t index, int val)
+    {
+        arr[index] = val;
+    }
+
+private:
+    int arr[3];
+
+    std::size_t outIndex;
+};
 
 int main(int argc, char *(argv[]))
 {
-    const int size = 32;
-    auto raw = unique_ptr<Byte[]>(new Byte[size]);
-    for (int i = 0; i != size / GetElementBytes(Type::Int16); ++i)
-    {
-        *(reinterpret_cast<int16_t*>(raw.get()) + i) = i;
-    }
+    shared_ptr<A> a = std::make_shared<A>();
+    a->set(0, 1);
+    a->set(1, 2);
+    a->set(2, 4);
 
-    BitWrapper arr(Type::Int16, size / sizeof(int16_t));
-    arr.CopyFrom(raw.get(), 0, 32);
-    auto arr2 = arr.Cast(Type::Float32);
-    arr2 = arr2.Exp();
+    WireManager wires;
+    auto wire1 = wires.Get<int>("wire1");
+    wire1->SubscribeWriter<int>(Binder<int>::Bind(&A::get, a, 0));
+    wire1->SubscribeWriter<int>(Binder<int>::Bind(&A::get, a, 1));
+    wire1->SubscribeWriter<int>(Binder<int>::Bind(&A::get, a, 2));
+
+    auto wire2 = wires["wire1"];
+    cout << *(wire2->Read<int>()) << endl;
+    a->set_out(1);
+    cout << *(wire2->Read<int>()) << endl;
+    a->set_out(2);
+    cout << *(wire2->Read<int>()) << endl;
+    a->set_out(1);
+    cout << *(wire2->Read<int>()) << endl;
+
+    a.reset();
+
+    cout << (wire2->Read<int>() == nullptr) << endl;
+
+    //wires.Get<double>("wire1");
     
-    //auto arr2 = arr->Exp();
-    // print and see the result
-    cout << arr2.GetNElem() << endl;
-    for (int i = 0; i != arr2.GetNElem(); ++i)
-    {
-        int32_t value;
-        arr2.GetAs(i, Type::Int32, &value);
-        std::cout << value << " ";
-    }
-    std::cout << std::endl;
-    
-    arr2 = arr2 + arr;
-    for (int i = 0; i != arr2.GetNElem(); ++i)
-    {
-        float value;
-        arr2.GetAs(i, Type::Float32, &value);
-        std::cout << value << " ";
-    }
-    std::cout << std::endl;
-
-    cout << static_cast<std::size_t>(arr.GetType()) << std::endl;
-    cout << static_cast<std::size_t>(arr2.GetType()) << std::endl;
-
     return 0;
 }

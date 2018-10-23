@@ -180,6 +180,12 @@ void BufferCopyInsn::Dump(ostream &os) const
        << ", $" << SrcAddrReg << ", $" << SrcStrideReg << ", $" << NElemReg;
 }
 
+void MemsetInsn::Dump(ostream &os) const
+{
+    os << "Memset." << mode2str(Mode) << " $" << AddrReg << ", $" << NUnitReg
+       << ", $" << StrideReg << ", #" << Imm;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)

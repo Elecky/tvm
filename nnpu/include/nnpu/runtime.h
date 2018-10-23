@@ -134,6 +134,8 @@ void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride
                          uint32_t srcAddr, int32_t srcOffset, uint32_t dsrStride,
                          uint32_t elemBytes, uint32_t nElem);
 
+void NNPU_Memset(uint32_t addr, uint32_t nUnit, uint32_t stride, const char *val, uint32_t mode);
+
 void NNPUSynchronize(uint32_t timeout);
 
 #ifdef __cplusplus
