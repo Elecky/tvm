@@ -17,7 +17,10 @@ namespace runtime
 class NNPUDeviceAPI final : public DeviceAPI
 {
   public:
-    void SetDevice(TVMContext ctx) final {}
+    void SetDevice(TVMContext ctx) final 
+    {
+        NNPUSetDevice(ctx.device_id);
+    }
 
     void GetAttr(TVMContext ctx, DeviceAttrKind kind, TVMRetValue *rv) final
     {

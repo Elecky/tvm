@@ -14,6 +14,8 @@ also declares the base simulator interface.
 #include <nnpusim/S0Simulator.h>
 #include <tvm/runtime/registry.h>
 
+using std::shared_ptr;
+
 namespace nnpu
 {
 
@@ -102,12 +104,32 @@ DRAM *DRAM::Global()
 // set default simulator type as S0
 DevType Simulator::DefaultType = DevType::S0;
 
+std::unordered_map<int, std::shared_ptr<Simulator>> Simulator::devices;
+
 /*!
 * use dmlc Thread Local to achieve thread local instance.
 */
-std::shared_ptr<Simulator>& Simulator::ThreadLocal()
+shared_ptr<Simulator>& Simulator::ThreadLocal()
 {
-    return *(dmlc::ThreadLocalStore<std::shared_ptr<Simulator>>::Get());
+    return *(dmlc::ThreadLocalStore<shared_ptr<Simulator>>::Get());
+}
+
+std::shared_ptr<Simulator> Simulator::GetDevice(int id)
+{
+    auto it = devices.find(id);
+    if (it != devices.end())
+    {
+        return it->second;
+    }
+    else
+    {
+        return nullptr;
+    }
+}
+
+void Simulator::SetDevice(int id, const shared_ptr<Simulator> &device)
+{
+    devices[id] = device;
 }
 
 } // namespace nnpu
@@ -141,6 +163,11 @@ void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns)
     nnpu::Simulator::ThreadLocal()->Run(insns);
 }
 
+void NNPUSetDevice(int id)
+{
+    nnpu::Simulator::ThreadLocal() = nnpu::Simulator::GetDevice(id);
+}
+
 /*!
 * \brief construct a nnpu simulator based on given configuration
 * \param:
@@ -165,15 +192,15 @@ std::shared_ptr<nnpu::Simulator> NNPUDevAlloc(nnpu::DevType type, YAML::Node cfg
 TVM_REGISTER_GLOBAL("nnpu.set_dev")
     .set_body([](tvm::runtime::TVMArgs args, tvm::runtime::TVMRetValue *rv) {
         // there should be 2 arguments
-        if (args.num_args != 2)
+        if (args.num_args != 3)
         {
-            *rv = std::string("expect 2 arguments");
+            *rv = std::string("expect 3 arguments");
             return;
         }
 
         using Type = nnpu::DevType;
         Type devType;
-        std::string t_str = args[0];
+        std::string t_str = args[1];
 
         static const std::string s0("S0"), s1("S1");
 
@@ -191,8 +218,10 @@ TVM_REGISTER_GLOBAL("nnpu.set_dev")
             return;
         }
 
-        std::string cfg_path = args[1];
+        std::string cfg_path = args[2];
         YAML::Node cfg = YAML::LoadFile(cfg_path);
 
-        nnpu::Simulator::ThreadLocal() = NNPUDevAlloc(devType, cfg);
+        int device_id = args[0];
+
+        nnpu::Simulator::SetDevice(device_id, NNPUDevAlloc(devType, cfg));
     });

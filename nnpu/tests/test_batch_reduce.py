@@ -29,7 +29,7 @@ def test():
     print(nnpu.lower(s, [a, b_host], simple_mode=True))
 
     func = nnpu.build(s, [a, b_host], 'nnpu', 'llvm', name='nnpu_func')
-
+    #exit()
     ctx = tvm.nd.TVMContext(13, 0)
     a_np = np.random.randint(size=(4, 16), dtype=a.dtype, low = -127, high = 127)
     a_nd = tvm.nd.array(a_np, ctx)

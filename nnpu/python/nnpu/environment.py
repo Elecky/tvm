@@ -59,13 +59,13 @@ class Environment(object):
     def __enter__(self):
         self.last_env = Environment.current
         Environment.current = self
-        set_device(self)
+        #set_device(self)
         return self
 
     def __exit__(self, ptype, value, trace):
         Environment.current = self.last_env
         # reset device based on the last Environment
-        set_device(Environment.current)
+        #set_device(Environment.current)
 
     def scope2config(self, scope):
         key = None
@@ -80,10 +80,11 @@ class Environment(object):
         return self.cfg[key]
 
 # set device with the configs in the environment
-def set_device(env):
-    func = tvm.get_global_func('nnpu.set_dev',True)
+def set_device(env, device_id=0, type='S0'):
+    func = tvm.get_global_func('nnpu.set_dev', False)
+    print("setting device with config file: {0}".format(env.cfg_path))
     print(env.cfg_path)
-    func('S0', env.cfg_path)
+    func(int(device_id), str(type), str(env.cfg_path))
     pass
 
 def get_env():

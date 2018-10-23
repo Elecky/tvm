@@ -33,6 +33,11 @@ void NNPUMemFree(void *buf);
 
 void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns);
 
+/*!
+ * relate device[id] with current thread.
+*/
+void NNPUSetDevice(int id);
+
 #ifdef __cplusplus
 }
 #endif
@@ -76,6 +81,13 @@ public:
     * \brief default simulator type
     */
     static DevType DefaultType;
+
+    static void SetDevice(int id, const std::shared_ptr<Simulator> &device);
+
+    static std::shared_ptr<Simulator> GetDevice(int id);
+
+private:
+    static std::unordered_map<int, std::shared_ptr<Simulator>> devices;
 };
 
 /*!
