@@ -127,9 +127,9 @@ std::shared_ptr<Simulator> Simulator::GetDevice(int id)
     }
 }
 
-void Simulator::SetDevice(int id, const shared_ptr<Simulator> &device)
+void Simulator::SetDevice(int id, shared_ptr<Simulator> device)
 {
-    devices[id] = device;
+    devices[id] = std::move(device);
 }
 
 } // namespace nnpu
