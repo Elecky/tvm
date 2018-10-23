@@ -4,6 +4,7 @@ NNPU runtime
 
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <nnpu/driver.h>
 #include <nnpu/insn.h>
 #include <nnpu/runtime.h>
@@ -426,7 +427,17 @@ void NNPU_VctrBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     nnpu::VctrBinaryInsn insn(op, 0, 1, 2, size, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
-
+double str_to_double(const char* S){
+    std::stringstream st;
+    double Imm = 0;
+    if(!memcmp(S,"-INFINITY",strlen(S))) 
+        return Imm = std::numeric_limits<double>::min();
+    else if(!memcmp(S,"INFINITY",strlen(S)))
+        return Imm = std::numeric_limits<double>::max();
+    st<<S;
+    st>>Imm;
+    return Imm;
+}
 void NNPU_VctrImm(uint32_t outAddr, uint32_t inAddr, double Imm, 
                     uint32_t size, uint32_t mode, nnpu::VctrImmOp op)
 {
@@ -455,91 +466,61 @@ void NNPU_MatImm(uint32_t outAddr, uint32_t inAddr, double Imm,
 }
 void NNPU_MAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::Add);
 }
 
 void NNPU_MMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::Mul);
 }
 
 void NNPU_ISubM(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::RSub);
 }
 
 void NNPU_VAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Add);
 }
 
 void NNPU_VSubI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Sub);
 }
 
 void NNPU_ISubV(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::RSub);
 }
 
 void NNPU_VMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Mul);
 }
 
 void NNPU_VDivI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Div);
 }
 
 void NNPU_IDivV(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_VctrImm(outAddr, inAddr ,Imm, size, mode, nnpu::VctrImmOp::RDiv);
 }
 
 void NNPU_VGTMI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
 {
-    std::stringstream st;
-    st<<ImmS;
-    double Imm = 0;
-    st>>Imm;
+    double Imm = str_to_double(ImmS);
     NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::GTM);
 }
 
@@ -835,11 +816,7 @@ void NNPU_Memset(uint32_t addr, uint32_t nUnit, uint32_t stride, const char *val
     queue->EmplaceBack(li2);
     Li li3(2, stride);
     queue->EmplaceBack(li3);
-
-    std::stringstream ss(val);
-    double imm;
-    ss >> imm;
-
+    double imm=str_to_double(val);
     nnpu::MemsetInsn insn(0, 1, 2, ModeFromInt(mode), imm);
     queue->EmplaceBack(insn);
 }

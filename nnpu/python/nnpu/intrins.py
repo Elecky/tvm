@@ -419,23 +419,18 @@ class IntrinManager(object):
 
             in1 = tvm.placeholder(shape_in, dtype_in, 'in1')
             k = tvm.reduce_axis((0, 1), 'k_d')
-            num = 0
+            num = '0'
             if (intrin_op == 'VAddMerge'):
                 expr = lambda i: tvm.sum(in1[k, i], axis=k)
-                num = 0
+                num = '0'
                 extern_func = 'NNPU_VAddV'
             elif(intrin_op == 'VMulMerge'):
                 expr = lambda i: tvm.sum(in1[k,i], axis=k)
-                num = 1
+                num = '1'
                 extern_func = 'NNPU_VMulV'
             elif(intrin_op == 'VGTMMerge'):
                 expr = lambda i: tvm.sum(in1[k,i], axis=k)
-                if(dtype_in == 'int16'):
-                    num = -(1<<15)
-                elif(dtype_in == 'int8'):
-                    num = -(1<<7)
-                elif(dtype_in == 'int32'):
-                    num = -(1<<31)
+                num='-INFINITY'
                 extern_func = 'NNPU_VGTMV'
             else:
                 raise ValueError('unsupported op in vctr_merge: ' + intrin_op)
