@@ -91,7 +91,11 @@ class IntrinManager(object):
             scope_in = self.get_scope(scope_in)
             scope_out = self.get_scope(scope_out)
             dtype_in, dtype_out = self.mode2dtype(mode)
-            imm = tvm.const(imm_value, dtype_in)
+            
+            if (isinstance(imm_value, type(tvm.const(0)))):
+                imm = imm_value.astype(dtype_in)
+            else:
+                imm = tvm.const(imm_value, dtype_in)
             name = intrin_op + ';' + scope_in + ';' + scope_out + ';' +str(imm_value)+';'+ mode
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
@@ -251,7 +255,7 @@ class IntrinManager(object):
                                                  out: out_buf})
         self.intrin_ctors['GEMM'] = gemm
 
-        def mat_imm(intrin_op, shape, imm_val, scope_in = 'uni',
+        def mat_imm(intrin_op, shape, imm_value, scope_in = 'uni',
                  scope_out = 'uni', mode='inc'):
             env = self.env
             cfg = self.env.cfg
@@ -266,7 +270,10 @@ class IntrinManager(object):
             scope_out = self.get_scope(scope_out)
 
             dtype_in, dtype_out = self.mode2dtype(mode)
-            imm = tvm.const(imm_val, dtype_in)
+            if (isinstance(imm_value, type(tvm.const(0)))):
+                imm = imm_value.astype(dtype_in)
+            else:
+                imm = tvm.const(imm_value, dtype_in)
             # the name should contain all parameters
             name = intrin_op + str(nRow) + '_'+ str(nCol) +  '_'+ str(imm.value) +  ';' \
                    + ';' + scope_in + ';' + scope_out + ';' + mode + \
@@ -1000,7 +1007,7 @@ class IntrinManager(object):
     def get_ins(self, ins, *args):
         res = []
         for name in args:
-            print(name)
+            #print(name)
             for din in ins:
                 if (din.name == name):
                     res.append(din)

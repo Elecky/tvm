@@ -46,9 +46,9 @@ int main(int argc, char *(argv[]))
 
     WireManager wires;
     auto wire1 = wires.Get<int>("wire1");
-    wire1->SubscribeWriter<int>(Binder<int>::Bind(&A::get, a, 0));
-    wire1->SubscribeWriter<int>(Binder<int>::Bind(&A::get, a, 1));
-    wire1->SubscribeWriter<int>(Binder<int>::Bind(&A::get, a, 2));
+    wire1->SubscribeWriter(Binder<int>::Bind(&A::get, a, 0));
+    wire1->SubscribeWriter(Binder<int>::Bind(&A::get, a, 1));
+    wire1->SubscribeWriter(Binder<int>::Bind(&A::get, a, 2));
 
     auto wire2 = wires["wire1"];
     cout << *(wire2->Read<int>()) << endl;

@@ -82,7 +82,7 @@ public:
     */
     static DevType DefaultType;
 
-    static void SetDevice(int id, const std::shared_ptr<Simulator> &device);
+    static void SetDevice(int id, std::shared_ptr<Simulator> device);
 
     static std::shared_ptr<Simulator> GetDevice(int id);
 
