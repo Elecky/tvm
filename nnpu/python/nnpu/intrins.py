@@ -426,10 +426,24 @@ class IntrinManager(object):
 
             in1 = tvm.placeholder(shape_in, dtype_in, 'in1')
             k = tvm.reduce_axis((0, 1), 'k_d')
-
+            num = 0
             if (intrin_op == 'VAddMerge'):
                 expr = lambda i: tvm.sum(in1[k, i], axis=k)
+                num = 0
                 extern_func = 'NNPU_VAddV'
+            elif(intrin_op == 'VMulMerge'):
+                expr = lambda i: tvm.sum(in1[k,i], axis=k)
+                num = 1
+                extern_func = 'NNPU_VMulV'
+            elif(intrin_op == 'VGTMMerge'):
+                expr = lambda i: tvm.sum(in1[k,i], axis=k)
+                if(dtype_in == 'int16'):
+                    num = -(1<<15)
+                elif(dtype_in == 'int8'):
+                    num = -(1<<7)
+                elif(dtype_in == 'int32'):
+                    num = -(1<<31)
+                extern_func = 'NNPU_VGTMV'
             else:
                 raise ValueError('unsupported op in vctr_merge: ' + intrin_op)
             
@@ -443,7 +457,7 @@ class IntrinManager(object):
                 dout = outs[0]
 
                 init = self.emit_memset(dout.access_ptr('w', 'uint32'), shape_out[0], 
-                            dtype_bytes(dtype_out), 0, mode)
+                            dtype_bytes(dtype_out), num , mode)
 
                 def comp():
                     irb = tvm.ir_builder.create()
@@ -463,6 +477,8 @@ class IntrinManager(object):
                                           binds={in1: in_buf,
                                                  out: out_buf})
         self.intrin_ctors['VAddMerge'] = vctr_merge
+        self.intrin_ctors['VMulMerge'] = vctr_merge
+        self.intrin_ctors['VGTMMerge'] = vctr_merge
 
 
         def vctr_dot_product(intrin_op, scope_in1 = 'uni', scope_in2 = 'uni', scope_out = 'uni',
