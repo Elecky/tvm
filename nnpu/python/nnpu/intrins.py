@@ -311,7 +311,7 @@ class IntrinManager(object):
                 irb.emit(tvm.call_extern("int32", extern_func,
                             dout.access_ptr('w', 'uint32'),
                             din.access_ptr('r', 'uint32'),
-                            str(imm_val),nRow, nCol, 
+                            str(imm_value),nRow, nCol, 
                             self.get_mode_code(mode)
                             ))
                 return irb.get()
@@ -444,7 +444,7 @@ class IntrinManager(object):
             
             out = tvm.compute(shape_out, expr, 'out')
 
-            in_buf = self.decl_buffer(in1, scope_in, 'in_buf')
+            in_buf = self.decl_buffer(in1, scope_in, 'in_buf', strides=[tvm.var('s'), 1])
             out_buf = self.decl_buffer(out, scope_out, 'out_buf')
 
             def lower_func(ins, outs):
@@ -1055,12 +1055,13 @@ class IntrinManager(object):
     def get_scope(self, scope_str):
         return convert_scope(self.env, scope_str)
     
-    def decl_buffer(self, tensor, scope, buf_name):
+    def decl_buffer(self, tensor, scope, buf_name, **kwargs):
         dtype_bits = dtype_bytes(tensor.dtype) * 8
         return tvm.decl_buffer(
                 tensor.shape, tensor.dtype, buf_name, scope=scope,
                 data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8,
-                offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits)
+                offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits,
+                **kwargs)
 
     def mode2dtype(self, mode):
         cfg = self.env.cfg
