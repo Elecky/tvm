@@ -784,8 +784,8 @@ void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride
     if (dstStride == elemBytes && srcStride == elemBytes)
     {
         // if this is a compact copy.
-        elemBytes = 1;
         nElem = elemBytes * nElem;
+        elemBytes = 1;
         dstStride = 1;
         srcStride = 1;
     }
@@ -797,7 +797,7 @@ void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride
     queue->EmplaceBack(li2);
     Li li3(2, srcAddr + srcOffset);
     queue->EmplaceBack(li3);
-    Li li4(3, dstStride);
+    Li li4(3, srcStride);
     queue->EmplaceBack(li4);
     Li li5(4, nElem);
     queue->EmplaceBack(li5);
