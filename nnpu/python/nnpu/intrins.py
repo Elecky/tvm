@@ -681,6 +681,75 @@ class IntrinManager(object):
         self.intrin_ctors['MSubM'] = mat_binary
         self.intrin_ctors['MMulM'] = mat_binary
 
+        def mat_merge(intrin_op, shape ,scope_in = 'uni', scope_out = 'uni', mode='n'):
+            env = self.env
+            cfg = self.env.cfg
+
+            assert mode in ['n', 'w'], 'merge intrin can only have mode n or w'
+
+            scope_in = self.get_scope(scope_in)
+            scope_out = self.get_scope(scope_out)
+            ndim,nrow,ncol=shape
+            dtype_in, dtype_out = self.mode2dtype(mode)
+            print('THIS IS SHAP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            print(shape)
+            print(nrow*ncol)
+            assert len(shape) == 3, 'the length of shape should be 3'
+            # the name should contain all parameters
+            name = intrin_op + scope_in + ';' + scope_out + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+
+            shape_in = (1,nrow,ncol)
+            shape_out = (nrow,ncol)
+
+            in1 = tvm.placeholder(shape_in, dtype_in, 'in1')
+            k = tvm.reduce_axis((0, 1), 'k_d')
+            num = '0'
+            if (intrin_op == 'MAddMerge'):
+                expr = lambda i,j: tvm.sum(in1[k, i,j], axis=k)
+                num = '0'
+                extern_func = 'NNPU_MAddM'
+            elif(intrin_op == 'MMulMerge'):
+                expr = lambda i,j: tvm.sum(in1[k, i,j], axis=k)
+                num = '1'
+                extern_func = 'NNPU_MMulM'
+            else:
+                raise ValueError('unsupported op in mat_merge: ' + intrin_op)
+            
+            out = tvm.compute(shape_out, expr, 'out')
+
+            in_buf = self.decl_buffer(in1, scope_in, 'in_buf')
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+
+            def lower_func(ins, outs):
+                din = ins[0]
+                dout = outs[0]
+
+                init = self.emit_memset(dout.access_ptr('w', 'uint32'), shape_out[0]*shape_out[1], 
+                            dtype_bytes(dtype_out), num , mode)
+
+                def comp():
+                    irb = tvm.ir_builder.create()
+                    irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                    irb.emit(tvm.call_extern("int32", extern_func,
+                            dout.access_ptr('w', 'uint32'),
+                            din.access_ptr('r', 'uint32'),
+                            dout.access_ptr('r', 'uint32'),
+                            shape_out[0]*shape_out[1],
+                            self.get_mode_code(mode)
+                            ))
+                
+                    return irb.get()
+                return None, init, comp()
+            
+            return tvm.decl_tensor_intrin(out.op, lower_func, name=name, 
+                                          binds={in1: in_buf,
+                                                 out: out_buf})
+        self.intrin_ctors['MAddMerge'] = mat_merge
+        self.intrin_ctors['MMulMerge'] = mat_merge
+
         def mat_reduce_row(intrin_op, shape, scope_in='uni', scope_out='uni', mode='inc'):
             env = self.env
             cfg = self.env.cfg
