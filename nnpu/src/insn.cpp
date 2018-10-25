@@ -133,14 +133,16 @@ void VctrReduceInsn::Dump(std::ostream &os) const
 
 void MatBinaryInsn::Dump(std::ostream &os) const
 {
-    os << "M" << ToString(Op) << "M" << "_" << Size << '.' << mode2str(Mode) << " $"
-       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+    os << "M" << ToString(Op) << "M" << "_" << NRow << "_" << NCol << '.' << mode2str(Mode) 
+       << " $" << OutAddrReg << ", $" << OutRowStrideReg 
+       << ", $" << In1AddrReg << ", $" << In1RowStrideReg 
+       << ", $" << In2AddrReg << ", $" << In2RowStrideReg;
 }
 
 void MatReduceRowInsn::Dump(std::ostream &os) const
 {
     os << "MReduce" << ToString(Op) << "Row_" << NRow << '_' << NCol << '.' << mode2str(Mode) 
-       << " $" << OutAddrReg << ", $" << InAddrReg;
+       << " $" << OutAddrReg << ", $" << InAddrReg << ", $" << InRowStrideReg;
 }
 
 void MatReduceColInsn::Dump(std::ostream &os) const
@@ -176,8 +178,8 @@ void VctrSclrInsn::Dump(std::ostream& os) const
 
 void BufferCopyInsn::Dump(ostream &os) const
 {
-    os << "Copy.b_" << ElemBytes << " $" << DstAddrReg << ", $" << DstStrideReg
-       << ", $" << SrcAddrReg << ", $" << SrcStrideReg << ", $" << NElemReg;
+    os << "Copy.b_" << UnitBytes << " $" << DstAddrReg << ", $" << DstStrideReg
+       << ", $" << SrcAddrReg << ", $" << SrcStrideReg << ", $" << NUnitReg;
 }
 
 void MemsetInsn::Dump(ostream &os) const

@@ -55,6 +55,10 @@ def test():
     mul_nd = tvm.nd.array(np.zeros((8, 16)).astype(mul_host.dtype), ctx)
 
     func(a_nd, b_nd, c_nd, sub_nd, mul_nd)
+    print('a = ')
+    print(a_np)
+    print('b = ')
+    print(b_np)
     print('a + b = ')
     print(c_nd.asnumpy())
     print("numpy ground truth is")

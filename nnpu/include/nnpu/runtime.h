@@ -88,14 +88,23 @@ void NNPU_VctrReduceMax(uint32_t outAddr, uint32_t inAddr, uint32_t size,
 void NNPU_VctrReduceMin(uint32_t outAddr, uint32_t inAddr, uint32_t size, 
                       uint32_t mode);
 
-void NNPU_MAddM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode);
+void NNPU_MAddM(uint32_t outAddr, uint32_t outRowStride, 
+                uint32_t in1Addr, uint32_t in1RowStride,
+                uint32_t in2Addr, uint32_t in2RowStride,
+                uint32_t nRow, uint32_t nCol, uint32_t mode);
 
-void NNPU_MSubM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode);
+void NNPU_MSubM(uint32_t outAddr, uint32_t outRowStride, 
+                uint32_t in1Addr, uint32_t in1RowStride,
+                uint32_t in2Addr, uint32_t in2RowStride,
+                uint32_t nRow, uint32_t nCol, uint32_t mode);
 
-void NNPU_MMulM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode);
+void NNPU_MMulM(uint32_t outAddr, uint32_t outRowStride, 
+                uint32_t in1Addr, uint32_t in1RowStride,
+                uint32_t in2Addr, uint32_t in2RowStride,
+                uint32_t nRow, uint32_t nCol, uint32_t mode);
 
-void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t nRow, uint32_t nCol, 
-                        uint32_t mode);
+void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride,
+                        uint32_t nRow, uint32_t nCol, uint32_t mode);
 
 void NNPU_MAddV(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
                 uint32_t nRow, uint32_t nCol, uint32_t mode);

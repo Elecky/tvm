@@ -652,9 +652,9 @@ class IntrinManager(object):
                 raise ValueError('unsupported mat binary op')
             out = tvm.compute(shape, expr, 'out')
 
-            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf')
-            in2_buf = self.decl_buffer(in2, scope_in2, 'in2_buf')
-            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf', strides=(tvm.var('s1'), 1))
+            in2_buf = self.decl_buffer(in2, scope_in2, 'in2_buf', strides=(tvm.var('s2'), 1))
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf', strides=(tvm.var('s3'), 1))
             
             def lower_func(ins, outs):
                 din1, din2 = ins[0], ins[1]
@@ -663,10 +663,13 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(tvm.call_extern("int32", extern_func,
-                            dout.access_ptr('w', 'uint32'),
-                            din1.access_ptr('r', 'uint32'),
-                            din2.access_ptr('r', 'uint32'),
-                            shape[0] * shape[1],
+                            dout.access_ptr('w', 'uint32'), 
+                            dout.strides[0] * dtype_bytes(dtype_out),
+                            din1.access_ptr('r', 'uint32'), 
+                            din1.strides[0] * dtype_bytes(dtype_in),
+                            din2.access_ptr('r', 'uint32'), 
+                            din2.strides[0] * dtype_bytes(dtype_in),
+                            shape[0], shape[1],
                             self.get_mode_code(mode)
                             ))
                 
@@ -790,7 +793,7 @@ class IntrinManager(object):
             
             out = tvm.compute((nRow, ), expr, 'out')
 
-            in_buf = self.decl_buffer(op_in, scope_in, 'in_buf')
+            in_buf = self.decl_buffer(op_in, scope_in, 'in_buf', strides=(tvm.var('s'), 1))
             out_buf = self.decl_buffer(out, scope_out, 'out_buf')
             
             def lower_func(ins, outs):
@@ -801,7 +804,8 @@ class IntrinManager(object):
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(tvm.call_extern("int32", extern_func,
                             dout.access_ptr('w', 'uint32'),
-                            din1.access_ptr('r', 'uint32'),
+                            din1.access_ptr('r', 'uint32'), 
+                            din1.strides[0] * dtype_bytes(dtype_in),
                             shape[0], shape[1],
                             self.get_mode_code(mode)
                             ))
