@@ -7,7 +7,7 @@ import numpy as np
 with ScheduleProcHelper():
     env = nnpu.get_env()
     nnpu.set_device(env)
-    shape = (16, 32)  # (16, 32) tiled to (16, 2, 16)
+    shape = (32, 32)  # (32, 32) tiled to (2, 16, 2, 16)
     a = tvm.placeholder(shape, env.cfg['dtype_n'], 'a')
     b = tvm.placeholder(shape, env.cfg['dtype_n'], 'b')
 
@@ -20,10 +20,10 @@ with ScheduleProcHelper():
 
     s = nnpu.create_schedule(sum_host.op)
     # tensorize
-    x = sum_buf.op.axis[0]
-    y,z = s[sum_buf].split(sum_buf.op.axis[1], factor=16)
-    s[sum_buf].reorder(y, x, z)
-    s[sum_buf].tensorize(x, env.intrins.get('MAddM', shape=(16, 16), mode='n'))
+    xo, xi = s[sum_buf].split(sum_buf.op.axis[0], factor=16)
+    yo, yi = s[sum_buf].split(sum_buf.op.axis[1], factor=16)
+    s[sum_buf].reorder(xo, yo, xi, yi)
+    s[sum_buf].tensorize(xi, env.intrins.get('MAddM', shape=(16, 16), mode='n'))
 
     print(nnpu.lower(s, [a, b, sum_host], simple_mode=True))
 
