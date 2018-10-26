@@ -482,15 +482,19 @@ struct MatRowDotInsn
 public:
     MatRowDotInsn() = default;
 
-    MatRowDotInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg,
+    MatRowDotInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in1RowStrideReg,
+                  uint32_t _in2AddrReg, uint32_t _in2RowStrideReg,
                   uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
+        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In1RowStrideReg(_in1RowStrideReg),
+        In2AddrReg(_in2AddrReg), In2RowStrideReg(_in2RowStrideReg),
         NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
     uint32_t In1AddrReg;
+    uint32_t In1RowStrideReg;
     uint32_t In2AddrReg;
+    uint32_t In2RowStrideReg;
 
     // the following fileds are part of insn encoding.
     uint32_t NRow, NCol;  // the total elements in both matrix.

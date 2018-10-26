@@ -724,7 +724,8 @@ void NNPU_MMulV(uint32_t outAddr, uint32_t outRowStride,
                     nnpu::MatVctrOp::Mul, nRow, nCol, mode);
 }
 
-void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
+void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in1RowStride,
+                  uint32_t in2Addr, uint32_t in2RowStride,
                   uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
     using Li = nnpu::LiInsn;
@@ -733,12 +734,12 @@ void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     // assign 3 addresses
     Li li1(0, outAddr);
     queue->EmplaceBack(li1);
-    Li li2(1, in1Addr);
-    queue->EmplaceBack(li2);
-    Li li3(2, in2Addr);
-    queue->EmplaceBack(li3);
+    queue->EmplaceBack(Li(1, in1Addr));
+    queue->EmplaceBack(Li(2, in1RowStride));
+    queue->EmplaceBack(Li(3, in2Addr));
+    queue->EmplaceBack(Li(4, in2RowStride));
 
-    nnpu::MatRowDotInsn insn(0, 1, 2, nRow, nCol, ModeFromInt(mode));
+    nnpu::MatRowDotInsn insn(0, 1, 2, 3, 4, nRow, nCol, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 

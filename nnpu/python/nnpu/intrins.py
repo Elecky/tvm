@@ -931,8 +931,8 @@ class IntrinManager(object):
                 expr = lambda i: tvm.sum(in1[i, k] * in2[i, k], k)
             out = tvm.compute((nRow, ), expr, 'out')
 
-            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf')
-            in2_buf = self.decl_buffer(in2, scope_in2, 'in2_buf')
+            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf', strides=[tvm.var('s1'), 1])
+            in2_buf = self.decl_buffer(in2, scope_in2, 'in2_buf', strides=[tvm.var('s2'), 1])
             out_buf = self.decl_buffer(out, scope_out, 'out_buf')
             
             def lower_func(ins, outs):
@@ -944,7 +944,9 @@ class IntrinManager(object):
                 irb.emit(tvm.call_extern("int32", 'NNPU_MRowDot',
                             dout.access_ptr('w', 'uint32'),
                             din1.access_ptr('r', 'uint32'),
+                            din1.strides[0] * dtype_bytes(dtype_in),
                             din2.access_ptr('r', 'uint32'),
+                            din2.strides[0] * dtype_bytes(dtype_in),
                             shape[0], shape[1],
                             self.get_mode_code(mode)
                             ))

@@ -162,7 +162,8 @@ void MatVctrInsn::Dump(std::ostream &os) const
 void MatRowDotInsn::Dump(std::ostream &os) const
 {
     os << "MRowDot" << "_" << NRow << '_' << NCol << '.' << mode2str(Mode) << " $"
-       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+       << OutAddrReg << ", $" << In1AddrReg << ", $" << In1RowStrideReg
+       << ", $" << In2AddrReg << ", $" << In2RowStrideReg;
 }
 
 void VctrSclrInsn::Dump(std::ostream& os) const

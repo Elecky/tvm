@@ -118,7 +118,8 @@ void NNPU_MMulV(uint32_t outAddr, uint32_t outRowStride,
                 uint32_t matAddr, uint32_t matRowStride,
                 uint32_t vctrAddr, uint32_t nRow, uint32_t nCol, uint32_t mode);
 
-void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
+void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in1RowStride,
+                  uint32_t in2Addr, uint32_t in2RowStride,
                   uint32_t nRow, uint32_t nCol, uint32_t mode); 
 
 void NNPU_VAddS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
