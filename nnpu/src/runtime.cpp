@@ -374,23 +374,25 @@ void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
 }
 
 void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut, 
-             uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t mode)
+               uint32_t outAddr, uint32_t outRowStride,
+               uint32_t in1Addr, uint32_t in1RowStride,
+               uint32_t in2Addr, uint32_t in2RowStride, uint32_t mode)
 {
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
     // load 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    
-    Li li2(1, in1Addr);
-    queue->EmplaceBack(li2);
+    queue->EmplaceBack(Li(0, outAddr));
+    queue->EmplaceBack(Li(1, outRowStride));
 
-    Li li3(2, in2Addr);
-    queue->EmplaceBack(li3);
+    queue->EmplaceBack(Li(2, in1Addr));
+    queue->EmplaceBack(Li(3, in1RowStride));
+
+    queue->EmplaceBack(Li(4, in2Addr));
+    queue->EmplaceBack(Li(5, in2RowStride));
 
     // create a gemm instruction
-    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, ModeFromInt(mode));
+    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, 3, 4, 5, ModeFromInt(mode));
     queue->EmplaceBack(gemm);
 }
 

@@ -371,6 +371,8 @@ def inject_scratchpad_copy(stmt_in):
     env = get_env()
 
     def _inject_copy(src, dst, pad_before, pad_after, pad_value):
+        #print('inject_scratchpad_copy called')
+
         if ((pad_before and not util.equal_const_int(pad_before[-1], 0)) or 
             (pad_after and not util.equal_const_int(pad_after[-1], 0))):
             raise ValueError('can not pad last dimension')

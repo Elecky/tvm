@@ -84,7 +84,9 @@ void StallInsn::Dump(std::ostream& os) const
 void GemmInsn::Dump(std::ostream& os) const
 {
     os << "gemm_" << NRowOut << '_' << Factor << '_' << NColOut << '.' << mode2str(this->Mode)
-       << " $" << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+       << " $" << OutAddrReg << ", $" << OutRowStrideReg 
+       << ", $" << In1AddrReg << ", $" << In1RowStrideReg 
+       << ", $" << In2AddrReg << ", $" << In2RowStrideReg;
 }
 
 void VctrBinaryInsn::Dump(ostream& os) const

@@ -167,6 +167,7 @@ class IntrinManager(object):
         self.intrin_ctors['VGTMI'] = vctr_imm
         self.intrin_ctors['ISubV'] = vctr_imm
         self.intrin_ctors['IDivV'] = vctr_imm
+
         def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
                  scope_out = 'uni', mode='inc', reduce=False):
             env = self.env
@@ -200,6 +201,7 @@ class IntrinManager(object):
             k = tvm.reduce_axis((0, factor), 'k')
 
             # due to the limitation of tvm, we have 3 conditions to consider.
+            in1_strides, in2_strides, out_strides = None, None, None
             if (nColOut == 1 and reduce):
                 if (mode == 'inc'):
                     expr = lambda i: \
@@ -209,6 +211,7 @@ class IntrinManager(object):
                 else:
                     expr = lambda i: tvm.sum(in1[i, k] * in2[k], axis=k)
                 out = tvm.compute((nRowOut, ), expr, name='out')
+                in1_strides = [tvm.var('s1'), 1]
             elif (nRowOut == 1 and reduce):
                 if (mode == 'inc'):
                     expr = lambda j: \
@@ -218,6 +221,7 @@ class IntrinManager(object):
                 else:
                     expr = lambda j: tvm.sum(in1[k] * in2[j, k], axis=k)
                 out = tvm.compute((nColOut, ), expr, name='out')
+                in2_strides = [tvm.var('s2'), 1]
             else:
                 if (mode == 'inc'):
                     expr = lambda i, j: \
@@ -227,22 +231,36 @@ class IntrinManager(object):
                 else:
                     expr = lambda i, j: tvm.sum(in1[i, k] * in2[j, k], axis=k)
                 out = tvm.compute((nRowOut, nColOut), expr, name='out')
-            in1_buf = self.decl_buffer(in1, scope_in1, 'in1')
-            in2_buf = self.decl_buffer(in2, scope_in2, 'in2')
-            out_buf = self.decl_buffer(out, scope_out, 'out')
+                in1_strides = [tvm.var('s1'), 1]
+                in2_strides = [tvm.var('s2'), 1]
+                out_strides = [tvm.var('s3'), 1]
+            
+            in1_buf = self.decl_buffer(in1, scope_in1, 'in1', strides=in1_strides)
+            in2_buf = self.decl_buffer(in2, scope_in2, 'in2', strides=in2_strides)
+            out_buf = self.decl_buffer(out, scope_out, 'out', strides=out_strides)
 
             def lower_func(ins, outs):
                 ins = self.get_ins(ins, 'in1', 'in2')
                 din1, din2 = ins[0], ins[1]
                 dout = outs[0]
 
+                in1_row_stride = din1.strides[0] * dtype_bytes(dtype_in) \
+                                 if din1.strides else 0
+                in2_row_stride = din2.strides[0] * dtype_bytes(dtype_in) \
+                                 if din2.strides else 0
+                out_row_stride = (dout.strides[0] if dout.strides else 1) * dtype_bytes(dtype_out)
+                                 
+
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(tvm.call_extern("int32", 'NNPU_Gemm',
                             nRowOut, factor, nColOut,
                             dout.access_ptr('w', 'uint32'),
+                            out_row_stride,
                             din1.access_ptr('r', 'uint32'),
+                            in1_row_stride,
                             din2.access_ptr('r', 'uint32'),
+                            in2_row_stride,
                             self.get_mode_code(mode)
                             ))
                 
