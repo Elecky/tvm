@@ -597,8 +597,10 @@ void NNPU_VctrReduceMin(uint32_t outAddr, uint32_t inAddr, uint32_t size, uint32
     NNPU_VctrReduce(outAddr, inAddr, nnpu::ReduceOp::Min, size, mode);
 }
 
-void NNPU_MatBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
-                    nnpu::MatBinaryOp op, uint32_t Size, uint32_t mode)
+void NNPU_MatBinary(uint32_t outAddr, uint32_t outRowStride, 
+                uint32_t in1Addr, uint32_t in1RowStride,
+                uint32_t in2Addr, uint32_t in2RowStride,
+                uint32_t nRow, uint32_t nCol, nnpu::MatBinaryOp op, uint32_t mode)
 {
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
@@ -606,31 +608,46 @@ void NNPU_MatBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     // assign 3 addresses
     Li li1(0, outAddr);
     queue->EmplaceBack(li1);
-    Li li2(1, in1Addr);
-    queue->EmplaceBack(li2);
-    Li li3(2, in2Addr);
+    queue->EmplaceBack(Li(1, outRowStride));
+    Li li3(2, in1Addr);
     queue->EmplaceBack(li3);
-
-    nnpu::MatBinaryInsn insn(0, 1, 2, op, Size, ModeFromInt(mode));
+    queue->EmplaceBack(Li(3, in1RowStride));
+    Li li5(4, in2Addr);
+    queue->EmplaceBack(li5);
+    queue->EmplaceBack(Li(5, in2RowStride));
+    
+    nnpu::MatBinaryInsn insn(0, 2, 4, 1, 3, 5, op, nRow, nCol, nnpu::ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 
-void NNPU_MAddM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode)
+void NNPU_MAddM(uint32_t outAddr, uint32_t outRowStride, 
+                uint32_t in1Addr, uint32_t in1RowStride,
+                uint32_t in2Addr, uint32_t in2RowStride,
+                uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
-    NNPU_MatBinary(outAddr, in1Addr, in2Addr, nnpu::MatBinaryOp::Add, Size, mode);
+    NNPU_MatBinary(outAddr, outRowStride, in1Addr, in1RowStride, in2Addr, in2RowStride,
+                  nRow, nCol, nnpu::MatBinaryOp::Add, mode);
 }
 
-void NNPU_MSubM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode)
+void NNPU_MSubM(uint32_t outAddr, uint32_t outRowStride, 
+                uint32_t in1Addr, uint32_t in1RowStride,
+                uint32_t in2Addr, uint32_t in2RowStride,
+                uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
-    NNPU_MatBinary(outAddr, in1Addr, in2Addr, nnpu::MatBinaryOp::Sub, Size, mode);
+    NNPU_MatBinary(outAddr, outRowStride, in1Addr, in1RowStride, in2Addr, in2RowStride,
+                  nRow, nCol, nnpu::MatBinaryOp::Sub, mode);
 }
 
-void NNPU_MMulM(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t Size, uint32_t mode)
+void NNPU_MMulM(uint32_t outAddr, uint32_t outRowStride, 
+                uint32_t in1Addr, uint32_t in1RowStride,
+                uint32_t in2Addr, uint32_t in2RowStride,
+                uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
-    NNPU_MatBinary(outAddr, in1Addr, in2Addr, nnpu::MatBinaryOp::Mul, Size, mode);
+    NNPU_MatBinary(outAddr, outRowStride, in1Addr, in1RowStride, in2Addr, in2RowStride,
+                  nRow, nCol, nnpu::MatBinaryOp::Mul, mode);
 }
 
-void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, nnpu::ReduceOp op, 
+void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride, nnpu::ReduceOp op, 
                   uint32_t nRow, uint32_t nCol, uint32_t mode, bool isRow)
 {
     using Li = nnpu::LiInsn;
@@ -641,10 +658,11 @@ void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, nnpu::ReduceOp op,
     queue->EmplaceBack(li1);
     Li li2(1, inAddr);
     queue->EmplaceBack(li2);
+    queue->EmplaceBack(Li(2, inRowStride));
 
     if (isRow)
     {
-        nnpu::MatReduceRowInsn insn(0, 1, op, nRow, nCol, ModeFromInt(mode));
+        nnpu::MatReduceRowInsn insn(0, 1, 2, op, nRow, nCol, ModeFromInt(mode));
         queue->EmplaceBack(insn);
     }
     else
@@ -654,10 +672,10 @@ void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, nnpu::ReduceOp op,
     }
 }
 
-void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t nRow, uint32_t nCol, 
-                        uint32_t mode)
+void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride,
+                        uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
-    NNPU_MReduce(outAddr, inAddr, nnpu::ReduceOp::Sum, nRow, nCol, mode, true);
+    NNPU_MReduce(outAddr, inAddr, inRowStride, nnpu::ReduceOp::Sum, nRow, nCol, mode, true);
 }
 
 void NNPU_MatVctrRow(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
@@ -784,8 +802,8 @@ void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride
     if (dstStride == elemBytes && srcStride == elemBytes)
     {
         // if this is a compact copy.
-        elemBytes = 1;
         nElem = elemBytes * nElem;
+        elemBytes = 1;
         dstStride = 1;
         srcStride = 1;
     }
@@ -797,7 +815,7 @@ void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride
     queue->EmplaceBack(li2);
     Li li3(2, srcAddr + srcOffset);
     queue->EmplaceBack(li3);
-    Li li4(3, dstStride);
+    Li li4(3, srcStride);
     queue->EmplaceBack(li4);
     Li li5(4, nElem);
     queue->EmplaceBack(li5);

@@ -37,7 +37,7 @@ class IntrinManager(object):
             op_in = tvm.placeholder(in_shape, dtype=dtype_in,
                                     name='in')
             # To Add More Intrins, just add other expression and extern function call here!!!!!
-            if (intrin_op == 'VEXP'):
+            if (intrin_op == 'VExp'):
                 if (mode == 'inc'):
                     expr = lambda i: tvm.exp(op_in[i].astype(dtype_out))
                 elif (mode == 'dec'):
@@ -45,7 +45,7 @@ class IntrinManager(object):
                 else:
                     expr = lambda i: tvm.exp(op_in[i])
                 extern_func = 'NNPU_VEXP'
-            elif (intrin_op == 'VLOG'):
+            elif (intrin_op == 'VLog'):
                 if (mode == 'inc'):
                     expr = lambda i: tvm.log(op_in[i].astype(dtype_out))
                 elif (mode == 'dec'):
@@ -82,8 +82,8 @@ class IntrinManager(object):
                                     binds={op_in: in_layout,
                                            out: out_layout})
 
-        self.intrin_ctors['VEXP'] = vctr_unary
-        self.intrin_ctors['VLOG'] = vctr_unary
+        self.intrin_ctors['VExp'] = vctr_unary
+        self.intrin_ctors['VLog'] = vctr_unary
 
         def vctr_imm(intrin_op, scope_in = 'uni', scope_out = 'uni', imm_value = 1 , mode = 'w'):
             env = self.env
@@ -557,21 +557,21 @@ class IntrinManager(object):
             
             def expr_template(x, func, k):
                 if (mode == 'inc'):
-                    return lambda i: func(x.astype(dtype_out), k)
+                    return lambda i: func(x.astype(dtype_out)[k], k)
                 elif (mode == 'dec'):
-                    return lambda i: func(x, k).astype(dtype_out)
+                    return lambda i: func(x[k], k).astype(dtype_out)
                 else:
-                    return lambda i: func(x, k)
+                    return lambda i: func(x[k], k)
 
             k = tvm.reduce_axis((0, shape[0]), 'k')
             if (intrin_op == 'VReduceSum'):
-                expr = expr_template(op_in[k], tvm.sum, k)
+                expr = expr_template(op_in, tvm.sum, k)
                 extern_func = 'NNPU_VctrReduceSum'
             elif (intrin_op == 'VReduceMax'):
-                expr = expr_template(op_in[k], tvm.max, k)
+                expr = expr_template(op_in, tvm.max, k)
                 extern_func = 'NNPU_VctrReduceMax'
             elif (intrin_op == 'VReduceMin'):
-                expr = expr_template(op_in[k], tvm.min, k)
+                expr = expr_template(op_in, tvm.min, k)
                 extern_func = 'NNPU_VctrReduceMin'
             else:
                 raise ValueError("unimplemented vctr reduce op")
@@ -652,9 +652,9 @@ class IntrinManager(object):
                 raise ValueError('unsupported mat binary op')
             out = tvm.compute(shape, expr, 'out')
 
-            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf')
-            in2_buf = self.decl_buffer(in2, scope_in2, 'in2_buf')
-            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+            in1_buf = self.decl_buffer(in1, scope_in1, 'in1_buf', strides=(tvm.var('s1'), 1))
+            in2_buf = self.decl_buffer(in2, scope_in2, 'in2_buf', strides=(tvm.var('s2'), 1))
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf', strides=(tvm.var('s3'), 1))
             
             def lower_func(ins, outs):
                 din1, din2 = ins[0], ins[1]
@@ -663,10 +663,13 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(tvm.call_extern("int32", extern_func,
-                            dout.access_ptr('w', 'uint32'),
-                            din1.access_ptr('r', 'uint32'),
-                            din2.access_ptr('r', 'uint32'),
-                            shape[0] * shape[1],
+                            dout.access_ptr('w', 'uint32'), 
+                            dout.strides[0] * dtype_bytes(dtype_out),
+                            din1.access_ptr('r', 'uint32'), 
+                            din1.strides[0] * dtype_bytes(dtype_in),
+                            din2.access_ptr('r', 'uint32'), 
+                            din2.strides[0] * dtype_bytes(dtype_in),
+                            shape[0], shape[1],
                             self.get_mode_code(mode)
                             ))
                 
@@ -790,7 +793,7 @@ class IntrinManager(object):
             
             out = tvm.compute((nRow, ), expr, 'out')
 
-            in_buf = self.decl_buffer(op_in, scope_in, 'in_buf')
+            in_buf = self.decl_buffer(op_in, scope_in, 'in_buf', strides=(tvm.var('s'), 1))
             out_buf = self.decl_buffer(out, scope_out, 'out_buf')
             
             def lower_func(ins, outs):
@@ -801,7 +804,8 @@ class IntrinManager(object):
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(tvm.call_extern("int32", extern_func,
                             dout.access_ptr('w', 'uint32'),
-                            din1.access_ptr('r', 'uint32'),
+                            din1.access_ptr('r', 'uint32'), 
+                            din1.strides[0] * dtype_bytes(dtype_in),
                             shape[0], shape[1],
                             self.get_mode_code(mode)
                             ))

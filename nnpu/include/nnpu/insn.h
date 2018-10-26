@@ -136,19 +136,19 @@ public:
 
     BufferCopyInsn(uint32_t _dstAddrReg, uint32_t _dstStrideReg, 
                    uint32_t _srcAddrReg, uint32_t _srcStrideReg,
-                   uint32_t _nElemReg, uint32_t _elemBytes) :
+                   uint32_t _nUnitReg, uint32_t _unitBytes) :
         DstAddrReg(_dstAddrReg), DstStrideReg(_dstStrideReg),
         SrcAddrReg(_srcAddrReg), SrcStrideReg(_srcStrideReg),
-        NElemReg(_nElemReg), ElemBytes(_elemBytes)
+        NUnitReg(_nUnitReg), UnitBytes(_unitBytes)
     {}
 
     uint32_t DstAddrReg;
     uint32_t DstStrideReg;
     uint32_t SrcAddrReg;
     uint32_t SrcStrideReg;
-    uint32_t NElemReg;
+    uint32_t NUnitReg;
 
-    uint32_t ElemBytes;
+    uint32_t UnitBytes;
 
     /*!
     * \brief dump the string representation of this instruction into ostream
@@ -376,18 +376,24 @@ public:
     MatBinaryInsn() = default;
 
     MatBinaryInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg,
-                  MatBinaryOp _op, uint32_t _size, ModeCode _mode) :
+                  uint32_t _outRowStrideReg, uint32_t _in1RowStrideReg, uint32_t _in2RowStrideReg,
+                  MatBinaryOp _op, uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
         OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
-        Op(_op), Size(_size), Mode(_mode)
+        OutRowStrideReg(_outRowStrideReg), In1RowStrideReg(_in1RowStrideReg), 
+        In2RowStrideReg(_in2RowStrideReg), Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
     uint32_t In1AddrReg;
     uint32_t In2AddrReg;
 
+    uint32_t OutRowStrideReg;
+    uint32_t In1RowStrideReg;
+    uint32_t In2RowStrideReg;
+
     // the following fileds are part of insn encoding.
     MatBinaryOp Op;
-    uint32_t Size;  // the total elements in both matrix.
+    uint32_t NRow, NCol;  // the elements in all 3 matrix.
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
@@ -398,14 +404,15 @@ struct MatReduceRowInsn
 public:
     MatReduceRowInsn() = default;
 
-    MatReduceRowInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, ReduceOp _op,
-        uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Op(_op),
-        NRow(_nRow), NCol(_nCol), Mode(_mode)
+    MatReduceRowInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, uint32_t _inRowStrideReg,
+        ReduceOp _op, uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
+        OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), InRowStrideReg(_inRowStrideReg),
+        Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
     uint32_t InAddrReg;
+    uint32_t InRowStrideReg;
 
     // the following fileds are part of insn encoding.
     ReduceOp Op;
