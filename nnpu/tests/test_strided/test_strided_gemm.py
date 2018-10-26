@@ -10,6 +10,10 @@ with ScheduleProcHelper():
     shape = (48, 64)  # (32, 32) reshaped to (32, 2, 16)
     gemm_shape = (16, 16, 1)
     factor = gemm_shape[1]
+    assert shape[1] % factor == 0, 'emmmmmm'
+    assert shape[0] % gemm_shape[0] == 0, 'well~~'
+    assert shape[0] % env.cfg['vector_unit']['size'] == 0, 'oh~'
+
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     a = tvm.placeholder(shape, dtype_n, 'a')
     b = tvm.placeholder((shape[1], ), dtype_n, 'b')  # reshaped to (2, 16)
@@ -61,3 +65,4 @@ with ScheduleProcHelper():
     gt = np.dot(a_np, b_np.astype(out_host.dtype))
     print(gt)
     np.testing.assert_allclose(out_nd.asnumpy(), gt)
+    print('test passed')

@@ -11,6 +11,12 @@ with ScheduleProcHelper():
     shape2 = (32, 32)
     gemm_shape = (8, 16, 8)
     factor = gemm_shape[1]
+    assert shape1[1] == shape2[1], \
+           'gemm do dot product between rows, so the shape[1] of inputs should match'
+    assert shape1[0] % gemm_shape[0] == 0, 'gemm insn require size of input 1 be x{0}'.format(gemm_shape[0])
+    assert shape2[0] % gemm_shape[2] == 0, 'gemm insn require size of input 2 be x{0}'.format(gemm_shape[0])
+    assert shape1[1] % factor == 0, 'gemm insn requires size of reduce dim be multiples of {0}'.format(factor)
+    assert shape1[0] * shape2[0] % env.cfg['vector_unit']['size'] == 0, 'aha~~'
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     a = tvm.placeholder(shape1, dtype_n, 'a')
     b = tvm.placeholder(shape2, dtype_n, 'b')
