@@ -167,6 +167,7 @@ class IntrinManager(object):
         self.intrin_ctors['VGTMI'] = vctr_imm
         self.intrin_ctors['ISubV'] = vctr_imm
         self.intrin_ctors['IDivV'] = vctr_imm
+
         def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
                  scope_out = 'uni', mode='inc', reduce=False):
             env = self.env
