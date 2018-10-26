@@ -374,23 +374,25 @@ void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
 }
 
 void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut, 
-             uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t mode)
+               uint32_t outAddr, uint32_t outRowStride,
+               uint32_t in1Addr, uint32_t in1RowStride,
+               uint32_t in2Addr, uint32_t in2RowStride, uint32_t mode)
 {
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
     // load 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    
-    Li li2(1, in1Addr);
-    queue->EmplaceBack(li2);
+    queue->EmplaceBack(Li(0, outAddr));
+    queue->EmplaceBack(Li(1, outRowStride));
 
-    Li li3(2, in2Addr);
-    queue->EmplaceBack(li3);
+    queue->EmplaceBack(Li(2, in1Addr));
+    queue->EmplaceBack(Li(3, in1RowStride));
+
+    queue->EmplaceBack(Li(4, in2Addr));
+    queue->EmplaceBack(Li(5, in2RowStride));
 
     // create a gemm instruction
-    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, ModeFromInt(mode));
+    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, 3, 4, 5, ModeFromInt(mode));
     queue->EmplaceBack(gemm);
 }
 
@@ -678,8 +680,10 @@ void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride,
     NNPU_MReduce(outAddr, inAddr, inRowStride, nnpu::ReduceOp::Sum, nRow, nCol, mode, true);
 }
 
-void NNPU_MatVctrRow(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
-                    nnpu::MatVctrOp op, uint32_t nRow, uint32_t nCol, uint32_t mode)
+void NNPU_MatVctrRow(uint32_t outAddr, uint32_t outRowStride,
+                    uint32_t matAddr, uint32_t matRowStride,
+                    uint32_t vctrAddr, nnpu::MatVctrOp op, 
+                    uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
@@ -687,34 +691,43 @@ void NNPU_MatVctrRow(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr,
     // assign 3 addresses
     Li li1(0, outAddr);
     queue->EmplaceBack(li1);
-    Li li2(1, matAddr);
+    queue->EmplaceBack(Li(1, outRowStride));
+    Li li2(2, matAddr);
     queue->EmplaceBack(li2);
-    Li li3(2, vctrAddr);
+    queue->EmplaceBack(Li(3, matRowStride));
+    Li li3(4, vctrAddr);
     queue->EmplaceBack(li3);
 
-    nnpu::MatVctrInsn insn(0, 1, 2, op, nRow, nCol, ModeFromInt(mode));
+    nnpu::MatVctrInsn insn(0, 1, 2, 3, 4, op, nRow, nCol, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 
-void NNPU_MAddV(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
-                uint32_t nRow, uint32_t nCol, uint32_t mode)
+void NNPU_MAddV(uint32_t outAddr, uint32_t outRowStride,
+                uint32_t matAddr, uint32_t matRowStride,
+                uint32_t vctrAddr, uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
-    NNPU_MatVctrRow(outAddr, matAddr, vctrAddr, nnpu::MatVctrOp::Add, nRow, nCol, mode);
+    NNPU_MatVctrRow(outAddr, outRowStride, matAddr, matRowStride, vctrAddr,
+                    nnpu::MatVctrOp::Add, nRow, nCol, mode);
 }
 
-void NNPU_MSubV(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
-                uint32_t nRow, uint32_t nCol, uint32_t mode)
+void NNPU_MSubV(uint32_t outAddr, uint32_t outRowStride,
+                uint32_t matAddr, uint32_t matRowStride,
+                uint32_t vctrAddr, uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
-    NNPU_MatVctrRow(outAddr, matAddr, vctrAddr, nnpu::MatVctrOp::Sub, nRow, nCol, mode);
+    NNPU_MatVctrRow(outAddr, outRowStride, matAddr, matRowStride, vctrAddr,
+                    nnpu::MatVctrOp::Sub, nRow, nCol, mode);
 }
 
-void NNPU_MMulV(uint32_t outAddr, uint32_t matAddr, uint32_t vctrAddr, 
-                uint32_t nRow, uint32_t nCol, uint32_t mode)
+void NNPU_MMulV(uint32_t outAddr, uint32_t outRowStride,
+                uint32_t matAddr, uint32_t matRowStride,
+                uint32_t vctrAddr, uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
-    NNPU_MatVctrRow(outAddr, matAddr, vctrAddr, nnpu::MatVctrOp::Mul, nRow, nCol, mode);
+    NNPU_MatVctrRow(outAddr, outRowStride, matAddr, matRowStride, vctrAddr,
+                    nnpu::MatVctrOp::Mul, nRow, nCol, mode);
 }
 
-void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
+void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in1RowStride,
+                  uint32_t in2Addr, uint32_t in2RowStride,
                   uint32_t nRow, uint32_t nCol, uint32_t mode)
 {
     using Li = nnpu::LiInsn;
@@ -723,12 +736,12 @@ void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     // assign 3 addresses
     Li li1(0, outAddr);
     queue->EmplaceBack(li1);
-    Li li2(1, in1Addr);
-    queue->EmplaceBack(li2);
-    Li li3(2, in2Addr);
-    queue->EmplaceBack(li3);
+    queue->EmplaceBack(Li(1, in1Addr));
+    queue->EmplaceBack(Li(2, in1RowStride));
+    queue->EmplaceBack(Li(3, in2Addr));
+    queue->EmplaceBack(Li(4, in2RowStride));
 
-    nnpu::MatRowDotInsn insn(0, 1, 2, nRow, nCol, ModeFromInt(mode));
+    nnpu::MatRowDotInsn insn(0, 1, 2, 3, 4, nRow, nCol, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 

@@ -84,7 +84,9 @@ void StallInsn::Dump(std::ostream& os) const
 void GemmInsn::Dump(std::ostream& os) const
 {
     os << "gemm_" << NRowOut << '_' << Factor << '_' << NColOut << '.' << mode2str(this->Mode)
-       << " $" << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+       << " $" << OutAddrReg << ", $" << OutRowStrideReg 
+       << ", $" << In1AddrReg << ", $" << In1RowStrideReg 
+       << ", $" << In2AddrReg << ", $" << In2RowStrideReg;
 }
 
 void VctrBinaryInsn::Dump(ostream& os) const
@@ -154,13 +156,16 @@ void MatReduceColInsn::Dump(std::ostream &os) const
 void MatVctrInsn::Dump(std::ostream &os) const
 {
     os << "M" << ToString(Op) << "V_" << NRow << '_' << NCol << '.' << mode2str(Mode) 
-       << " $" << OutAddrReg << ", $" << MatAddrReg << ", $" << VctrAddrReg;
+       << " $" << OutAddrReg << ", $" << OutRowStrideReg
+       << ", $" << MatAddrReg << ", $" << MatRowStrideReg 
+       << ", $" << VctrAddrReg;
 }
 
 void MatRowDotInsn::Dump(std::ostream &os) const
 {
     os << "MRowDot" << "_" << NRow << '_' << NCol << '.' << mode2str(Mode) << " $"
-       << OutAddrReg << ", $" << In1AddrReg << ", $" << In2AddrReg;
+       << OutAddrReg << ", $" << In1AddrReg << ", $" << In1RowStrideReg
+       << ", $" << In2AddrReg << ", $" << In2RowStrideReg;
 }
 
 void VctrSclrInsn::Dump(std::ostream& os) const

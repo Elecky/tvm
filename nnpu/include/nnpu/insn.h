@@ -215,9 +215,13 @@ public:
     GemmInsn() = default;
 
     GemmInsn(uint32_t _nRowOut, uint32_t _factor, uint32_t _nColOut, 
-             uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg, ModeCode _mode)
+             uint32_t _outAddrReg, uint32_t _outRowStrideReg,
+             uint32_t _in1AddrReg, uint32_t _in1RowStrideReg,
+             uint32_t _in2AddrReg, uint32_t _in2RowStrideReg, ModeCode _mode)
             : NRowOut(_nRowOut), Factor(_factor), NColOut(_nColOut),
-              OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
+              OutAddrReg(_outAddrReg), OutRowStrideReg(_outRowStrideReg),
+              In1AddrReg(_in1AddrReg), In1RowStrideReg(_in1RowStrideReg),
+              In2AddrReg(_in2AddrReg), In2RowStrideReg(_in2RowStrideReg),
               Mode(_mode)
     {}
 
@@ -230,8 +234,11 @@ public:
     uint32_t NColOut;
 
     uint32_t OutAddrReg;
+    uint32_t OutRowStrideReg;
     uint32_t In1AddrReg;
+    uint32_t In1RowStrideReg;
     uint32_t In2AddrReg;
+    uint32_t In2RowStrideReg;
 
     ModeCode Mode;
 
@@ -452,14 +459,19 @@ struct MatVctrInsn
 public:
     MatVctrInsn() = default;
 
-    MatVctrInsn(uint32_t _outAddrReg, uint32_t _matAddrReg, uint32_t _vctrAddrReg,
-                MatVctrOp _op, uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), MatAddrReg(_matAddrReg), VctrAddrReg(_vctrAddrReg),
-        Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
+    MatVctrInsn(uint32_t _outAddrReg, uint32_t _outRowStrideReg, 
+                uint32_t _matAddrReg, uint32_t _matRowStrideReg,
+                uint32_t _vctrAddrReg, MatVctrOp _op, uint32_t _nRow, uint32_t _nCol, 
+                ModeCode _mode) :
+        OutAddrReg(_outAddrReg), OutRowStrideReg(_outRowStrideReg), 
+        MatAddrReg(_matAddrReg), MatRowStrideReg(_matRowStrideReg),
+        VctrAddrReg(_vctrAddrReg), Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
+    uint32_t OutRowStrideReg;
     uint32_t MatAddrReg;
+    uint32_t MatRowStrideReg;
     uint32_t VctrAddrReg;
 
     MatVctrOp Op;
@@ -477,15 +489,19 @@ struct MatRowDotInsn
 public:
     MatRowDotInsn() = default;
 
-    MatRowDotInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg,
+    MatRowDotInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in1RowStrideReg,
+                  uint32_t _in2AddrReg, uint32_t _in2RowStrideReg,
                   uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
+        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In1RowStrideReg(_in1RowStrideReg),
+        In2AddrReg(_in2AddrReg), In2RowStrideReg(_in2RowStrideReg),
         NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
     uint32_t In1AddrReg;
+    uint32_t In1RowStrideReg;
     uint32_t In2AddrReg;
+    uint32_t In2RowStrideReg;
 
     // the following fileds are part of insn encoding.
     uint32_t NRow, NCol;  // the total elements in both matrix.
