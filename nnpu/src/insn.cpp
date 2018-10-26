@@ -154,7 +154,9 @@ void MatReduceColInsn::Dump(std::ostream &os) const
 void MatVctrInsn::Dump(std::ostream &os) const
 {
     os << "M" << ToString(Op) << "V_" << NRow << '_' << NCol << '.' << mode2str(Mode) 
-       << " $" << OutAddrReg << ", $" << MatAddrReg << ", $" << VctrAddrReg;
+       << " $" << OutAddrReg << ", $" << OutRowStrideReg
+       << ", $" << MatAddrReg << ", $" << MatRowStrideReg 
+       << ", $" << VctrAddrReg;
 }
 
 void MatRowDotInsn::Dump(std::ostream &os) const

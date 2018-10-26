@@ -864,11 +864,12 @@ class IntrinManager(object):
                 raise ValueError('unsupported mat vctr intrin op')
 
             out = tvm.compute(shape, expr, 'out')
-            mat_buf = self.decl_buffer(mat_in, scope_in_mat, 'mat_buf')
+            mat_buf = self.decl_buffer(mat_in, scope_in_mat, 'mat_buf', strides=[tvm.var('s1'), 1])
             vctr_buf = self.decl_buffer(vctr_in, scope_in_vctr, 'in_buf')
-            out_buf = self.decl_buffer(out, scope_out, 'out_buf')
+            out_buf = self.decl_buffer(out, scope_out, 'out_buf', strides=[tvm.var('s2'), 1])
 
             def lower_func(ins, outs):
+                ins = self.get_ins(ins, 'mat_buf', 'in_buf')
                 din1, din2 = ins[0], ins[1]
                 dout = outs[0]
 
@@ -876,7 +877,9 @@ class IntrinManager(object):
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(tvm.call_extern("int32", extern_func,
                             dout.access_ptr('w', 'uint32'),
+                            dout.strides[0] * dtype_bytes(dtype_out),
                             din1.access_ptr('r', 'uint32'),
+                            din1.strides[0] * dtype_bytes(dtype_in),
                             din2.access_ptr('r', 'uint32'),
                             shape[0], shape[1],
                             self.get_mode_code(mode)

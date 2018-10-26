@@ -452,14 +452,19 @@ struct MatVctrInsn
 public:
     MatVctrInsn() = default;
 
-    MatVctrInsn(uint32_t _outAddrReg, uint32_t _matAddrReg, uint32_t _vctrAddrReg,
-                MatVctrOp _op, uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), MatAddrReg(_matAddrReg), VctrAddrReg(_vctrAddrReg),
-        Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
+    MatVctrInsn(uint32_t _outAddrReg, uint32_t _outRowStrideReg, 
+                uint32_t _matAddrReg, uint32_t _matRowStrideReg,
+                uint32_t _vctrAddrReg, MatVctrOp _op, uint32_t _nRow, uint32_t _nCol, 
+                ModeCode _mode) :
+        OutAddrReg(_outAddrReg), OutRowStrideReg(_outRowStrideReg), 
+        MatAddrReg(_matAddrReg), MatRowStrideReg(_matRowStrideReg),
+        VctrAddrReg(_vctrAddrReg), Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
+    uint32_t OutRowStrideReg;
     uint32_t MatAddrReg;
+    uint32_t MatRowStrideReg;
     uint32_t VctrAddrReg;
 
     MatVctrOp Op;
