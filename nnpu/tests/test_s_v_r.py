@@ -30,10 +30,10 @@ def test():
     ko, ki = s[c_buf].split(c_buf.op.reduce_axis[0], factor=1)
     xo,xi = s[c_buf].split(c_buf.op.axis[0], factor=shape[0])
     s[c_buf].reorder(xo, ko, ki, xi)
-    s[c_buf].tensorize(ki, env.intrins.get(str_op,  mode='n'))
+    #s[c_buf].tensorize(ki, env.intrins.get(str_op,  mode='n'))
     
     print(nnpu.lower(s, [a, c_host], simple_mode=True))
-    #exit()
+    exit()
     func = nnpu.build(s, [a, c_host], 'nnpu', 'llvm', name='nnpu_func')
 
     ctx = tvm.nd.TVMContext(13, 0)
