@@ -83,9 +83,13 @@ class Environment(object):
 def set_device(env, device_id=0, type='S0'):
     func = tvm.get_global_func('nnpu.set_dev', False)
     print("setting device with config file: {0}".format(env.cfg_path))
-    print(env.cfg_path)
     func(int(device_id), str(type), str(env.cfg_path))
-    pass
+
+def set_dump(value):
+    value = bool(value)
+    func = tvm.get_global_func('nnpu.set_dump', True)
+    if (func):
+        func(value)
 
 def get_env():
     return Environment.current

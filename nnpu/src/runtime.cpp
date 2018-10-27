@@ -10,6 +10,7 @@ NNPU runtime
 #include <nnpu/runtime.h>
 #include <dmlc/logging.h>
 #include <dmlc/thread_local.h>
+#include <tvm/runtime/registry.h>
 
 static const bool kBufferCoherent = false;
 
@@ -214,8 +215,6 @@ void NNPUBufferCopy(const void *from,
 
 void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode)
 {
-    LOG(INFO) << "VEXP " << vctr_out_addr << ", " << vctr_in_addr << ", " << len << std::endl;
-
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
     // load vector out address into $0
@@ -234,8 +233,6 @@ void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint
 }
 void NNPU_VLOG(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode)
 {
-    LOG(INFO) << "VLOG " << vctr_out_addr << ", " << vctr_in_addr << ", " << len << std::endl;
-
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
     // load vector out address into $0
@@ -257,11 +254,6 @@ void NNPU_DMALoad(void *host_buf_addr, uint32_t host_buf_offset,
                   nnpu_dram_addr_t dst_phy_addr, uint32_t dst_phy_offset,
                   uint32_t size)
 {
-    LOG(INFO) << "DMALoad " 
-              << host_buf_addr << "(" << host_buf_offset << "), " 
-              << dst_phy_addr << "(" << dst_phy_offset << ")" << ", "
-              << size << std::endl;
-
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
@@ -287,12 +279,7 @@ void NNPU_DMALoad(void *host_buf_addr, uint32_t host_buf_offset,
 void NNPU_DMAStore(void *host_buf_addr, uint32_t host_buf_offset,
                   nnpu_dram_addr_t src_phy_addr, uint32_t src_phy_offset,
                   uint32_t size)
-{
-    LOG(INFO) << "DMAStore " 
-              << host_buf_addr << "(" << host_buf_offset << "), " 
-              << src_phy_addr << "(" << src_phy_offset << ")" << ", "
-              << size << std::endl;
-    
+{  
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
@@ -319,11 +306,6 @@ void NNPU_ScratchpadLoad(nnpu_dram_addr_t src_phy_addr, uint32_t src_offset,
                         nnpu_buf_addr_t dst_phy_addr, uint32_t dst_offset,
                         uint32_t size)
 {
-    LOG(INFO) << "ScratchpadLoad "
-              << src_phy_addr << "(" << src_offset << "), "
-              << dst_phy_addr << "(" << dst_offset << "), "
-              << size << std::endl;
-
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
@@ -347,12 +329,7 @@ void NNPU_ScratchpadLoad(nnpu_dram_addr_t src_phy_addr, uint32_t src_offset,
 void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
                         nnpu_buf_addr_t src_phy_addr, uint32_t src_offset,
                         uint32_t size)
-{
-    LOG(INFO) << "ScratchpadStore "
-              << dst_phy_addr << "(" << dst_offset << "), "
-              << src_phy_addr << "(" << src_offset << "), "
-              << size << std::endl;
-    
+{  
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
 
@@ -396,6 +373,16 @@ void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut,
     queue->EmplaceBack(gemm);
 }
 
+static bool DumpInsn = true;
+using tvm::runtime::TVMArgs;
+using tvm::runtime::TVMRetValue;
+static TVM_ATTRIBUTE_UNUSED auto &__register_dev__ =
+    ::tvm::runtime::Registry::Register("nnpu.set_dump", true)
+        .set_body([](TVMArgs args, TVMRetValue *rv) {
+            if (args.size() >= 1)
+                DumpInsn = static_cast<bool>(args[0]);
+        });
+
 void NNPUSynchronize(uint32_t timeout)
 {
     LOG(INFO) << "Sync" << std::endl;
@@ -407,7 +394,8 @@ void NNPUSynchronize(uint32_t timeout)
     nnpu::StallInsn stall;
     queue->EmplaceBack(stall);
 
-    nnpu::InsnQueue::ThreadLocal()->Dump(LOG(INFO) << std::endl);
+    if (DumpInsn)
+        nnpu::InsnQueue::ThreadLocal()->Dump(LOG(INFO) << std::endl);
 
     NNPU_Run(queue->GetInsns());
 }
