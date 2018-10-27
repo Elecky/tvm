@@ -422,39 +422,43 @@ class IntrinManager(object):
         self.intrin_ctors['VDivV'] = vctr_binary
         self.intrin_ctors['VGTMV'] = vctr_binary
 
-        def vctr_merge(intrin_op, scope_in = 'uni', scope_out = 'uni', mode='n'):
+        def vctr_merge(intrin_op, scope_in = 'uni', scope_out = 'uni', mode='n', nDim=2):
             env = self.env
             cfg = self.env.cfg
 
             assert mode in ['n', 'w'], 'merge intrin can only have mode n or w'
-
+            assert nDim >= 2, 'merge intrin requires nDim >= 2'
             scope_in = self.get_scope(scope_in)
             scope_out = self.get_scope(scope_out)
 
             dtype_in, dtype_out = self.mode2dtype(mode)
 
             # the name should contain all parameters
-            name = intrin_op + scope_in + ';' + scope_out + ';' + mode
+            name = intrin_op + scope_in + ';' + scope_out + ';' + str(nDim) + ';' + mode
 
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
 
-            shape_in = (1, cfg['vector_unit']['size'])
-            shape_out = (cfg['vector_unit']['size'], )
+            shape_in = [1] * (nDim - 1)
+            shape_in.append(cfg['vector_unit']['size'])
+            #shape_in = tuple(shape_in)
+            shape_out = [1] * (nDim - 2)
+            shape_out.append(cfg['vector_unit']['size'])
+            #shape_out = (cfg['vector_unit']['size'], )
 
             in1 = tvm.placeholder(shape_in, dtype_in, 'in1')
             k = tvm.reduce_axis((0, 1), 'k_d')
             num = '0'
             if (intrin_op == 'VAddMerge'):
-                expr = lambda i: tvm.sum(in1[k, i], axis=k)
+                expr = lambda *i: tvm.sum(in1(k, *i), axis=k)
                 num = '0'
                 extern_func = 'NNPU_VAddV'
             elif(intrin_op == 'VMulMerge'):
-                expr = lambda i: tvm.sum(in1[k,i], axis=k)
+                expr = lambda *i: tvm.sum(in1(k, *i), axis=k)
                 num = '1'
                 extern_func = 'NNPU_VMulV'
             elif(intrin_op == 'VGTMMerge'):
-                expr = lambda i: tvm.sum(in1[k,i], axis=k)
+                expr = lambda *i: tvm.sum(in1(k, *i), axis=k)
                 num='-INFINITY'
                 extern_func = 'NNPU_VGTMV'
             else:
@@ -462,14 +466,19 @@ class IntrinManager(object):
             
             out = tvm.compute(shape_out, expr, 'out')
 
-            in_buf = self.decl_buffer(in1, scope_in, 'in_buf', strides=[tvm.var('s'), 1])
+            # create strides array
+            strides = []
+            for i in range(nDim - 1):
+                strides.append(tvm.var('s{0}'.format(i)))
+            strides.append(1)
+            in_buf = self.decl_buffer(in1, scope_in, 'in_buf', strides=strides)
             out_buf = self.decl_buffer(out, scope_out, 'out_buf')
 
             def lower_func(ins, outs):
                 din = ins[0]
                 dout = outs[0]
 
-                init = self.emit_memset(dout.access_ptr('w', 'uint32'), shape_out[0], 
+                init = self.emit_memset(dout.access_ptr('w', 'uint32'), shape_out[-1], 
                             dtype_bytes(dtype_out), num , mode)
 
                 def comp():
@@ -479,7 +488,7 @@ class IntrinManager(object):
                             dout.access_ptr('w', 'uint32'),
                             din.access_ptr('r', 'uint32'),
                             dout.access_ptr('r', 'uint32'),
-                            shape_out[0],
+                            shape_out[-1],
                             self.get_mode_code(mode)
                             ))
                 
