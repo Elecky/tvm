@@ -7,7 +7,11 @@ import numpy as np
 with ScheduleProcHelper():
     env = nnpu.get_env()
     nnpu.set_device(env)
-    shape = (32, 32)  # (32, 32) tiled to (2, 16, 2, 16)
+    shape = (32, 48)  # (32, 32) tiled to (2, 16, 2, 16)
+    insn_shape = (16, 16)
+    assert shape[0] % insn_shape[0] == 0, 'error'
+    assert shape[1] % insn_shape[1] == 0, 'error'
+
     a = tvm.placeholder(shape, env.cfg['dtype_n'], 'a')
     b = tvm.placeholder(shape, env.cfg['dtype_n'], 'b')
 
@@ -20,10 +24,10 @@ with ScheduleProcHelper():
 
     s = nnpu.create_schedule(sum_host.op)
     # tensorize
-    xo, xi = s[sum_buf].split(sum_buf.op.axis[0], factor=16)
-    yo, yi = s[sum_buf].split(sum_buf.op.axis[1], factor=16)
+    xo, xi = s[sum_buf].split(sum_buf.op.axis[0], factor=insn_shape[0])
+    yo, yi = s[sum_buf].split(sum_buf.op.axis[1], factor=insn_shape[1])
     s[sum_buf].reorder(xo, yo, xi, yi)
-    s[sum_buf].tensorize(xi, env.intrins.get('MAddM', shape=(16, 16), mode='n'))
+    s[sum_buf].tensorize(xi, env.intrins.get('MAddM', shape=insn_shape, mode='n'))
 
     print(nnpu.lower(s, [a, b, sum_host], simple_mode=True))
 
@@ -41,3 +45,4 @@ with ScheduleProcHelper():
 
     gt = a_np + b_np
     np.testing.assert_allclose(sum_nd.asnumpy(), gt)
+    print('test finished')
