@@ -12,7 +12,7 @@ def max_pooling(inshape,outshape,cell_shape,innp,outdetype):
       for j in range(cell_shape):
         for k in range(cell_shape):
           for l in range(outshape[2]):
-            ret[w][h][l]=max(ret[w][h][l],innp[w*4+j][h*4+k][l])
+            ret[w][h][l]=max(ret[w][h][l],innp[w*cell_shape+j][h*cell_shape+k][l])
   return ret    
 
 
@@ -20,9 +20,9 @@ def max_pooling(inshape,outshape,cell_shape,innp,outdetype):
 def test():
     env = nnpu.get_env()
     nnpu.set_device(env)
-    in_shape = (16,16,32)
-    cell_shape = 4
-    out_shape = (4,4,32)
+    in_shape = (20,20,32)
+    cell_shape = 5
+    out_shape = (in_shape[0] // cell_shape,in_shape[1] // cell_shape,in_shape[2])
     reduce_shap=(0,cell_shape)
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     
@@ -34,14 +34,14 @@ def test():
     k1 = tvm.reduce_axis(reduce_shap, 'k1')
     step1_buf = tvm.compute((in_shape[0],in_shape[1]//cell_shape,in_shape[2]), 
                         lambda i,j,k: 
-                         tvm.sum(a_buf[i,j*4+k1,k],axis=k1),
+                         tvm.sum(a_buf[i,j*cell_shape+k1,k],axis=k1),
                        'step1_buf')
     sph.MarkScope(step1_buf)
 
     k1 = tvm.reduce_axis(reduce_shap, 'k2')
     step2_buf = tvm.compute(out_shape, 
                         lambda i,j,k: 
-                         tvm.sum(step1_buf[i*4+k1,j,k],axis=k1),
+                         tvm.sum(step1_buf[i*cell_shape+k1,j,k],axis=k1),
                        'step2_buf')
     sph.MarkScope(step2_buf)
     
@@ -66,7 +66,7 @@ def test():
     func = nnpu.build(s, [a, step2_host], 'nnpu', 'llvm', name='nnpu_func')
 
     ctx = tvm.nd.TVMContext(13, 0)
-    a_np = np.random.randint(size=in_shape, dtype=a.dtype, low = 0, high = 8)
+    a_np = np.random.randint(size=in_shape, dtype=a.dtype, low = -128, high = 127)
     a_nd = tvm.nd.array(a_np, ctx)
 
     c_nd = tvm.nd.array(np.zeros(out_shape, dtype=step2_host.dtype), ctx)
@@ -79,6 +79,7 @@ def test():
     gt=max_pooling(in_shape,out_shape,cell_shape,a_np,a.dtype)
     print(gt)
     np.testing.assert_allclose(c_nd.asnumpy(), gt)
+    print('test passed')
     
 
 if __name__ == '__main__':
