@@ -18,12 +18,12 @@ public:
         outIndex = index;
     }
 
-    std::unique_ptr<int> get(int index)
+    WireData<int> get(int index)
     {
         if (index == outIndex)
-            return unique_ptr<int>(new int(arr[index]));
+            return WireData<int>(true, arr[index]);
         else
-            return nullptr;
+            return WireData<int>(false);
     }
 
     void set(std::size_t index, int val)
@@ -51,17 +51,17 @@ int main(int argc, char *(argv[]))
     wire1->SubscribeWriter(Binder<int>::Bind(&A::get, a, 2));
 
     auto wire2 = wires["wire1"];
-    cout << *(wire2->Read<int>()) << endl;
+    cout << wire2->Read<int>().Data << endl;
     a->set_out(1);
-    cout << *(wire2->Read<int>()) << endl;
+    cout << wire2->Read<int>().Data << endl;
     a->set_out(2);
-    cout << *(wire2->Read<int>()) << endl;
+    cout << wire2->Read<int>().Data << endl;
     a->set_out(1);
-    cout << *(wire2->Read<int>()) << endl;
+    cout << wire2->Read<int>().Data << endl;
 
     a.reset();
 
-    cout << (wire2->Read<int>() == nullptr) << endl;
+    cout << wire2->Read<int>().HasData << endl;
 
     //wires.Get<double>("wire1");
     
