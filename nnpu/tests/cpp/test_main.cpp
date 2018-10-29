@@ -3,67 +3,153 @@
 #include <iostream>
 #include <nnpusim/common/bit_wrapper.h>
 #include <nnpusim/common/wire.h>
+#include <nnpusim/sim_module.h>
 
 using namespace nnpu;
 using namespace std;
 
-class A
+class RegisterFile : public SimModule
 {
 public:
-    A() : outIndex(0)
-    {}
-
-    void set_out(std::size_t index)
+    RegisterFile(WireManager &wm):
+        readIdx1(wm.Get<int>("RegReadIdx1")), readIdx2(wm.Get<int>("RegReadIdx2")),
+        writeIdx(wm.Get<int>("RegWriteIdx")), writeData(wm.Get<uint32_t>("RegWriteData"))
     {
-        outIndex = index;
+        regs.resize(32);
+        for (int i = 0; i != 32; ++i)
+        {
+            regs[i] = i;
+        }
     }
 
-    WireData<int> get(int index)
+    void Move() override
     {
-        if (index == outIndex)
-            return WireData<int>(true, arr[index]);
+        auto wIdx = writeIdx->Read();
+        auto wData = writeData->Read();
+
+        _updateFunc = [this, wIdx, wData]()
+        {
+            if (wIdx.HasData)
+            {
+                this->regs[wIdx.Data] = wData.Data;
+            }
+        };
+    }
+
+    WireData<uint32_t> Out1()
+    {
+        WireData<int> idx = readIdx1->Read();
+        if (idx.HasData)
+        {
+            return WireData<uint32_t>(true, regs[idx.Data]);
+        }
+        else
+        {
+            return WireData<uint32_t>(false);
+        }
+    }
+
+    const vector<uint32_t>& Values()
+    {
+        return regs;
+    }
+
+    void BindOutputs(WireManager &wm);
+
+private:
+    vector<uint32_t> regs;
+    std::shared_ptr<WireImpl<int>> readIdx1, readIdx2, writeIdx;
+    std::shared_ptr<WireImpl<uint32_t>> writeData;
+};
+
+void RegisterFile::BindOutputs(WireManager &wm)
+{
+    auto outWire1 = wm.Get<uint32_t>("RegOut1");
+    outWire1->SubscribeWriter(Binder<uint32_t>::Bind(&RegisterFile::Out1, sharedFromBase<RegisterFile>()));
+}
+
+class ALU : public SimModule
+{
+public:
+    ALU(WireManager &wm) : readIdx(0), calcIdx(-1), regWire(wm.Get<uint32_t>("RegOut1"))
+    {
+    }
+
+    void Move() override
+    {
+        auto regOut = regWire->Read();
+        _updateFunc = [this, regOut]()
+        {
+            calcIdx = readIdx;
+            regData = regOut.Data;
+            if (readIdx <= 31)
+                readIdx = readIdx + 1;
+        };
+    }
+
+    WireData<int> GetReadIdx()
+    {
+        return WireData<int>(true, readIdx);
+    }
+
+    WireData<int> GetWriteIdx()
+    {
+        if (calcIdx != -1)
+            return WireData<int>(true, calcIdx);
         else
             return WireData<int>(false);
     }
 
-    void set(std::size_t index, int val)
+    WireData<uint32_t> GetRes()
     {
-        arr[index] = val;
+        // to implement other calculation, add logic at here.
+        return WireData<uint32_t>(true, regData * regData);
     }
 
+    void BindOutputs(WireManager &wm);
 private:
-    int arr[3];
+    int readIdx, calcIdx;
+    uint32_t regData;
 
-    std::size_t outIndex;
+    std::shared_ptr<WireImpl<uint32_t>> regWire;
 };
+
+void ALU::BindOutputs(WireManager &wm)
+{
+    auto self = sharedFromBase<ALU>();
+    wm.Get<int>("RegReadIdx1")->SubscribeWriter(
+                Binder<int>::Bind(&ALU::GetReadIdx, self));
+    wm.Get<int>("RegWriteIdx")->SubscribeWriter(
+                Binder<int>::Bind(&ALU::GetWriteIdx, self));
+    wm.Get<uint32_t>("RegWriteData")->SubscribeWriter(
+                Binder<uint32_t>::Bind(&ALU::GetRes, self));
+}
 
 int main(int argc, char *(argv[]))
 {
-    shared_ptr<A> a = std::make_shared<A>();
-    a->set(0, 1);
-    a->set(1, 2);
-    a->set(2, 4);
+    WireManager wm;
+    std::shared_ptr<RegisterFile> reg(new RegisterFile(wm));
+    reg->BindOutputs(wm);
 
-    WireManager wires;
-    auto wire1 = wires.Get<int>("wire1");
-    wire1->SubscribeWriter(Binder<int>::Bind(&A::get, a, 0));
-    wire1->SubscribeWriter(Binder<int>::Bind(&A::get, a, 1));
-    wire1->SubscribeWriter(Binder<int>::Bind(&A::get, a, 2));
+    std::shared_ptr<ALU> alu(new ALU(wm));
+    alu->BindOutputs(wm);
 
-    auto wire2 = wires["wire1"];
-    cout << wire2->Read<int>().Data << endl;
-    a->set_out(1);
-    cout << wire2->Read<int>().Data << endl;
-    a->set_out(2);
-    cout << wire2->Read<int>().Data << endl;
-    a->set_out(1);
-    cout << wire2->Read<int>().Data << endl;
+    for (int i = 0; i <= 32; ++i)
+    {
+        reg->Move();
+        alu->Move();
 
-    a.reset();
+        // update
+        reg->Update();
+        alu->Update();
+    }
+    cout << endl;
 
-    cout << wire2->Read<int>().HasData << endl;
+    for (auto val : reg->Values())
+    {
+        cout << val << ' ';
+    }
+    cout << endl;
 
-    //wires.Get<double>("wire1");
-    
     return 0;
 }

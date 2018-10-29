@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 11)
 set(SIM_SRC ../../NNPUSim/src/)
 set(NNPU_S0SIM_SRC test_main.cpp ${SIM_SRC}/common/bit_packer.cpp
                    ${SIM_SRC}/common/bit_packer_factory.cpp ${SIM_SRC}/common/bit_wrapper.cpp
-                   ${SIM_SRC}/common/wire.cpp)
+                   ${SIM_SRC}/common/wire.cpp ${SIM_SRC}/sim_module.cpp)
 # include directories
 include_directories("../../../include")
 include_directories("../../../dlpack/include")
