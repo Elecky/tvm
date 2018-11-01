@@ -180,7 +180,7 @@ class IntrinManager(object):
 
             scope_in1 = self.get_scope(scope_in1)
             scope_in2 = self.get_scope(scope_in2)
-            scope_out = self.get_scope(scope_out)
+            scope_out = self.get_scope(scope_out, include_acc=True)
 
             dtype_in, dtype_out = self.mode2dtype(mode)
             
@@ -238,6 +238,8 @@ class IntrinManager(object):
             in1_buf = self.decl_buffer(in1, scope_in1, 'in1', strides=in1_strides)
             in2_buf = self.decl_buffer(in2, scope_in2, 'in2', strides=in2_strides)
             out_buf = self.decl_buffer(out, scope_out, 'out', strides=out_strides)
+            print('scope_out=')
+            print(scope_out)
 
             def lower_func(ins, outs):
                 ins = self.get_ins(ins, 'in1', 'in2')
@@ -248,23 +250,45 @@ class IntrinManager(object):
                                  if din1.strides else 0
                 in2_row_stride = din2.strides[0] * dtype_bytes(dtype_in) \
                                  if din2.strides else 0
-                out_row_stride = (dout.strides[0] if dout.strides else 1) * dtype_bytes(dtype_out)
-                                 
+                if (nColOut == 1 and reduce):
+                    out_row_stride = 1
+                elif (nRowOut == 1 and reduce):
+                    out_row_stride = 0
+                else:
+                    out_row_stride = dout.strides[0]
+                out_row_stride = out_row_stride * dtype_bytes(dtype_out)
 
-                irb = tvm.ir_builder.create()
-                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", 'NNPU_Gemm',
-                            nRowOut, factor, nColOut,
-                            dout.access_ptr('w', 'uint32'),
+                def init(dout, val=0):
+                    irb = tvm.ir_builder.create()
+                    irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                    irb.emit(tvm.call_extern("int32", 'NNPU_AccMemset',
+                            dout.access_ptr('r', 'uint32'),
                             out_row_stride,
-                            din1.access_ptr('r', 'uint32'),
-                            in1_row_stride,
-                            din2.access_ptr('r', 'uint32'),
-                            in2_row_stride,
-                            self.get_mode_code(mode)
+                            nRowOut, nColOut,
+                            str(val), self.get_mode_code(mode)
                             ))
+                    return irb.get()
+
+                def calc(toAccBuf, doAcc):
+                    irb = tvm.ir_builder.create()
+                    irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                    irb.emit(tvm.call_extern("int32", 'NNPU_Gemm',
+                                nRowOut, factor, nColOut,
+                                dout.access_ptr('w', 'uint32'),
+                                out_row_stride,
+                                din1.access_ptr('r', 'uint32'),
+                                in1_row_stride,
+                                din2.access_ptr('r', 'uint32'),
+                                in2_row_stride,
+                                self.get_mode_code(mode),
+                                toAccBuf, doAcc
+                                ))
+                    return irb.get()
                 
-                return irb.get()
+                if (scope_out == env.acc_scope):
+                    return calc(True, False), init(dout), calc(True, True)
+                else:
+                    return calc(False, False)
 
             return tvm.decl_tensor_intrin(out.op, lower_func,
                                           name=name,
@@ -1088,8 +1112,8 @@ class IntrinManager(object):
         return self.intrin_ctors[intrin_op](intrin_op, **kwargs)
 
     # convert scope name, also check whether scope is legal under current config
-    def get_scope(self, scope_str):
-        return convert_scope(self.env, scope_str)
+    def get_scope(self, scope_str, include_acc=False):
+        return convert_scope(self.env, scope_str, include_acc=include_acc)
     
     def decl_buffer(self, tensor, scope, buf_name, **kwargs):
         dtype_bits = dtype_bytes(tensor.dtype) * 8

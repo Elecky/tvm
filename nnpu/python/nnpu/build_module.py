@@ -44,6 +44,7 @@ def build_config(debug_flag=0, **kwargs):
                  (1, ir_pass.inject_dma_intrin),
                  (1, ir_pass.inject_scratchpad_ls),
                  (1, ir_pass.inject_scratchpad_copy),
+                 (1, ir_pass.inject_accTobuffer),
                  (1, tvm.ir_pass.CoProcSync),
                 ]
 

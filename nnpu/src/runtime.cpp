@@ -353,7 +353,8 @@ void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
 void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut, 
                uint32_t outAddr, uint32_t outRowStride,
                uint32_t in1Addr, uint32_t in1RowStride,
-               uint32_t in2Addr, uint32_t in2RowStride, uint32_t mode)
+               uint32_t in2Addr, uint32_t in2RowStride, uint32_t mode,
+               bool toAccBuf, bool acc)
 {
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
@@ -369,7 +370,8 @@ void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut,
     queue->EmplaceBack(Li(5, in2RowStride));
 
     // create a gemm instruction
-    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, 3, 4, 5, ModeFromInt(mode));
+    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, 3, 4, 5, 
+                        ModeFromInt(mode), toAccBuf, acc);
     queue->EmplaceBack(gemm);
 }
 
@@ -417,6 +419,7 @@ void NNPU_VctrBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr,
     nnpu::VctrBinaryInsn insn(op, 0, 1, 2, size, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
+
 double str_to_double(const char* S){
     std::stringstream st;
     double Imm = 0;
@@ -428,6 +431,7 @@ double str_to_double(const char* S){
     st>>Imm;
     return Imm;
 }
+
 void NNPU_VctrImm(uint32_t outAddr, uint32_t inAddr, double Imm, 
                     uint32_t size, uint32_t mode, nnpu::VctrImmOp op)
 {
@@ -440,6 +444,7 @@ void NNPU_VctrImm(uint32_t outAddr, uint32_t inAddr, double Imm,
     nnpu::VctrImmInsn insn(op, 0, 1, Imm, size, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
+
 void NNPU_MatImm(uint32_t outAddr, uint32_t inAddr, double Imm, 
                     uint32_t nRow,uint32_t nCol, uint32_t mode, nnpu::MatImmOp op)
 {
@@ -454,6 +459,7 @@ void NNPU_MatImm(uint32_t outAddr, uint32_t inAddr, double Imm,
     nnpu::MatImmInsn insn(op, 0, 1, Imm, nRow, nCol , ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
+
 void NNPU_MAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
 {
     double Imm = str_to_double(ImmS);
@@ -825,6 +831,38 @@ void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride
     queue->EmplaceBack(insn);
 }
 
+void NNPU_CopyAccToBuffer(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride,
+                         uint32_t srcAddr, int32_t srcOffset, uint32_t srcStride,
+                         uint32_t elemBytes, uint32_t nElem)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    if (dstStride == elemBytes && srcStride == elemBytes)
+    {
+        // if this is a compact copy.
+        nElem = elemBytes * nElem;
+        elemBytes = 1;
+        dstStride = 1;
+        srcStride = 1;
+    }
+
+    // assign 5 addresses and strides
+    Li li1(0, dstAddr + dstOffset);
+    queue->EmplaceBack(li1);
+    Li li2(1, dstStride);
+    queue->EmplaceBack(li2);
+    Li li3(2, srcAddr + srcOffset);
+    queue->EmplaceBack(li3);
+    Li li4(3, srcStride);
+    queue->EmplaceBack(li4);
+    Li li5(4, nElem);
+    queue->EmplaceBack(li5);
+
+    nnpu::CopyAcc2BufInsn insn(0, 1, 2, 3, 4, elemBytes);
+    queue->EmplaceBack(insn);
+}
+
 void NNPU_Memset(uint32_t addr, uint32_t nUnit, uint32_t stride, const char *val, uint32_t mode)
 {
     using Li = nnpu::LiInsn;
@@ -837,5 +875,18 @@ void NNPU_Memset(uint32_t addr, uint32_t nUnit, uint32_t stride, const char *val
     queue->EmplaceBack(li3);
     double imm=str_to_double(val);
     nnpu::MemsetInsn insn(0, 1, 2, ModeFromInt(mode), imm);
+    queue->EmplaceBack(insn);
+}
+
+void NNPU_AccMemset(uint32_t addr, uint32_t rowStride, uint32_t nRow, uint32_t nCol,
+                    const char *val, uint32_t mode)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    queue->EmplaceBack(Li(0, addr));
+    queue->EmplaceBack(Li(1, rowStride));
+
+    nnpu::AccMemsetInsn insn(nRow, nCol, 0, 1, ModeFromInt(mode), str_to_double(val));
     queue->EmplaceBack(insn);
 }

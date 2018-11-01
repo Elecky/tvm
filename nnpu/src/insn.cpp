@@ -83,7 +83,17 @@ void StallInsn::Dump(std::ostream& os) const
 
 void GemmInsn::Dump(std::ostream& os) const
 {
-    os << "gemm_" << NRowOut << '_' << Factor << '_' << NColOut << '.' << mode2str(this->Mode)
+    string insnName;
+    if (ToAccBuf)
+    {
+        insnName = DoAcc ? "gemm.acc.up" : "gemm.acc";
+    }
+    else
+    {
+        insnName = "gemm.buf";
+    }
+    os << insnName << "_" << NRowOut << '_' << Factor << '_' << NColOut << '.' 
+       << mode2str(this->Mode)
        << " $" << OutAddrReg << ", $" << OutRowStrideReg 
        << ", $" << In1AddrReg << ", $" << In1RowStrideReg 
        << ", $" << In2AddrReg << ", $" << In2RowStrideReg;
@@ -187,10 +197,22 @@ void BufferCopyInsn::Dump(ostream &os) const
        << ", $" << SrcAddrReg << ", $" << SrcStrideReg << ", $" << NUnitReg;
 }
 
+void CopyAcc2BufInsn::Dump(ostream &os) const
+{
+    os << "Copy.acc2buf_" << UnitBytes << " $" << DstAddrReg << ", $" << DstStrideReg
+       << ", $" << SrcAddrReg << ", $" << SrcStrideReg << ", $" << NUnitReg;
+}
+
 void MemsetInsn::Dump(ostream &os) const
 {
     os << "Memset." << mode2str(Mode) << " $" << AddrReg << ", $" << NUnitReg
        << ", $" << StrideReg << ", #" << Imm;
+}
+
+void AccMemsetInsn::Dump(ostream &os) const
+{
+    os << "AccMemset_" << NRow << '_' << NCol << '.' << mode2str(Mode) 
+       << " $" << AddrReg << ", $" << RowStrideReg << ", #" << Imm;
 }
 
 // ToString functions starts from here

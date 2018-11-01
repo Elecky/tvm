@@ -12,7 +12,7 @@ def dtype_bytes(dtype):
         raise ValueError('unhandeled dtype: {0}'.format(dtype))
 
 # convert scope name, also check whether scope is legal under current config
-def convert_scope(env, scope_str):
+def convert_scope(env, scope_str, include_acc=False):
     scope = scope_str
     if (scope_str == 'uni'):
         scope = env.uni_scratchpad_scope
@@ -20,10 +20,17 @@ def convert_scope(env, scope_str):
         scope = env.vctr_scratch_scope
     elif (scope_str == 'mat'):
         scope = env.mat_scratch_scope
-    design = env.cfg['scratchpad_design']
-    assert not (design == 'unified') or (scope == env.uni_scratchpad_scope), \
-        'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
-    assert not (design == 'seperated') or \
-            (scope in [env.vctr_scratch_scope, env.mat_scratch_scope]), \
+    elif (scope_str == 'acc'):
+        scope = env.acc_scope
+
+    if (scope == env.acc_scope):
+        assert include_acc, 'accumulation scope is not allowed'
+        return scope
+    else:
+        design = env.cfg['scratchpad_design']
+        assert not (design == 'unified') or (scope == env.uni_scratchpad_scope), \
             'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
-    return scope
+        assert not (design == 'seperated') or \
+                (scope in [env.vctr_scratch_scope, env.mat_scratch_scope]), \
+                'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
+        return scope

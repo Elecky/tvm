@@ -39,10 +39,12 @@ class Environment(object):
     uni_scratchpad_scope = 'local.nnpu_scratchpad'
     vctr_scratch_scope = 'local.nnpu_vscratchpad'
     mat_scratch_scope = 'local.nnpu_mscratchpad'
+    acc_scope = 'local.nnpu_acc_buffer'
     # compiler pragmas
     dma_copy_pragma = 'nnpu_dma_copy'
     scratchpad_ls = 'nnpu_scratchpad_ls'
     scratchpad_copy = 'nnpu_scratchpad_copy'
+    copy_acc2buf = 'nnpu_copy_acc2buf'
 
     def __init__(self, cfg_path):
         self.cfg = {}
@@ -75,6 +77,8 @@ class Environment(object):
             key = 'vctr_scratchpad'
         elif (scope == self.mat_scratch_scope):
             key = 'mat_scratchpad'
+        elif (scope == self.acc_scope):
+            key = 'acc_buffer'
         else:
             raise ValueError('illegal scope name')
         return self.cfg[key]
@@ -117,6 +121,16 @@ def mem_info_scratchpad():
                              head_address=None)
     else:
         return None
+
+@tvm.register_func("tvm.info.mem.%s" % Environment.acc_scope)
+def mem_info_acc():
+    spec = get_env()
+    acc_cfg = spec.cfg['acc_buffer']
+    return tvm.make.node("MemoryInfo",
+                         unit_bits=8,
+                         max_simd_bits=acc_cfg['width_per_channel'],
+                         max_num_bits=acc_cfg['nchannel'] * (1 << acc_cfg['log_size_per_channel']) * 8,
+                         head_address=None)
 
 @tvm.register_func("tvm.info.mem.{0}".format(Environment.vctr_scratch_scope))
 def mem_info_vscratchpad():

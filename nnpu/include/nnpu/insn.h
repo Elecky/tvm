@@ -19,7 +19,7 @@ enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
     MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy,
-    Memset
+    Memset, AccMemset, CopyAcc2Buf
 };
 
 /*!
@@ -179,6 +179,31 @@ public:
 };
 
 /*!
+ * \brief used to init accumulation 
+*/
+struct AccMemsetInsn
+{
+public:
+    AccMemsetInsn() = default;
+
+    AccMemsetInsn(uint32_t _nRow, uint32_t _nCol, 
+                  uint32_t _addrReg, uint32_t _rowStrideReg,
+                  ModeCode _mode, double _imm) :
+        AddrReg(_addrReg), RowStrideReg(_rowStrideReg),
+        NRow(_nRow), NCol(_nCol), Mode(_mode), Imm(_imm)
+    {}
+
+    uint32_t AddrReg;
+    uint32_t RowStrideReg;
+
+    uint32_t NRow, NCol;
+    ModeCode Mode;  // can only be n or w.
+    double Imm;  // currently, accumulation memory is only inited by zero.
+
+    void Dump(std::ostream& os) const;
+};
+
+/*!
 * \brief Load Immediate Insn,
 *        assign an immediate value to a register
 */
@@ -217,12 +242,13 @@ public:
     GemmInsn(uint32_t _nRowOut, uint32_t _factor, uint32_t _nColOut, 
              uint32_t _outAddrReg, uint32_t _outRowStrideReg,
              uint32_t _in1AddrReg, uint32_t _in1RowStrideReg,
-             uint32_t _in2AddrReg, uint32_t _in2RowStrideReg, ModeCode _mode)
+             uint32_t _in2AddrReg, uint32_t _in2RowStrideReg, ModeCode _mode,
+             bool _toAccBuf, bool _doAcc)
             : NRowOut(_nRowOut), Factor(_factor), NColOut(_nColOut),
               OutAddrReg(_outAddrReg), OutRowStrideReg(_outRowStrideReg),
               In1AddrReg(_in1AddrReg), In1RowStrideReg(_in1RowStrideReg),
               In2AddrReg(_in2AddrReg), In2RowStrideReg(_in2RowStrideReg),
-              Mode(_mode)
+              ToAccBuf(_toAccBuf), DoAcc(_doAcc), Mode(_mode)
     {}
 
     // the following 3 field is not Imm nor register operand, 
@@ -240,6 +266,8 @@ public:
     uint32_t In2AddrReg;
     uint32_t In2RowStrideReg;
 
+    bool ToAccBuf;  // write to accumulation buffer or not.
+    bool DoAcc;  // do accumulation or not.
     ModeCode Mode;
 
     /*!
@@ -536,6 +564,34 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+struct CopyAcc2BufInsn
+{
+public:
+    CopyAcc2BufInsn() = default;
+
+    CopyAcc2BufInsn(uint32_t _dstAddrReg, uint32_t _dstStrideReg, 
+                   uint32_t _srcAddrReg, uint32_t _srcStrideReg,
+                   uint32_t _nUnitReg, uint32_t _unitBytes) :
+        DstAddrReg(_dstAddrReg), DstStrideReg(_dstStrideReg),
+        SrcAddrReg(_srcAddrReg), SrcStrideReg(_srcStrideReg),
+        NUnitReg(_nUnitReg), UnitBytes(_unitBytes)
+    {}
+
+    uint32_t DstAddrReg;
+    uint32_t DstStrideReg;
+    uint32_t SrcAddrReg;
+    uint32_t SrcStrideReg;
+    uint32_t NUnitReg;
+
+    uint32_t UnitBytes;
+
+    /*!
+    * \brief dump the string representation of this instruction into ostream
+    * \param os: the stream to which to dump.
+    */
+    void Dump(std::ostream& os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -585,6 +641,10 @@ public:
         BufferCopyInsn BufferCopy;
 
         MemsetInsn Memset;
+
+        CopyAcc2BufInsn CopyAcc2Buf;
+
+        AccMemsetInsn AccMemset;
     };
 
     /* dispatch a call depends on the instruction type
@@ -674,6 +734,12 @@ public:
         case InsnType::Memset:
             return functor(this->Memset, std::forward<TArgs>(args)...);
 
+        case InsnType::CopyAcc2Buf:
+            return functor(this->CopyAcc2Buf, std::forward<TArgs>(args)...);
+
+        case InsnType::AccMemset:
+            return functor(this->AccMemset, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -739,6 +805,12 @@ public:
     {}
 
     NNPUInsn(const MemsetInsn &_insn) : Type(InsnType::Memset), Memset(_insn)
+    {}
+
+    NNPUInsn(const CopyAcc2BufInsn &_insn) : Type(InsnType::CopyAcc2Buf), CopyAcc2Buf(_insn)
+    {}
+
+    NNPUInsn(const AccMemsetInsn &_insn) : Type(InsnType::AccMemset), AccMemset(_insn)
     {}
 };
 

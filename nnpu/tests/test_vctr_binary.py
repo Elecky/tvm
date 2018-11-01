@@ -9,7 +9,7 @@ def test():
     nnpu.set_device(env)
 
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    shape = (32, )
+    shape = (48, )
     nvctr_unit = env.cfg['vector_unit']['size']
     assert shape[0] % nvctr_unit == 0, 'error'
 

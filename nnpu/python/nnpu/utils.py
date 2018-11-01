@@ -24,7 +24,9 @@ class ScheduleProcHelper(object):
         self.closures = []
     
     def MarkScope(self, tensor, scope='uni'):
-        scope = convert_scope(self.env, scope)
+        scope = convert_scope(self.env, scope, include_acc=True)
+        #print('marking scope:')
+        #print(scope)
         self.Add(lambda sc: sc[tensor].set_scope(scope))
     
     def __enter__(self):
@@ -35,8 +37,11 @@ class ScheduleProcHelper(object):
     def __exit__(self, ptype, value, trace):
         ScheduleProcHelper.current = self.last
 
-def MarkScope(tensor, sph=None, scope='uni'):
-    ScheduleProcHelper.current.MarkScope(tensor, scope)
+def MarkScope(tensor, scope='uni', sph=None):
+    if (sph):
+        sph.MarkScope(tensor, sph)
+    else:
+        ScheduleProcHelper.current.MarkScope(tensor, scope)
 
 def DMACopyHtoDram(tensor, name_prefix, sph=None):
     sph = ScheduleProcHelper.current if sph is None else sph
@@ -104,6 +109,14 @@ def transpose(tensor, axes=None, sph=None, dst_scope='uni'):
     PragmaCopy(res)
     return res
 
+def CopyAcc2Buf(tensor, name, dst_scope='uni', sph=None):
+    res = tvm.compute(tensor.shape, lambda *i: tensor(*i), name)
+    MarkScope(res, dst_scope, sph)
+    env = get_env()
+    sph = ScheduleProcHelper.current if sph is None else sph
+    sph.Add(lambda sc: sc[res].pragma(res.op.axis[0], env.copy_acc2buf))
+
+    return res
 
 def create_schedule(*args, **kwargs):
     s = tvm.create_schedule(*args, **kwargs)

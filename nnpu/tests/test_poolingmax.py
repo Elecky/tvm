@@ -20,6 +20,7 @@ def max_pooling(inshape,outshape,cell_shape,innp,outdetype):
 def test():
     env = nnpu.get_env()
     nnpu.set_device(env)
+    nnpu.set_dump(False)
     in_shape = (20,20,32)
     cell_shape = 5
     out_shape = (in_shape[0] // cell_shape,in_shape[1] // cell_shape,in_shape[2])

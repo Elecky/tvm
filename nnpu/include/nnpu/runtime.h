@@ -49,7 +49,8 @@ void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
 void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut, 
                uint32_t outAddr, uint32_t outRowStride,
                uint32_t in1Addr, uint32_t in1RowStride,
-               uint32_t in2Addr, uint32_t in2RowStride, uint32_t mode);
+               uint32_t in2Addr, uint32_t in2RowStride, uint32_t mode,
+               bool toAccBuf, bool acc);
 
 void NNPU_MAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t nRow,uint32_t nCol, uint32_t mode);
 void NNPU_MMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS ,uint32_t nRow,uint32_t nCol, uint32_t mode);
@@ -146,10 +147,17 @@ void NNPU_SDivV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr,
                 uint32_t size, uint32_t mode);
 
 void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride,
-                         uint32_t srcAddr, int32_t srcOffset, uint32_t dsrStride,
+                         uint32_t srcAddr, int32_t srcOffset, uint32_t srcStride,
+                         uint32_t elemBytes, uint32_t nElem);
+
+void NNPU_CopyAccToBuffer(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride,
+                         uint32_t srcAddr, int32_t srcOffset, uint32_t srcStride,
                          uint32_t elemBytes, uint32_t nElem);
 
 void NNPU_Memset(uint32_t addr, uint32_t nUnit, uint32_t stride, const char *val, uint32_t mode);
+
+void NNPU_AccMemset(uint32_t addr, uint32_t rowStride, uint32_t nRow, uint32_t nCol,
+                    const char *val, uint32_t mode);
 
 void NNPUSynchronize(uint32_t timeout);
 
