@@ -7,7 +7,7 @@ import numpy as np
 with ScheduleProcHelper():
     env = nnpu.get_env()
     nnpu.set_device(env)
-    shape = (32, 128)  # (32, 64) -> (32, )
+    shape = (32, 64)  # (32, 64) -> (32, )
     rshape = (16, 16)  # the shape that MReduceSum insn accepts
     assert shape[0] % rshape[0] == 0, 'height must be divisible to {0}'.format(rshape[0])
     assert shape[0] % env.cfg['vector_unit']['size'] == 0, \
@@ -30,9 +30,11 @@ with ScheduleProcHelper():
 
     s = nnpu.create_schedule(res_host.op)
     # tensorize
-    xo, xi = s[re_buf].split(re_buf.op.axis[0], rshape[0])
-    ro, ri = s[re_buf].split(re_buf.op.reduce_axis[0], rshape[1])
-    s[re_buf].reorder(xo, ro, xi, ri)
+    #xo, xi = s[re_buf].split(re_buf.op.axis[0], rshape[0])
+    #ro, ri = s[re_buf].split(re_buf.op.reduce_axis[0], rshape[1])
+    #s[re_buf].reorder(xo, ro, xi, ri)
+    xo, ro, xi, ri = s[re_buf].tile(re_buf.op.axis[0], re_buf.op.reduce_axis[0], 
+                                    rshape[0], rshape[1])
     s[re_buf].tensorize(xi, env.intrins.get('MReduceSumRow', mode='inc', 
                                             shape=rshape, scope_out='acc'))
 

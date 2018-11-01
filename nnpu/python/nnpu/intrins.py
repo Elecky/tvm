@@ -958,7 +958,7 @@ class IntrinManager(object):
 
             scope_in1 = self.get_scope(scope_in1)
             scope_in2 = self.get_scope(scope_in2)
-            scope_out = self.get_scope(scope_out)
+            scope_out = self.get_scope(scope_out, include_acc=True)
 
             dtype_in, dtype_out = self.mode2dtype(mode)
 
@@ -993,19 +993,30 @@ class IntrinManager(object):
                 din1, din2 = ins[0], ins[1]
                 dout = outs[0]
 
-                irb = tvm.ir_builder.create()
-                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", 'NNPU_MRowDot',
-                            dout.access_ptr('w', 'uint32'),
-                            din1.access_ptr('r', 'uint32'),
-                            din1.strides[0] * dtype_bytes(dtype_in),
-                            din2.access_ptr('r', 'uint32'),
-                            din2.strides[0] * dtype_bytes(dtype_in),
-                            shape[0], shape[1],
-                            self.get_mode_code(mode)
-                            ))
+                init = self.emit_acc_init(dout.access_ptr('w', 'uint32'),
+                                    1, nRow, 0, mode, 0)
+
+                def calc(toAccBuf, doAcc):
+                    irb = tvm.ir_builder.create()
+                    irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                    ptr_mode = 'rw' if doAcc else 'w'
+                    irb.emit(tvm.call_extern("int32", 'NNPU_MRowDot',
+                                dout.access_ptr(ptr_mode, 'uint32'),
+                                din1.access_ptr('r', 'uint32'),
+                                din1.strides[0] * dtype_bytes(dtype_in),
+                                din2.access_ptr('r', 'uint32'),
+                                din2.strides[0] * dtype_bytes(dtype_in),
+                                shape[0], shape[1],
+                                self.get_mode_code(mode),
+                                toAccBuf, doAcc
+                                ))
+                    
+                    return irb.get()
                 
-                return irb.get()
+                if (scope_out == env.acc_scope):
+                    return calc(True, False), init, calc(True, True)
+                else:
+                    return calc(False, False)
 
             return tvm.decl_tensor_intrin(out.op, lower_func,
                                           name=name,

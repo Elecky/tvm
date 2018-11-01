@@ -740,7 +740,7 @@ void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in1RowStride,
     queue->EmplaceBack(Li(3, in2Addr));
     queue->EmplaceBack(Li(4, in2RowStride));
 
-    nnpu::MatRowDotInsn insn(0, 1, 2, 3, 4, nRow, nCol, false, false, ModeFromInt(mode));
+    nnpu::MatRowDotInsn insn(0, 1, 2, 3, 4, nRow, nCol, toAccBuf, doAcc, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 
