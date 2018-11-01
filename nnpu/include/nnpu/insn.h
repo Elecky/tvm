@@ -440,9 +440,10 @@ public:
     MatReduceRowInsn() = default;
 
     MatReduceRowInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, uint32_t _inRowStrideReg,
-        ReduceOp _op, uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
+                     ReduceOp _op, uint32_t _nRow, uint32_t _nCol, 
+                     bool _toAccBuf, bool _doAcc, ModeCode _mode) :
         OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), InRowStrideReg(_inRowStrideReg),
-        Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
+        Op(_op), NRow(_nRow), NCol(_nCol), ToAccBuf(_toAccBuf), DoAcc(_doAcc), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
@@ -452,6 +453,8 @@ public:
     // the following fileds are part of insn encoding.
     ReduceOp Op;
     uint32_t NRow, NCol;
+    bool ToAccBuf;   // write to accumulation buffer or not, if not write to scratchpad.
+    bool DoAcc;  // do accumulation or not, only valid when ToAccBuf is true.
     ModeCode Mode;
 
     void Dump(std::ostream &os) const;
@@ -519,10 +522,11 @@ public:
 
     MatRowDotInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in1RowStrideReg,
                   uint32_t _in2AddrReg, uint32_t _in2RowStrideReg,
-                  uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
+                  uint32_t _nRow, uint32_t _nCol, 
+                  bool _toAccBuf, bool _doAcc, ModeCode _mode) :
         OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In1RowStrideReg(_in1RowStrideReg),
         In2AddrReg(_in2AddrReg), In2RowStrideReg(_in2RowStrideReg),
-        NRow(_nRow), NCol(_nCol), Mode(_mode)
+        NRow(_nRow), NCol(_nCol), toAccBuf(_toAccBuf), doAcc(_doAcc), Mode(_mode)
     {}
 
     uint32_t OutAddrReg;
@@ -533,6 +537,8 @@ public:
 
     // the following fileds are part of insn encoding.
     uint32_t NRow, NCol;  // the total elements in both matrix.
+    bool toAccBuf;  // write to accumulation buffer or scratchpad?
+    bool doAcc;  // do an accumulation?
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;

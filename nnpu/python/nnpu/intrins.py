@@ -258,23 +258,16 @@ class IntrinManager(object):
                     out_row_stride = dout.strides[0]
                 out_row_stride = out_row_stride * dtype_bytes(dtype_out)
 
-                def init(dout, val=0):
-                    irb = tvm.ir_builder.create()
-                    irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                    irb.emit(tvm.call_extern("int32", 'NNPU_AccMemset',
-                            dout.access_ptr('r', 'uint32'),
-                            out_row_stride,
-                            nRowOut, nColOut,
-                            str(val), self.get_mode_code(mode)
-                            ))
-                    return irb.get()
+                init = self.emit_acc_init(dout.access_ptr('w', 'uint32'),
+                                nRowOut, nColOut, out_row_stride, mode, 0)
 
                 def calc(toAccBuf, doAcc):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                    ptr_type = 'rw' if doAcc else 'w'
                     irb.emit(tvm.call_extern("int32", 'NNPU_Gemm',
                                 nRowOut, factor, nColOut,
-                                dout.access_ptr('w', 'uint32'),
+                                dout.access_ptr(ptr_type, 'uint32'),
                                 out_row_stride,
                                 din1.access_ptr('r', 'uint32'),
                                 in1_row_stride,
@@ -286,7 +279,7 @@ class IntrinManager(object):
                     return irb.get()
                 
                 if (scope_out == env.acc_scope):
-                    return calc(True, False), init(dout), calc(True, True)
+                    return calc(True, False), init, calc(True, True)
                 else:
                     return calc(False, False)
 
@@ -809,7 +802,7 @@ class IntrinManager(object):
             cfg = self.env.cfg
 
             scope_in = self.get_scope(scope_in)
-            scope_out = self.get_scope(scope_out)
+            scope_out = self.get_scope(scope_out, include_acc=True)
 
             dtype_in, dtype_out = self.mode2dtype(mode)
 
@@ -851,17 +844,27 @@ class IntrinManager(object):
                 din1 = ins[0]
                 dout = outs[0]
 
-                irb = tvm.ir_builder.create()
-                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
-                            dout.access_ptr('w', 'uint32'),
-                            din1.access_ptr('r', 'uint32'), 
-                            din1.strides[0] * dtype_bytes(dtype_in),
-                            shape[0], shape[1],
-                            self.get_mode_code(mode)
-                            ))
+                init = self.emit_acc_init(dout.access_ptr('w', 'uint32'), 1, nRow, 0, mode, 0)
+
+                def calc(toAccBuf, doAcc):
+                    irb = tvm.ir_builder.create()
+                    irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                    ptr_mode = 'rw' if doAcc else 'w'
+                    irb.emit(tvm.call_extern("int32", extern_func,
+                                dout.access_ptr(ptr_mode, 'uint32'),
+                                din1.access_ptr('r', 'uint32'), 
+                                din1.strides[0] * dtype_bytes(dtype_in),
+                                shape[0], shape[1],
+                                self.get_mode_code(mode),
+                                toAccBuf, doAcc
+                                ))
+
+                    return irb.get()
                 
-                return irb.get()
+                if (scope_out == env.acc_scope):
+                    return calc(True, False), init, calc(True, True)
+                else:
+                    return calc(False, False)
 
             return tvm.decl_tensor_intrin(out.op, lower_func,
                                           name=name,
@@ -1150,4 +1153,15 @@ class IntrinManager(object):
                                 addr, nUnit, stride,
                                 str(val), self.get_mode_code(mode)
                     ))
+        return irb.get()
+
+    def emit_acc_init(self, addr, nRow, nCol, rowStride, mode, val=0):
+        irb = tvm.ir_builder.create()
+        irb.scope_attr(self.env.nnpu_axis, "coproc_scope", 0)
+        irb.emit(tvm.call_extern("int32", 'NNPU_AccMemset',
+                addr,
+                rowStride,
+                nRow, nCol,
+                str(val), self.get_mode_code(mode)
+                ))
         return irb.get()

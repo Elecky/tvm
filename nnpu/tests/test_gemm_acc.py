@@ -28,7 +28,7 @@ with ScheduleProcHelper():
                     'prod_buf')
     nnpu.utils.MarkScope(prod_buf, 'acc')
 
-    out_buf = nnpu.utils.CopyAcc2Buf(prod_buf, 'res')
+    out_buf = nnpu.utils.CopyAccToBuf(prod_buf, 'res')
     #nnpu.utils.MarkScope(out_buf)
 
     out_host, _ = nnpu.utils.CopyBufToH(out_buf, 'out')

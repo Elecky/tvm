@@ -109,7 +109,7 @@ def transpose(tensor, axes=None, sph=None, dst_scope='uni'):
     PragmaCopy(res)
     return res
 
-def CopyAcc2Buf(tensor, name, dst_scope='uni', sph=None):
+def CopyAccToBuf(tensor, name, dst_scope='uni', sph=None):
     res = tvm.compute(tensor.shape, lambda *i: tensor(*i), name)
     MarkScope(res, dst_scope, sph)
     env = get_env()

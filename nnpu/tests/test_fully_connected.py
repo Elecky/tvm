@@ -35,7 +35,7 @@ with ScheduleProcHelper():
                         'prod')
     nnpu.utils.MarkScope(prod_buf, 'acc')
 
-    out_buf = nnpu.utils.CopyAcc2Buf(prod_buf, 'out')
+    out_buf = nnpu.utils.CopyAccToBuf(prod_buf, 'out')
     
     res_buf = tvm.compute((out_channel, ),
                         lambda i: out_buf[i] + bias_buf[i], 'res')

@@ -644,7 +644,8 @@ void NNPU_MMulM(uint32_t outAddr, uint32_t outRowStride,
 }
 
 void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride, nnpu::ReduceOp op, 
-                  uint32_t nRow, uint32_t nCol, uint32_t mode, bool isRow)
+                  uint32_t nRow, uint32_t nCol, uint32_t mode, bool toAccBuf, bool doAcc,
+                  bool isRow)
 {
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
@@ -658,7 +659,8 @@ void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride, nnpu:
 
     if (isRow)
     {
-        nnpu::MatReduceRowInsn insn(0, 1, 2, op, nRow, nCol, ModeFromInt(mode));
+        nnpu::MatReduceRowInsn insn(0, 1, 2, op, nRow, nCol, 
+                                    toAccBuf, doAcc, ModeFromInt(mode));
         queue->EmplaceBack(insn);
     }
     else
@@ -669,9 +671,11 @@ void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride, nnpu:
 }
 
 void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride,
-                        uint32_t nRow, uint32_t nCol, uint32_t mode)
+                        uint32_t nRow, uint32_t nCol, uint32_t mode, 
+                        bool toAccBuf, bool doAcc)
 {
-    NNPU_MReduce(outAddr, inAddr, inRowStride, nnpu::ReduceOp::Sum, nRow, nCol, mode, true);
+    NNPU_MReduce(outAddr, inAddr, inRowStride, nnpu::ReduceOp::Sum, nRow, nCol, 
+                 mode, toAccBuf, doAcc, true);
 }
 
 void NNPU_MatVctrRow(uint32_t outAddr, uint32_t outRowStride,
@@ -722,7 +726,8 @@ void NNPU_MMulV(uint32_t outAddr, uint32_t outRowStride,
 
 void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in1RowStride,
                   uint32_t in2Addr, uint32_t in2RowStride,
-                  uint32_t nRow, uint32_t nCol, uint32_t mode)
+                  uint32_t nRow, uint32_t nCol, uint32_t mode,
+                  bool toAccBuf, bool doAcc)
 {
     using Li = nnpu::LiInsn;
     nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
@@ -735,7 +740,7 @@ void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in1RowStride,
     queue->EmplaceBack(Li(3, in2Addr));
     queue->EmplaceBack(Li(4, in2RowStride));
 
-    nnpu::MatRowDotInsn insn(0, 1, 2, 3, 4, nRow, nCol, ModeFromInt(mode));
+    nnpu::MatRowDotInsn insn(0, 1, 2, 3, 4, nRow, nCol, false, false, ModeFromInt(mode));
     queue->EmplaceBack(insn);
 }
 

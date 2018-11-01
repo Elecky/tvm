@@ -83,7 +83,7 @@ void StallInsn::Dump(std::ostream& os) const
 
 void GemmInsn::Dump(std::ostream& os) const
 {
-    string insnName;
+    const char * insnName;
     if (ToAccBuf)
     {
         insnName = DoAcc ? "gemm.acc.up" : "gemm.acc";
@@ -153,7 +153,17 @@ void MatBinaryInsn::Dump(std::ostream &os) const
 
 void MatReduceRowInsn::Dump(std::ostream &os) const
 {
-    os << "MReduce" << ToString(Op) << "Row_" << NRow << '_' << NCol << '.' << mode2str(Mode) 
+    const char * insnPostfix;
+    if (ToAccBuf)
+    {
+        insnPostfix = DoAcc ? ".acc.up" : ".acc";
+    }
+    else
+    {
+        insnPostfix = ".buf";
+    }
+    os << "MReduce" << ToString(Op) << "Row" << insnPostfix << '_' 
+       << NRow << '_' << NCol << '.' << mode2str(Mode) 
        << " $" << OutAddrReg << ", $" << InAddrReg << ", $" << InRowStrideReg;
 }
 
@@ -173,7 +183,16 @@ void MatVctrInsn::Dump(std::ostream &os) const
 
 void MatRowDotInsn::Dump(std::ostream &os) const
 {
-    os << "MRowDot" << "_" << NRow << '_' << NCol << '.' << mode2str(Mode) << " $"
+    const char * insn_name;
+    if (toAccBuf)
+    {
+        insn_name = doAcc ? "MRowDot.acc.up" : "MRowDot";
+    }
+    else
+    {
+        insn_name = "MRowDot.buf";
+    }
+    os << insn_name << "_" << NRow << '_' << NCol << '.' << mode2str(Mode) << " $"
        << OutAddrReg << ", $" << In1AddrReg << ", $" << In1RowStrideReg
        << ", $" << In2AddrReg << ", $" << In2RowStrideReg;
 }
