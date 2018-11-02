@@ -6,6 +6,12 @@ dtype_n: int8
 # number of register file elements
 register_file_size: 32
 
+# predict a branch is taken or just fall through.
+# if false, IF will continue fetching next insn, and wait for branch request.
+# if true, IF will jump to target and continue fetching, so if branch is not taken,
+# the issue queue will be cleared and fetch insn starts from next insn.
+predictBranchTaken: false
+
 # dram configs
 dram:
   nchannel: 2

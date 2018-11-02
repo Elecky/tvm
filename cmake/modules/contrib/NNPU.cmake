@@ -9,7 +9,8 @@ if(PYTHON)
     set(NNPU_SIM_COMMON ${SIM_SRC}/common/bit_packer.cpp ${SIM_SRC}/common/bit_packer_factory.cpp
                         ${SIM_SRC}/common/bit_wrapper.cpp ${SIM_SRC}/common/wire.cpp)
     set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/S0Simulator.cpp)
-    set(NNPU_S1SIM_SRC ${SIM_SRC}/sim_module.cpp ${SIM_SRC}/insn_mem.cpp)
+    set(NNPU_S1SIM_SRC ${SIM_SRC}/sim_module.cpp ${SIM_SRC}/insn_mem.cpp
+                       ${SIM_SRC}/insn_wrapper.cpp ${SIM_SRC}/insn_decoder.cpp)
     add_library(nnpu SHARED ${NNPU_RUNTIME_SRCS} ${NNPU_SIM_COMMON} ${NNPU_S0SIM_SRC}
                             ${NNPU_S1SIM_SRC})
     target_include_directories(nnpu PUBLIC nnpu/include /usr/local/include nnpu/NNPUSim/include)

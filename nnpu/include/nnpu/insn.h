@@ -19,7 +19,7 @@ enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
     MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy,
-    Memset, AccMemset, CopyAcc2Buf
+    Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ
 };
 
 /*!
@@ -598,6 +598,40 @@ public:
     void Dump(std::ostream& os) const;
 };
 
+struct NOPInsn
+{
+    NOPInsn() = default;
+
+    void Dump(std::ostream& os) const;
+};
+
+struct JumpInsn
+{
+    JumpInsn() = default;
+
+    JumpInsn(int32_t _offset):
+        Offset(_offset)
+    {}
+
+    int32_t Offset;
+
+    void Dump(std::ostream &os) const;
+};
+
+struct BEZInsn
+{
+    BEZInsn() = default;
+
+    BEZInsn(int32_t _offset, uint32_t _condReg) :
+        Offset(_offset), CondReg(_condReg)
+    {}
+
+    int32_t Offset;
+    uint32_t CondReg;
+
+    void Dump(std::ostream &os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -651,6 +685,12 @@ public:
         CopyAcc2BufInsn CopyAcc2Buf;
 
         AccMemsetInsn AccMemset;
+
+        NOPInsn NOP;
+
+        JumpInsn Jump;
+
+        BEZInsn BEZ;
     };
 
     /* dispatch a call depends on the instruction type
@@ -676,7 +716,7 @@ public:
     * };
     */
     template<typename T, typename ... TArgs >
-    typename T::result_type Call(T functor, TArgs&& ... args)
+    typename T::result_type Call(T functor, TArgs&& ... args) const
     {
         switch (Type)
         {
@@ -745,6 +785,15 @@ public:
 
         case InsnType::AccMemset:
             return functor(this->AccMemset, std::forward<TArgs>(args)...);
+
+        case InsnType::NOP:
+            return functor(this->NOP, std::forward<TArgs>(args)...);
+        
+        case InsnType::Jump:
+            return functor(this->Jump, std::forward<TArgs>(args)...);
+
+        case InsnType::BEZ:
+            return functor(this->BEZ, std::forward<TArgs>(args)...);
 
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
@@ -817,6 +866,15 @@ public:
     {}
 
     NNPUInsn(const AccMemsetInsn &_insn) : Type(InsnType::AccMemset), AccMemset(_insn)
+    {}
+
+    NNPUInsn(const NOPInsn &_insn) : Type(InsnType::NOP)
+    {}
+
+    NNPUInsn(const JumpInsn &_insn) : Type(InsnType::Jump), Jump(_insn)
+    {}
+
+    NNPUInsn(const BEZInsn &_insn) : Type(InsnType::BEZ), BEZ(_insn)
     {}
 };
 

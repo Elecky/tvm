@@ -1,155 +1,55 @@
-#include <nnpusim/common/bit_packer_factory.h>
 #include <memory>
 #include <iostream>
-#include <nnpusim/common/bit_wrapper.h>
-#include <nnpusim/common/wire.h>
-#include <nnpusim/sim_module.h>
+#include <nnpusim/insn_mem.h>
+#include <nnpusim/insn_decoder.h>
+#include <vector>
 
 using namespace nnpu;
 using namespace std;
 
-class RegisterFile : public SimModule
+std::vector<NNPUInsn> init_insn()
 {
-public:
-    RegisterFile(WireManager &wm):
-        readIdx1(wm.Get<int>("RegReadIdx1")), readIdx2(wm.Get<int>("RegReadIdx2")),
-        writeIdx(wm.Get<int>("RegWriteIdx")), writeData(wm.Get<uint32_t>("RegWriteData"))
-    {
-        regs.resize(32);
-        for (int i = 0; i != 32; ++i)
-        {
-            regs[i] = i;
-        }
-    }
+    vector<NNPUInsn> insns;
+    using Li = nnpu::LiInsn;
+    insns.emplace_back(Li(0, 23));
+    insns.emplace_back(Li(1, 0));
+    insns.emplace_back(Li(2, 233));
+    insns.emplace_back(Li(31, 0xff));
+    insns.emplace_back(nnpu::JumpInsn(0));
 
-    void Move() override
-    {
-        auto wIdx = writeIdx->Read();
-        auto wData = writeData->Read();
-
-        _updateFunc = [this, wIdx, wData]()
-        {
-            if (wIdx.HasData)
-            {
-                this->regs[wIdx.Data] = wData.Data;
-            }
-        };
-    }
-
-    WireData<uint32_t> Out1()
-    {
-        WireData<int> idx = readIdx1->Read();
-        if (idx.HasData)
-        {
-            return WireData<uint32_t>(true, regs[idx.Data]);
-        }
-        else
-        {
-            return WireData<uint32_t>(false);
-        }
-    }
-
-    const vector<uint32_t>& Values()
-    {
-        return regs;
-    }
-
-    void BindOutputs(WireManager &wm);
-
-private:
-    vector<uint32_t> regs;
-    std::shared_ptr<WireImpl<int>> readIdx1, readIdx2, writeIdx;
-    std::shared_ptr<WireImpl<uint32_t>> writeData;
-};
-
-void RegisterFile::BindOutputs(WireManager &wm)
-{
-    auto outWire1 = wm.Get<uint32_t>("RegOut1");
-    outWire1->SubscribeWriter(Binder<uint32_t>::Bind(&RegisterFile::Out1, sharedFromBase<RegisterFile>()));
-}
-
-class ALU : public SimModule
-{
-public:
-    ALU(WireManager &wm) : readIdx(0), calcIdx(-1), regWire(wm.Get<uint32_t>("RegOut1"))
-    {
-    }
-
-    void Move() override
-    {
-        auto regOut = regWire->Read();
-        _updateFunc = [this, regOut]()
-        {
-            calcIdx = readIdx;
-            regData = regOut.Data;
-            if (readIdx <= 31)
-                readIdx = readIdx + 1;
-        };
-    }
-
-    WireData<int> GetReadIdx()
-    {
-        return WireData<int>(true, readIdx);
-    }
-
-    WireData<int> GetWriteIdx()
-    {
-        if (calcIdx != -1)
-            return WireData<int>(true, calcIdx);
-        else
-            return WireData<int>(false);
-    }
-
-    WireData<uint32_t> GetRes()
-    {
-        // to implement other calculation, add logic at here.
-        return WireData<uint32_t>(true, regData * regData);
-    }
-
-    void BindOutputs(WireManager &wm);
-private:
-    int readIdx, calcIdx;
-    uint32_t regData;
-
-    std::shared_ptr<WireImpl<uint32_t>> regWire;
-};
-
-void ALU::BindOutputs(WireManager &wm)
-{
-    auto self = sharedFromBase<ALU>();
-    wm.Get<int>("RegReadIdx1")->SubscribeWriter(
-                Binder<int>::Bind(&ALU::GetReadIdx, self));
-    wm.Get<int>("RegWriteIdx")->SubscribeWriter(
-                Binder<int>::Bind(&ALU::GetWriteIdx, self));
-    wm.Get<uint32_t>("RegWriteData")->SubscribeWriter(
-                Binder<uint32_t>::Bind(&ALU::GetRes, self));
+    return insns;
 }
 
 int main(int argc, char *(argv[]))
 {
     WireManager wm;
-    std::shared_ptr<RegisterFile> reg(new RegisterFile(wm));
-    reg->BindOutputs(wm);
+    YAML::Node cfg = YAML::LoadFile("/home/jian/repositories/tvm/nnpu/nnpu_config.yaml");
+    std::shared_ptr<InsnMemModule> IF(new InsnMemModule(wm, cfg));
+    //cout << IF.get() << endl;
+    IF->SetInsns(init_insn());
+    IF->BindWires(wm);
 
-    std::shared_ptr<ALU> alu(new ALU(wm));
-    alu->BindOutputs(wm);
+    std::shared_ptr<InsnDecoder> ID(new InsnDecoder(wm, cfg));
+    ID->BindWires(wm);
 
-    for (int i = 0; i <= 32; ++i)
+    auto IFOut = wm.Get<InsnWrapper>("ID_out");
+    InsnDumper dumper;
+    for (int i = 0; i < 10; ++i)
     {
-        reg->Move();
-        alu->Move();
+        IF->Move();
+        ID->Move();
+        auto ifOut = IFOut->Read();
 
-        // update
-        reg->Update();
-        alu->Update();
-    }
-    cout << endl;
+        if (ifOut.HasData)
+        {
+            cout << "# " << ifOut.Data.pc << ": ";
+            ifOut.Data.insn->Call(dumper, cout);
+            cout << endl;
+        }
 
-    for (auto val : reg->Values())
-    {
-        cout << val << ' ';
+        IF->Update();
+        ID->Update();
     }
-    cout << endl;
 
     return 0;
 }

@@ -234,6 +234,21 @@ void AccMemsetInsn::Dump(ostream &os) const
        << " $" << AddrReg << ", $" << RowStrideReg << ", #" << Imm;
 }
 
+void NOPInsn::Dump(ostream &os) const
+{
+    os << "NOP";
+}
+
+void JumpInsn::Dump(ostream &os) const
+{
+    os << "Jump #" << Offset;
+}
+
+void BEZInsn::Dump(ostream &os) const
+{
+    os << "BEZ $" << CondReg << ", #" << Offset;
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)
