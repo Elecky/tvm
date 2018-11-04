@@ -12,6 +12,15 @@ register_file_size: 32
 # the issue queue will be cleared and fetch insn starts from next insn.
 predictBranchTaken: false
 
+issue_queue:
+  size: 8  # number of issue queue slots
+
+rob:
+  size: 16  # number of reorder buffer slots
+
+ReservationStations:
+  ALU: 8
+
 # dram configs
 dram:
   nchannel: 2
