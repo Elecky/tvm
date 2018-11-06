@@ -249,6 +249,30 @@ void BEZInsn::Dump(ostream &os) const
     os << "BEZ $" << CondReg << ", #" << Offset;
 }
 
+ALUBinaryInsn::ALUBinaryInsn(uint32_t _rdReg, uint32_t _rsReg, uint32_t _rtReg, ALUBinaryOp _op) :
+    RdReg(_rdReg), RsReg(_rsReg), RtReg(_rtReg), Op(_op)
+{}
+
+void ALUBinaryInsn::Dump(ostream &os) const
+{
+    os << ToString(Op) << " $" << RdReg << ", $" << RsReg << ", $" << RtReg;
+}
+
+const char* ToString(ALUBinaryOp op)
+{
+    switch (op)
+    {
+    case ALUBinaryOp::Add:
+        return "addu";
+    case ALUBinaryOp::Sub:
+        return "subu";
+    case ALUBinaryOp::Mul:
+        return "mulu";
+    default:
+        return "Unknown";
+    }
+}
+
 // ToString functions starts from here
 
 const char* ToString(VctrUnaryOp value)

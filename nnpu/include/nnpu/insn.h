@@ -19,7 +19,7 @@ enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
     MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy,
-    Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ
+    Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ, ALUBinary
 };
 
 /*!
@@ -632,6 +632,23 @@ struct BEZInsn
     void Dump(std::ostream &os) const;
 };
 
+enum class ALUBinaryOp { Add, Sub, Mul };
+const char* ToString(ALUBinaryOp op);
+
+struct ALUBinaryInsn
+{
+    ALUBinaryInsn() = default;
+
+    ALUBinaryInsn(uint32_t _rdReg, uint32_t _rsReg, uint32_t _rtReg, ALUBinaryOp _op);
+
+    uint32_t RdReg;
+    uint32_t RsReg, RtReg;
+
+    ALUBinaryOp Op;
+
+    void Dump(std::ostream &os) const;
+};
+
 /*
 * \brief nnpu instruction struct, contains a union of actual instructions, 
 *        and a InsnType field.
@@ -691,6 +708,8 @@ public:
         JumpInsn Jump;
 
         BEZInsn BEZ;
+
+        ALUBinaryInsn ALUBinary;
     };
 
     /* dispatch a call depends on the instruction type
@@ -795,6 +814,9 @@ public:
         case InsnType::BEZ:
             return functor(this->BEZ, std::forward<TArgs>(args)...);
 
+        case InsnType::ALUBinary:
+            return functor(this->ALUBinary, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -875,6 +897,9 @@ public:
     {}
 
     NNPUInsn(const BEZInsn &_insn) : Type(InsnType::BEZ), BEZ(_insn)
+    {}
+
+    NNPUInsn(const ALUBinaryInsn &_insn) : Type(InsnType::ALUBinary), ALUBinary(_insn)
     {}
 };
 

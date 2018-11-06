@@ -4,6 +4,8 @@
 #include <nnpusim/insn_decoder.h>
 #include <nnpusim/controller.h>
 #include <nnpusim/reg_file_module.h>
+#include <nnpusim/alu.h>
+#include <nnpusim/branch_unit.h>
 #include <vector>
 
 using namespace nnpu;
@@ -13,11 +15,14 @@ std::vector<NNPUInsn> init_insn()
 {
     vector<NNPUInsn> insns;
     using Li = nnpu::LiInsn;
-    insns.emplace_back(Li(0, 23));
-    insns.emplace_back(Li(1, 0));
-    insns.emplace_back(Li(2, 233));
-    insns.emplace_back(Li(31, 0xff));
-    insns.emplace_back(nnpu::JumpInsn(-4));
+    insns.emplace_back(Li(0, 5));
+    insns.emplace_back(Li(1, -1));
+    using Bin = nnpu::ALUBinaryInsn;
+    insns.emplace_back(nnpu::BEZInsn(4, 0));
+    insns.emplace_back(Bin(2, 0, 2, ALUBinaryOp::Add));
+    insns.emplace_back(Bin(0, 0, 1, ALUBinaryOp::Add));
+    insns.emplace_back(nnpu::JumpInsn(-3));
+    insns.emplace_back(nnpu::JumpInsn(0));
 
     return insns;
 }
@@ -49,17 +54,26 @@ int main(int argc, char *(argv[]))
     modules.push_back(ID);
     ID->BindWires(wm);
 
-    std::shared_ptr<Ctrl> ctrl(new Ctrl(wm, cfg));
+    std::shared_ptr<RegFileMod> regs(new RegFileMod(wm, cfg));
+    modules.push_back(std::static_pointer_cast<SimModule>(regs));
+
+    std::shared_ptr<Ctrl> ctrl(new Ctrl(wm, cfg, regs));
     modules.push_back(ctrl);
     ctrl->BindWires(wm);
 
-    std::shared_ptr<RegFileMod> regs(new RegFileMod(wm, cfg));
-    modules.push_back(std::static_pointer_cast<SimModule>(regs));
+    std::shared_ptr<ALU> alu(new ALU(wm, cfg));
+    modules.push_back(alu);
+    alu->BindWires(wm);
+
+    std::shared_ptr<BranchUnit> branchUnit(new BranchUnit(wm, cfg));
+    modules.push_back(branchUnit);
+    branchUnit->BindWires(wm);
     
     int i;
-    wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
-    for (i = 0; i < 20; ++i)
+    //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
+    for (i = 0; i < 50; ++i)
     {
+        cout << "end of cycle :" << i << endl;
         for (auto m : modules)
         {
             m->Move();
