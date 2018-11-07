@@ -24,6 +24,13 @@ std::vector<NNPUInsn> init_insn()
     insns.emplace_back(nnpu::JumpInsn(-3));
     insns.emplace_back(nnpu::JumpInsn(0));
 
+    InsnDumper dumper;
+    for (auto &item : insns)
+    {
+        item.Call(dumper, cout);
+        cout << endl;
+    }
+
     return insns;
 }
 
@@ -73,7 +80,7 @@ int main(int argc, char *(argv[]))
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
     for (i = 0; i < 50; ++i)
     {
-        cout << "end of cycle :" << i << endl;
+        //cout << "end of cycle :" << i << endl;
         for (auto m : modules)
         {
             m->Move();

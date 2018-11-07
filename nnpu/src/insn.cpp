@@ -474,4 +474,237 @@ const char* ToString(MatVctrOp value)
     }
 }
 
+KVList_t ALUBinaryInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[RsReg] = 0;
+    res[RtReg] = 0;
+
+    return res;
+}
+
+KVList_t VctrUnaryInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[VctrOutAddrReg] = 0;
+    res[VctrInAddrReg] = 0;
+    res[ElemCountReg] = 0;
+
+    return res;
+}
+
+KVList_t DMACopyInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[HostPhyAddrReg] = 0;
+    res[HostOffsetReg] = 0;
+    res[DramAddrReg] = 0;
+    res[SizeReg] = 0;
+
+    return res;
+}
+
+KVList_t BufferLSInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[DramAddrReg] = 0;
+    res[BufAddrReg] = 0;
+    res[SizeReg] = 0;
+
+    return res;
+}
+
+KVList_t BufferCopyInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[DstAddrReg] = 0;
+    res[DstStrideReg] = 0;
+    res[SrcAddrReg] = 0;
+    res[SrcStrideReg] = 0;
+    res[NUnitReg] = 0;
+
+    return res;
+}
+
+KVList_t MemsetInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[AddrReg] = 0;
+    res[NUnitReg] = 0;
+    res[StrideReg] = 0;
+
+    return res;
+}
+
+KVList_t AccMemsetInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[AddrReg] = 0;
+    res[RowStrideReg] = 0;
+
+    return res;
+}
+
+KVList_t LiInsn::GetRegMap() const
+{
+    return KVList_t();  // Li insn has no register operand.
+}
+
+KVList_t GemmInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[OutRowStrideReg] = 0;
+    res[In1AddrReg] = 0;
+    res[In1RowStrideReg] = 0;
+    res[In2AddrReg] = 0;
+    res[In2RowStrideReg] = 0;
+
+    return res;
+}
+
+KVList_t VctrBinaryInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[In1AddrReg] = 0;
+    res[In2AddrReg] = 0;
+
+    return res;
+}
+
+KVList_t VctrImmInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[InAddrReg] = 0;
+
+    return res;
+}
+
+KVList_t MatImmInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[InAddrReg] = 0;
+    
+    return res;
+}
+
+KVList_t VctrDotProdInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[In1AddrReg] = 0;
+    res[In2AddrReg] = 0;
+
+    return res;
+}
+
+KVList_t VctrReduceInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[InAddrReg] = 0;
+
+    return res;
+}
+
+KVList_t MatBinaryInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[OutRowStrideReg] = 0;
+    res[In1AddrReg] = 0;
+    res[In1RowStrideReg] = 0;
+    res[In2AddrReg] = 0;
+    res[In2RowStrideReg] = 0;
+
+    return res;
+}
+
+KVList_t MatReduceRowInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[InAddrReg] = 0;
+    res[InRowStrideReg] = 0;
+
+    return res;
+}
+
+KVList_t MatReduceColInsn::GetRegMap() const
+{
+    throw std::logic_error("Not implemented");
+}
+
+KVList_t MatVctrInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[OutRowStrideReg] = 0;
+    res[MatAddrReg] = 0;
+    res[MatRowStrideReg] = 0;
+    res[VctrAddrReg] = 0;
+
+    return res;
+}
+
+KVList_t MatRowDotInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[In1AddrReg] = 0;
+    res[In1RowStrideReg] = 0;
+    res[In2AddrReg] = 0;
+    res[In2RowStrideReg] = 0;
+
+    return res;
+}
+
+KVList_t VctrSclrInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[OutAddrReg] = 0;
+    res[VctrAddrReg] = 0;
+    res[SclrAddrReg] = 0;
+
+    return res;
+}
+
+KVList_t CopyAcc2BufInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[DstAddrReg] = 0;
+    res[DstStrideReg] = 0;
+    res[SrcAddrReg] = 0;
+    res[SrcStrideReg] = 0;
+    res[NUnitReg] = 0;
+
+    return res;
+}
+
+KVList_t NOPInsn::GetRegMap() const
+{
+    return KVList_t();
+}
+
+KVList_t JumpInsn::GetRegMap() const
+{
+    return KVList_t();
+}
+
+KVList_t BEZInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[CondReg] = 0;
+    
+    return res;
+}
+
+KVList_t StallInsn::GetRegMap() const
+{
+    return KVList_t();
+}
+
 }  // namespace nnpu

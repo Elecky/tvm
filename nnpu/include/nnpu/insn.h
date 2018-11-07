@@ -8,9 +8,16 @@ the instruction set definitions of nnpu simulator
 #include <cstdint>
 #include <iostream>
 #include <dmlc/logging.h>
+#include <nnpusim/typedef.h>
+#include <unordered_map>
 
 namespace nnpu
 {
+
+// the K-V list type to store register values.
+using KVList_t = std::unordered_map<regNo_t, reg_t>;
+using dst_pair_t = std::pair<bool, regNo_t>;
+using branch_off_t = std::pair<bool, int32_t>;
 
 /*
 * instruction type, similar to opcode in MIPS instruction
@@ -62,6 +69,33 @@ public:
     * \param os: the stream to which to dump.
     */
     void Dump(std::ostream& os) const;
+
+    /*!
+     * \brief get the register value map.
+     * \return a KVList_t contains all regiseters operands in key.
+    */
+    KVList_t GetRegMap() const;
+
+    /*!
+     * \brief get the destination register of this insn.
+     * \ return a pair<bool, regNo_t>, first value is has destination register or not,
+     *                                 second value is the destination register No.
+    */
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    /*!
+     * \brief check whether this insn is a branch insn,
+     *        and get the branch offset of this insn if so.
+     * \return a pair<bool, int32_t>, first value indicates whether this insn is a branch,
+     *                                second value is the branch offset.
+    */
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 /*!
@@ -96,6 +130,18 @@ public:
     * \param os: the stream to which to dump.
     */
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 /*
@@ -127,6 +173,18 @@ public:
     * \param os: the stream to which to dump.
     */
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct BufferCopyInsn
@@ -155,6 +213,18 @@ public:
     * \param os: the stream to which to dump.
     */
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct MemsetInsn
@@ -176,6 +246,18 @@ public:
     double Imm;
     
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 /*!
@@ -201,6 +283,18 @@ public:
     double Imm;  // currently, accumulation memory is only inited by zero.
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 /*!
@@ -224,6 +318,18 @@ public:
     * \param os: the stream to which to dump.
     */
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {true, ResReg};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct StallInsn
@@ -232,6 +338,18 @@ public:
     StallInsn() = default;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct GemmInsn
@@ -275,6 +393,18 @@ public:
     * \param os: the stream to which to dump.
     */
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 enum class VctrBinaryOp { Add, Sub, Div, Mul, GTM /* greater than merge */ };
@@ -302,6 +432,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 enum class VctrImmOp { Add, Sub, Div, Mul,GTM/* greater than merge */, RSub , RDiv };
@@ -328,6 +470,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 enum class MatImmOp { Add,Mul,RSub/* greater than merge */ };
@@ -354,6 +508,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct VctrDotProdInsn
@@ -376,6 +542,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 enum class ReduceOp { Sum, Max, Min };
@@ -400,6 +578,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 enum class MatBinaryOp { Add, Sub, Mul };
@@ -432,6 +622,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct MatReduceRowInsn
@@ -458,6 +660,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream &os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct MatReduceColInsn
@@ -480,6 +694,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream &os) const;
+    
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 enum class MatVctrOp { Add, Sub, Mul };
@@ -510,6 +736,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 /*!
@@ -542,6 +780,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 enum class VctrSclrOp { Add, Sub, Div, Mul,GTM/* greater than merge */, RSub , RDiv };
@@ -568,6 +818,18 @@ public:
     ModeCode Mode;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct CopyAcc2BufInsn
@@ -596,6 +858,18 @@ public:
     * \param os: the stream to which to dump.
     */
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct NOPInsn
@@ -603,6 +877,18 @@ struct NOPInsn
     NOPInsn() = default;
 
     void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 struct JumpInsn
@@ -616,6 +902,19 @@ struct JumpInsn
     int32_t Offset;
 
     void Dump(std::ostream &os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        // Jump is not a branch. and Jump is expilictly handled in code.
+        return {false, 0};
+    }
 };
 
 struct BEZInsn
@@ -630,6 +929,18 @@ struct BEZInsn
     uint32_t CondReg;
 
     void Dump(std::ostream &os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {true, Offset};
+    }
 };
 
 enum class ALUBinaryOp { Add, Sub, Mul };
@@ -647,6 +958,22 @@ struct ALUBinaryInsn
     ALUBinaryOp Op;
 
     void Dump(std::ostream &os) const;
+
+    /*!
+     * \brief get the register value map.
+     * \return a KVList_t contains all regiseters operands in key.
+    */
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {true, RdReg};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
 };
 
 /*
@@ -908,7 +1235,7 @@ struct InsnDumper
     using result_type = void;
 public:
     template<typename T>
-    void operator()(const T& value, std::ostream& os)
+    inline void operator()(const T& value, std::ostream& os)
     {
         value.Dump(os);
     }
