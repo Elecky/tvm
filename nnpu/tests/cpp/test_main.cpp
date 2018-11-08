@@ -6,6 +6,8 @@
 #include <nnpusim/reg_file_module.h>
 #include <nnpusim/alu.h>
 #include <nnpusim/branch_unit.h>
+#include <nnpusim/load_store_unit.h>
+#include <nnpusim/sclr_buffer.h>
 #include <vector>
 
 using namespace nnpu;
@@ -15,13 +17,19 @@ std::vector<NNPUInsn> init_insn()
 {
     vector<NNPUInsn> insns;
     using Li = nnpu::LiInsn;
+    using Bin = nnpu::ALUBinaryInsn;
+    using Store = nnpu::SclrStoreInsn;
+    using Load = nnpu::SclrLoadInsn;
+    
     insns.emplace_back(Li(0, 5));
     insns.emplace_back(Li(1, -1));
-    using Bin = nnpu::ALUBinaryInsn;
+    insns.emplace_back(Li(16, 0));
+    insns.emplace_back(Store(16, 0, 0));
     insns.emplace_back(nnpu::BEZInsn(4, 0));
     insns.emplace_back(Bin(2, 0, 2, ALUBinaryOp::Add));
     insns.emplace_back(Bin(0, 0, 1, ALUBinaryOp::Add));
     insns.emplace_back(nnpu::JumpInsn(-3));
+    insns.emplace_back(Load(16, 15, 0));
     insns.emplace_back(nnpu::JumpInsn(0));
 
     InsnDumper dumper;
@@ -75,6 +83,14 @@ int main(int argc, char *(argv[]))
     std::shared_ptr<BranchUnit> branchUnit(new BranchUnit(wm, cfg));
     modules.push_back(branchUnit);
     branchUnit->BindWires(wm);
+
+    std::shared_ptr<LoadStoreUnit> LSU(new LoadStoreUnit(wm, cfg));
+    LSU->BindWires(wm);
+    modules.push_back(LSU);
+
+    std::shared_ptr<SclrBuffer> sclrBuffer(new SclrBuffer(wm, cfg));
+    sclrBuffer->BindWires(wm);
+    modules.push_back(sclrBuffer);
     
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));

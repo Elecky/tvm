@@ -258,6 +258,25 @@ void ALUBinaryInsn::Dump(ostream &os) const
     os << ToString(Op) << " $" << RdReg << ", $" << RsReg << ", $" << RtReg;
 }
 
+SclrLoadInsn::SclrLoadInsn(regNo_t _addrReg, regNo_t _rdReg, uint32_t _offset) :
+    AddrReg(_addrReg), RdReg(_rdReg), Offset(_offset)
+{}
+
+void SclrLoadInsn::Dump(ostream &os) const
+{
+    os << "Load.S $" << RdReg << ", ($" << AddrReg << " + " << Offset << ")";
+}
+
+SclrStoreInsn::SclrStoreInsn(regNo_t _addrReg, regNo_t _rsReg, uint32_t _offset) :
+    AddrReg(_addrReg), RsReg(_rsReg), Offset(_offset)
+{
+}
+
+void SclrStoreInsn::Dump(ostream &os) const
+{
+    os << "Load.S $" << RsReg << ", ($" << AddrReg << " + " << Offset << ")";
+}
+
 const char* ToString(ALUBinaryOp op)
 {
     switch (op)
@@ -705,6 +724,23 @@ KVList_t BEZInsn::GetRegMap() const
 KVList_t StallInsn::GetRegMap() const
 {
     return KVList_t();
+}
+
+KVList_t SclrLoadInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[AddrReg] = 0;
+
+    return res;
+}
+
+KVList_t SclrStoreInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[AddrReg] = 0;
+    res[RsReg] = 0;
+
+    return res;
 }
 
 }  // namespace nnpu

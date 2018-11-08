@@ -26,7 +26,7 @@ enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
     MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy,
-    Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ, ALUBinary
+    Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ, ALUBinary, SclrLoad, SclrStore
 };
 
 /*!
@@ -943,7 +943,7 @@ struct BEZInsn
     }
 };
 
-enum class ALUBinaryOp { Add, Sub, Mul };
+enum class ALUBinaryOp { Add, Sub, Mul, Div, Mod };
 const char* ToString(ALUBinaryOp op);
 
 struct ALUBinaryInsn
@@ -968,6 +968,62 @@ struct ALUBinaryInsn
     inline dst_pair_t GetDstReg() const
     {
         return {true, RdReg};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
+};
+
+struct SclrLoadInsn
+{
+    SclrLoadInsn() = default;
+
+    SclrLoadInsn(regNo_t _addrReg, regNo_t _rdReg, uint32_t _offset);
+
+    regNo_t AddrReg;
+    regNo_t RdReg;
+
+    uint32_t Offset;
+
+    void Dump(std::ostream &os) const;
+
+    /*!
+     * \brief get the register value map.
+     * \return a KVList_t contains all regiseters operands in key.
+    */
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {true, RdReg};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
+};
+
+struct SclrStoreInsn
+{
+    SclrStoreInsn() = default;
+
+    SclrStoreInsn(regNo_t _addrReg, regNo_t _rsReg, uint32_t _offset);
+
+    regNo_t AddrReg;
+    regNo_t RsReg;
+
+    uint32_t Offset;
+
+    void Dump(std::ostream &os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};  // store insn has no register destination.
     }
 
     inline branch_off_t GetBranchOffset() const
@@ -1037,6 +1093,10 @@ public:
         BEZInsn BEZ;
 
         ALUBinaryInsn ALUBinary;
+
+        SclrLoadInsn SclrLoad;
+
+        SclrStoreInsn SclrStore;
     };
 
     /* dispatch a call depends on the instruction type
@@ -1144,6 +1204,12 @@ public:
         case InsnType::ALUBinary:
             return functor(this->ALUBinary, std::forward<TArgs>(args)...);
 
+        case InsnType::SclrLoad:
+            return functor(this->SclrLoad, std::forward<TArgs>(args)...);
+
+        case InsnType::SclrStore:
+            return functor(this->SclrStore, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -1227,6 +1293,12 @@ public:
     {}
 
     NNPUInsn(const ALUBinaryInsn &_insn) : Type(InsnType::ALUBinary), ALUBinary(_insn)
+    {}
+
+    NNPUInsn(const SclrLoadInsn &_insn) : Type(InsnType::SclrLoad), SclrLoad(_insn)
+    {}
+
+    NNPUInsn(const SclrStoreInsn &_insn) : Type(InsnType::SclrStore), SclrStore(_insn)
     {}
 };
 

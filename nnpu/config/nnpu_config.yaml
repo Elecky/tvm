@@ -63,6 +63,11 @@ acc_buffer:
   # memory address map policy
   map_policy: interleaved
 
+sclr_buffer:
+  r_delay: 2
+  w_delay: 2
+  log_size: 12  # 4KB scalar buffer.
+
 vctr_scratchpad: {}
 mat_scratchpad: {}
 
