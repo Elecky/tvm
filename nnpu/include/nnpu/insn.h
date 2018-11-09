@@ -926,7 +926,7 @@ struct BEZInsn
     {}
 
     int32_t Offset;
-    uint32_t CondReg;
+    regNo_t CondReg;
 
     void Dump(std::ostream &os) const;
 
@@ -943,7 +943,7 @@ struct BEZInsn
     }
 };
 
-enum class ALUBinaryOp { Add, Sub, Mul, Div, Mod };
+enum class ALUBinaryOp { Add, Sub, Mul, DivU, ModU };
 const char* ToString(ALUBinaryOp op);
 
 struct ALUBinaryInsn
@@ -952,8 +952,8 @@ struct ALUBinaryInsn
 
     ALUBinaryInsn(uint32_t _rdReg, uint32_t _rsReg, uint32_t _rtReg, ALUBinaryOp _op);
 
-    uint32_t RdReg;
-    uint32_t RsReg, RtReg;
+    regNo_t RdReg;
+    regNo_t RsReg, RtReg;
 
     ALUBinaryOp Op;
 

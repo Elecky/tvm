@@ -50,6 +50,7 @@ std::vector<NNPUInsn> load_store_test_insns()
     using Load = nnpu::SclrLoadInsn;
 
     insns.emplace_back(Li(0, 0));
+    insns.emplace_back(Li(16, 7));
     insns.emplace_back(Li(1, 1));
     insns.emplace_back(Store(1, 0, 0));
     insns.emplace_back(Li(1, 2));
@@ -67,9 +68,10 @@ std::vector<NNPUInsn> load_store_test_insns()
     insns.emplace_back(Bin(2, 0, 4, ALUBinaryOp::Mul));  // $2 <- 4*i
     insns.emplace_back(Load(3, 2, -4));  // $3 <- load $2 - 4
     insns.emplace_back(Bin(0, 0, 1, ALUBinaryOp::Add));  // i = i - 1
+    insns.emplace_back(Bin(3, 16, 3, ALUBinaryOp::Add));
     insns.emplace_back(Store(3, 2, 12));
 
-    insns.emplace_back(nnpu::JumpInsn(-5));
+    insns.emplace_back(nnpu::JumpInsn(-6));
     insns.emplace_back(Load(31, 0, 28));
     insns.emplace_back(nnpu::JumpInsn(0));
 
@@ -135,6 +137,7 @@ int main(int argc, char *(argv[]))
     
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
+    cout << "\n\n";
     for (i = 0; i < 60; ++i)
     {
         //cout << "end of cycle :" << i << endl;
@@ -149,6 +152,13 @@ int main(int argc, char *(argv[]))
         {
             m->Update();
         }
+        
+        /*
+        for (auto m : modules)
+        {
+            m->Dump(DumpLevel::Brief, cout);
+            //cout << endl;
+        }*/
     }
 
     return 0;
