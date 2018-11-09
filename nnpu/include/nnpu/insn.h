@@ -980,10 +980,10 @@ struct SclrLoadInsn
 {
     SclrLoadInsn() = default;
 
-    SclrLoadInsn(regNo_t _addrReg, regNo_t _rdReg, uint32_t _offset);
+    SclrLoadInsn(regNo_t _rdReg, regNo_t _addrReg, uint32_t _offset);
 
-    regNo_t AddrReg;
     regNo_t RdReg;
+    regNo_t AddrReg;
 
     uint32_t Offset;
 
@@ -1010,10 +1010,10 @@ struct SclrStoreInsn
 {
     SclrStoreInsn() = default;
 
-    SclrStoreInsn(regNo_t _addrReg, regNo_t _rsReg, uint32_t _offset);
+    SclrStoreInsn(regNo_t _rsReg, regNo_t _addrReg, uint32_t _offset);
 
-    regNo_t AddrReg;
     regNo_t RsReg;
+    regNo_t AddrReg;
 
     uint32_t Offset;
 

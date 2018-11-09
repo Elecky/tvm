@@ -23,13 +23,54 @@ std::vector<NNPUInsn> init_insn()
     
     insns.emplace_back(Li(0, 5));
     insns.emplace_back(Li(1, -1));
-    insns.emplace_back(Li(16, 0));
-    insns.emplace_back(Store(16, 0, 0));
     insns.emplace_back(nnpu::BEZInsn(4, 0));
     insns.emplace_back(Bin(2, 0, 2, ALUBinaryOp::Add));
     insns.emplace_back(Bin(0, 0, 1, ALUBinaryOp::Add));
     insns.emplace_back(nnpu::JumpInsn(-3));
-    insns.emplace_back(Load(16, 15, 0));
+    insns.emplace_back(nnpu::JumpInsn(0));
+
+    InsnDumper dumper;
+    for (auto &item : insns)
+    {
+        item.Call(dumper, cout);
+        cout << endl;
+    }
+
+    return insns;
+}
+
+std::vector<NNPUInsn> load_store_test_insns()
+{
+    std::vector<NNPUInsn> init_insn();
+
+    vector<NNPUInsn> insns;
+    using Li = nnpu::LiInsn;
+    using Bin = nnpu::ALUBinaryInsn;
+    using Store = nnpu::SclrStoreInsn;
+    using Load = nnpu::SclrLoadInsn;
+
+    insns.emplace_back(Li(0, 0));
+    insns.emplace_back(Li(1, 1));
+    insns.emplace_back(Store(1, 0, 0));
+    insns.emplace_back(Li(1, 2));
+    insns.emplace_back(Store(1, 0, 4));
+    insns.emplace_back(Li(1, 3));
+    insns.emplace_back(Store(1, 0, 8));
+    insns.emplace_back(Li(1, 65537));
+    insns.emplace_back(Store(1, 0, 12));
+    
+    insns.emplace_back(Li(0, 4));  // $0 == i
+    insns.emplace_back(Li(1, -1));  // $1 == -1
+    insns.emplace_back(Li(4, 4));  // $4 == 4
+    insns.emplace_back(nnpu::BEZInsn(6, 0));
+    
+    insns.emplace_back(Bin(2, 0, 4, ALUBinaryOp::Mul));  // $2 <- 4*i
+    insns.emplace_back(Load(3, 2, -4));  // $3 <- load $2 - 4
+    insns.emplace_back(Bin(0, 0, 1, ALUBinaryOp::Add));  // i = i - 1
+    insns.emplace_back(Store(3, 2, 12));
+
+    insns.emplace_back(nnpu::JumpInsn(-5));
+    insns.emplace_back(Load(31, 0, 28));
     insns.emplace_back(nnpu::JumpInsn(0));
 
     InsnDumper dumper;
@@ -62,7 +103,7 @@ int main(int argc, char *(argv[]))
     std::shared_ptr<InsnMemModule> IF(new InsnMemModule(wm, cfg));
     modules.push_back(IF);
     //cout << IF.get() << endl;
-    IF->SetInsns(init_insn());
+    IF->SetInsns(load_store_test_insns());
     IF->BindWires(wm);
 
     std::shared_ptr<InsnDecoder> ID(new InsnDecoder(wm, cfg));
@@ -94,7 +135,7 @@ int main(int argc, char *(argv[]))
     
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
-    for (i = 0; i < 50; ++i)
+    for (i = 0; i < 60; ++i)
     {
         //cout << "end of cycle :" << i << endl;
         for (auto m : modules)

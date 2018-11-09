@@ -258,8 +258,8 @@ void ALUBinaryInsn::Dump(ostream &os) const
     os << ToString(Op) << " $" << RdReg << ", $" << RsReg << ", $" << RtReg;
 }
 
-SclrLoadInsn::SclrLoadInsn(regNo_t _addrReg, regNo_t _rdReg, uint32_t _offset) :
-    AddrReg(_addrReg), RdReg(_rdReg), Offset(_offset)
+SclrLoadInsn::SclrLoadInsn(regNo_t _rdReg, regNo_t _addrReg, uint32_t _offset) :
+    RdReg(_rdReg), AddrReg(_addrReg), Offset(_offset)
 {}
 
 void SclrLoadInsn::Dump(ostream &os) const
@@ -267,14 +267,14 @@ void SclrLoadInsn::Dump(ostream &os) const
     os << "Load.S $" << RdReg << ", ($" << AddrReg << " + " << Offset << ")";
 }
 
-SclrStoreInsn::SclrStoreInsn(regNo_t _addrReg, regNo_t _rsReg, uint32_t _offset) :
-    AddrReg(_addrReg), RsReg(_rsReg), Offset(_offset)
+SclrStoreInsn::SclrStoreInsn(regNo_t _rsReg, regNo_t _addrReg, uint32_t _offset) :
+   RsReg(_rsReg),  AddrReg(_addrReg), Offset(_offset)
 {
 }
 
 void SclrStoreInsn::Dump(ostream &os) const
 {
-    os << "Load.S $" << RsReg << ", ($" << AddrReg << " + " << Offset << ")";
+    os << "Store.S $" << RsReg << ", ($" << AddrReg << " + " << Offset << ")";
 }
 
 const char* ToString(ALUBinaryOp op)
