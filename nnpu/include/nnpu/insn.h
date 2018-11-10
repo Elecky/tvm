@@ -26,7 +26,8 @@ enum class InsnType
 {
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
     MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy,
-    Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ, ALUBinary, SclrLoad, SclrStore
+    Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ, ALUBinary, SclrLoad, SclrStore, BNEZ,
+    ALURegImm
 };
 
 /*!
@@ -943,6 +944,35 @@ struct BEZInsn
     }
 };
 
+/*!
+ * \brief branch not equal to Zero insn.
+*/
+struct BNEZInsn
+{
+    BNEZInsn() = default;
+
+    BNEZInsn(int32_t _offset, uint32_t _condReg) :
+        Offset(_offset), CondReg(_condReg)
+    {}
+
+    int32_t Offset;
+    regNo_t CondReg;
+
+    void Dump(std::ostream &os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {true, Offset};
+    }
+};
+
 enum class ALUBinaryOp { Add, Sub, Mul, DivU, ModU };
 const char* ToString(ALUBinaryOp op);
 
@@ -956,6 +986,40 @@ struct ALUBinaryInsn
     regNo_t RsReg, RtReg;
 
     ALUBinaryOp Op;
+
+    void Dump(std::ostream &os) const;
+
+    /*!
+     * \brief get the register value map.
+     * \return a KVList_t contains all regiseters operands in key.
+    */
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {true, RdReg};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
+};
+
+enum class ALURegImmOp { AddIU, ISubU };
+const char * ToString(ALURegImmOp op);
+
+struct ALURegImmInsn
+{
+    ALURegImmInsn() = default;
+
+    ALURegImmInsn(regNo_t _rdReg, regNo_t _rsReg, reg_t _imm, ALURegImmOp _op);
+
+    regNo_t RdReg;
+    regNo_t RsReg;
+
+    reg_t Imm;
+    ALURegImmOp Op;
 
     void Dump(std::ostream &os) const;
 
@@ -1092,11 +1156,15 @@ public:
 
         BEZInsn BEZ;
 
+        BNEZInsn BNEZ;
+
         ALUBinaryInsn ALUBinary;
 
         SclrLoadInsn SclrLoad;
 
         SclrStoreInsn SclrStore;
+
+        ALURegImmInsn ALURegImm;
     };
 
     /* dispatch a call depends on the instruction type
@@ -1210,6 +1278,12 @@ public:
         case InsnType::SclrStore:
             return functor(this->SclrStore, std::forward<TArgs>(args)...);
 
+        case InsnType::BNEZ:
+            return functor(this->BNEZ, std::forward<TArgs>(args)...);
+
+        case InsnType::ALURegImm:
+            return functor(this->ALURegImm, std::forward<TArgs>(args)...);
+
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
                        << ". please modify NNPUInsn::Call to implement missing dispatch";
@@ -1299,6 +1373,12 @@ public:
     {}
 
     NNPUInsn(const SclrStoreInsn &_insn) : Type(InsnType::SclrStore), SclrStore(_insn)
+    {}
+
+    NNPUInsn(const BNEZInsn &_insn) : Type(InsnType::BNEZ), BNEZ(_insn)
+    {}
+
+    NNPUInsn(const ALURegImmInsn &_insn) : Type(InsnType::ALURegImm), ALURegImm(_insn)
     {}
 };
 
