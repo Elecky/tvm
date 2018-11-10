@@ -61,11 +61,11 @@ std::vector<NNPUInsn> load_store_test_insns()
     insns.emplace_back(Li(1, 65537));
     insns.emplace_back(Store(1, 0, 12));
     
-    insns.emplace_back(Li(0, 4));  // $0 == i
-    insns.emplace_back(Li(4, 4));  // $4 == 4
+    insns.emplace_back(Li(0, 4));  // $0 == i(4)
+    //insns.emplace_back(Li(4, 4));  // $4 == 4
     //insns.emplace_back(nnpu::BEZInsn(7, 0));
     
-    insns.emplace_back(Bin(2, 0, 4, ALUBinaryOp::Mul));  // $2 <- 4*i
+    insns.emplace_back(Unary(2, 0, 4, ALURegImmOp::MulIU));  // $2 <- 4*i
     insns.emplace_back(Load(3, 2, -4));  // $3 <- load $2 - 4
     insns.emplace_back(Bin(3, 16, 3, ALUBinaryOp::Add));
     insns.emplace_back(Unary(0, 0, -1, ALURegImmOp::AddIU));  // i = i - 1

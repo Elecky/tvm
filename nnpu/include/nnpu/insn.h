@@ -973,7 +973,8 @@ struct BNEZInsn
     }
 };
 
-enum class ALUBinaryOp { Add, Sub, Mul, DivU, ModU };
+enum class ALUBinaryOp { Add, Sub, Mul, DivU, ModU, SLTU /*set less than unsigned*/, 
+                         SEQ, XOR, And, Or };
 const char* ToString(ALUBinaryOp op);
 
 struct ALUBinaryInsn
@@ -1006,7 +1007,8 @@ struct ALUBinaryInsn
     }
 };
 
-enum class ALURegImmOp { AddIU, ISubU };
+enum class ALURegImmOp { AddIU, ISubU /*Imm subtract Register*/, MulIU, DivIU, 
+                         ModIU, SLTIU, SEQI, XORI, AndI, OrI };
 const char * ToString(ALURegImmOp op);
 
 struct ALURegImmInsn

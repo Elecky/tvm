@@ -307,6 +307,17 @@ const char* ToString(ALUBinaryOp op)
         return "DivU";
     case ALUBinaryOp::ModU:
         return "ModU";
+    case ALUBinaryOp::SLTU:
+        return "SLTU";
+    case ALUBinaryOp::SEQ:
+        return "SEQ";
+    case ALUBinaryOp::XOR:
+        return "XOR";
+    case ALUBinaryOp::And:
+        return "And";
+    case ALUBinaryOp::Or:
+        return "Or";
+    
     default:
         return "Unknown";
     }
@@ -320,6 +331,22 @@ const char * ToString(ALURegImmOp op)
         return "AddIU";
     case ALURegImmOp::ISubU:
         return "ISubU";
+    case ALURegImmOp::MulIU:
+        return "MulIU";
+    case ALURegImmOp::DivIU:
+        return "DivIU";
+    case ALURegImmOp::ModIU:
+        return "ModIU";
+    case ALURegImmOp::SLTIU:
+        return "SLUIU";
+    case ALURegImmOp::SEQI:
+        return "SEQI";
+    case ALURegImmOp::XORI:
+        return "XORI";
+    case ALURegImmOp::AndI:
+        return "AndI";
+    case ALURegImmOp::OrI:
+        return "OrI";
 
     default:
         return "UnkownRegImm";
