@@ -41,8 +41,6 @@ std::vector<NNPUInsn> init_insn()
 
 std::vector<NNPUInsn> load_store_test_insns()
 {
-    std::vector<NNPUInsn> init_insn();
-
     vector<NNPUInsn> insns;
     using Li = nnpu::LiInsn;
     using Bin = nnpu::ALUBinaryInsn;
@@ -86,6 +84,66 @@ std::vector<NNPUInsn> load_store_test_insns()
     return insns;
 }
 
+std::vector<NNPUInsn> insert_sort_insns()
+{
+    vector<NNPUInsn> insns;
+    using Li = nnpu::LiInsn;
+    using Bin = nnpu::ALUBinaryInsn;
+    using Store = nnpu::SclrStoreInsn;
+    using Load = nnpu::SclrLoadInsn;
+    using Unary = nnpu::ALURegImmInsn;
+
+    insns.emplace_back(Li(0, 0));
+    insns.emplace_back(Li(1, 29));
+    insns.emplace_back(Store(1, 0, 0));
+    insns.emplace_back(Li(1, 255));
+    insns.emplace_back(Store(1, 0, 4));
+    insns.emplace_back(Li(1, 8));
+    insns.emplace_back(Store(1, 0, 8));
+    insns.emplace_back(Li(1, 65537));
+    insns.emplace_back(Store(1, 0, 12));
+    insns.emplace_back(Li(1, 233));
+    insns.emplace_back(Store(1, 0, 16));
+
+    // insert sort
+    insns.emplace_back(Li(1, 1));  // let $1=i;  $1 <= 1
+
+    insns.emplace_back(Unary(2, 1, 5, ALURegImmOp::SLTIU));  // $2 = $1 < 5
+    insns.emplace_back(BEZInsn(13, 2));  // BEZ $2, #??
+
+    insns.emplace_back(Unary(3, 1, 4, ALURegImmOp::MulIU));  // let $3=j <= 4 * i
+    insns.emplace_back(Load(4, 3, 0));  // let $4 = arr[i]
+
+    insns.emplace_back(BEZInsn(7, 3));  // if j == 0, end while
+    insns.emplace_back(Load(5, 3, -4));  // load a[j / 4 - 1]
+    insns.emplace_back(Bin(2, 4, 5, ALUBinaryOp::SLTU));  // key < a[j / 4 - 1] ?
+    insns.emplace_back(BEZInsn(4, 2));  // if not, end while
+    // if key is less
+    insns.emplace_back(Store(5, 3, 0));  // a[j / 4] = a[j / 4 - 1]
+    insns.emplace_back(Unary(3, 3, -4, ALURegImmOp::AddIU));  // j = j - 4
+    insns.emplace_back(JumpInsn(-6));
+
+    // end of while
+    insns.emplace_back(Store(4, 3, 0));
+
+
+    insns.emplace_back(Unary(1, 1, 1, ALURegImmOp::AddIU));
+    insns.emplace_back(JumpInsn(-13));
+
+    // load all for once
+    insns.emplace_back(Li(1, 0));  // let $1=i;  $1 <= 0
+
+    insns.emplace_back(Unary(2, 1, 20, ALURegImmOp::SLTIU));  // $2 = $1 < 20
+    insns.emplace_back(BEZInsn(4, 2));
+    insns.emplace_back(Load(16, 1, 0));
+    insns.emplace_back(Unary(1, 1, 4, ALURegImmOp::AddIU));
+    insns.emplace_back(JumpInsn(-4));
+
+    insns.emplace_back(JumpInsn(0));
+
+    return insns;
+}
+
 WireData<bool> branchOut(int *i, int on)
 {
     if (*i == on)
@@ -106,7 +164,7 @@ int main(int argc, char *(argv[]))
     std::shared_ptr<InsnMemModule> IF(new InsnMemModule(wm, cfg));
     modules.push_back(IF);
     //cout << IF.get() << endl;
-    IF->SetInsns(load_store_test_insns());
+    IF->SetInsns(insert_sort_insns());
     IF->BindWires(wm);
 
     std::shared_ptr<InsnDecoder> ID(new InsnDecoder(wm, cfg));
@@ -139,7 +197,7 @@ int main(int argc, char *(argv[]))
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
     cout << "\n\n";
-    for (i = 0; i < 90; ++i)
+    for (i = 0; i < 200; ++i)
     {
         //cout << "end of cycle :" << i << endl;
         for (auto m : modules)
