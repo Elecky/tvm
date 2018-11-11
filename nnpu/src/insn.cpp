@@ -249,6 +249,11 @@ void BEZInsn::Dump(ostream &os) const
     os << "BEZ $" << CondReg << ", #" << Offset;
 }
 
+void BNEZInsn::Dump(ostream &os) const
+{
+    os << "BNEZ $" << CondReg << ", #" << Offset;
+}
+
 ALUBinaryInsn::ALUBinaryInsn(uint32_t _rdReg, uint32_t _rsReg, uint32_t _rtReg, ALUBinaryOp _op) :
     RdReg(_rdReg), RsReg(_rsReg), RtReg(_rtReg), Op(_op)
 {}
@@ -277,22 +282,76 @@ void SclrStoreInsn::Dump(ostream &os) const
     os << "Store.S $" << RsReg << ", ($" << AddrReg << " + " << Offset << ")";
 }
 
+ALURegImmInsn::ALURegImmInsn(regNo_t _rdReg, regNo_t _rsReg, reg_t _imm, ALURegImmOp _op) :
+    RdReg(_rdReg), RsReg(_rsReg), Imm(_imm), Op(_op)
+{}
+
+void ALURegImmInsn::Dump(ostream &os) const
+{
+    os << ToString(Op) << " $" << RdReg << ", $" << RsReg << ", #" << Imm;
+}
+
+// ToString functions starts from here
+
 const char* ToString(ALUBinaryOp op)
 {
     switch (op)
     {
     case ALUBinaryOp::Add:
-        return "addu";
+        return "AddU";
     case ALUBinaryOp::Sub:
-        return "subu";
+        return "SubU";
     case ALUBinaryOp::Mul:
-        return "mulu";
+        return "MulU";
+    case ALUBinaryOp::DivU:
+        return "DivU";
+    case ALUBinaryOp::ModU:
+        return "ModU";
+    case ALUBinaryOp::SLTU:
+        return "SLTU";
+    case ALUBinaryOp::SEQ:
+        return "SEQ";
+    case ALUBinaryOp::XOR:
+        return "XOR";
+    case ALUBinaryOp::And:
+        return "And";
+    case ALUBinaryOp::Or:
+        return "Or";
+    
     default:
         return "Unknown";
     }
 }
 
-// ToString functions starts from here
+const char * ToString(ALURegImmOp op)
+{
+    switch (op)
+    {
+    case ALURegImmOp::AddIU:
+        return "AddIU";
+    case ALURegImmOp::ISubU:
+        return "ISubU";
+    case ALURegImmOp::MulIU:
+        return "MulIU";
+    case ALURegImmOp::DivIU:
+        return "DivIU";
+    case ALURegImmOp::ModIU:
+        return "ModIU";
+    case ALURegImmOp::SLTIU:
+        return "SLUIU";
+    case ALURegImmOp::SEQI:
+        return "SEQI";
+    case ALURegImmOp::XORI:
+        return "XORI";
+    case ALURegImmOp::AndI:
+        return "AndI";
+    case ALURegImmOp::OrI:
+        return "OrI";
+
+    default:
+        return "UnkownRegImm";
+    }
+}
 
 const char* ToString(VctrUnaryOp value)
 {
@@ -721,6 +780,14 @@ KVList_t BEZInsn::GetRegMap() const
     return res;
 }
 
+KVList_t BNEZInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[CondReg] = 0;
+    
+    return res;
+}
+
 KVList_t StallInsn::GetRegMap() const
 {
     return KVList_t();
@@ -738,6 +805,14 @@ KVList_t SclrStoreInsn::GetRegMap() const
 {
     KVList_t res;
     res[AddrReg] = 0;
+    res[RsReg] = 0;
+
+    return res;
+}
+
+KVList_t ALURegImmInsn::GetRegMap() const
+{
+    KVList_t res;
     res[RsReg] = 0;
 
     return res;
