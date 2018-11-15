@@ -3,8 +3,11 @@ dtype_w: int16
 dtype_n: int8
 
 # scalar register file configs
-# number of register file elements
-register_file_size: 32
+register_file:
+  size: 32  # number of architectural registers.
+  read_port_num: 6  # number of future file read ports, can be no less than 6,
+                    # since some insn has to read 6 reigsters.
+  read_port_group_size: 2  # the number of read port comsumed by a insn is K times of this value.
 
 # predict a branch is taken or just fall through.
 # if false, IF will continue fetching next insn, and wait for branch request.
@@ -14,6 +17,7 @@ predictBranchTaken: false
 
 issue_queue:
   size: 8  # number of issue queue slots
+  issue_depth: 2  # how many insns can be fetched and issued on every cycle.
 
 rob:
   size: 16  # number of reorder buffer slots

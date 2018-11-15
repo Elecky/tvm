@@ -59,7 +59,7 @@ std::vector<NNPUInsn> load_store_test_insns()
     insns.emplace_back(Li(1, 65537));
     insns.emplace_back(Store(1, 0, 12));
     
-    insns.emplace_back(Li(0, 4));  // $0 == i(4)
+    insns.emplace_back(Li(0, 4));  // $0 <- i, value = #4
     //insns.emplace_back(Li(4, 4));  // $4 == 4
     //insns.emplace_back(nnpu::BEZInsn(7, 0));
     
@@ -204,7 +204,7 @@ int main(int argc, char *(argv[]))
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
     cout << "\n\n";
-    for (i = 0; i < 200; ++i)
+    for (i = 0; i < 180; ++i)
     {
         //cout << "end of cycle :" << i << endl;
         for (auto m : modules)
