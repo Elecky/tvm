@@ -141,6 +141,13 @@ std::vector<NNPUInsn> insert_sort_insns()
 
     insns.emplace_back(JumpInsn(0));
 
+    InsnDumper dumper;
+    for (auto &item : insns)
+    {
+        item.Call(dumper, cout);
+        cout << endl;
+    }
+
     return insns;
 }
 
@@ -171,10 +178,10 @@ int main(int argc, char *(argv[]))
     modules.push_back(ID);
     ID->BindWires(wm);
 
-    std::shared_ptr<RegFileMod> regs(new RegFileMod(wm, cfg));
-    modules.push_back(std::static_pointer_cast<SimModule>(regs));
+    //std::shared_ptr<RegFileMod> regs(new RegFileMod(wm, cfg));
+    //modules.push_back(std::static_pointer_cast<SimModule>(regs));
 
-    std::shared_ptr<Ctrl> ctrl(new Ctrl(wm, cfg, regs));
+    std::shared_ptr<Ctrl> ctrl(new Ctrl(wm, cfg));
     modules.push_back(ctrl);
     ctrl->BindWires(wm);
 

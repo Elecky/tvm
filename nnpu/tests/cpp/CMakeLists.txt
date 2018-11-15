@@ -10,7 +10,8 @@ set(NNPU_S1SIM_SRC test_main.cpp ${SIM_SRC}/common/bit_packer.cpp
                    ${SIM_SRC}/controller.cpp ${SIM_SRC}/reg_file_mod.cpp
                    ${SIM_SRC}/reservation_station.cpp ${SIM_SRC}/alu.cpp
                    ${SIM_SRC}/branch_unit.cpp ${SIM_SRC}/load_store_unit.cpp
-                   ${SIM_SRC}/sclr_buffer.cpp ${SIM_SRC}/ram.cpp)
+                   ${SIM_SRC}/sclr_buffer.cpp ${SIM_SRC}/ram.cpp 
+                   ${SIM_SRC}/future_file.cpp)
 # include directories
 include_directories("../../../include")
 include_directories("../../../dlpack/include")

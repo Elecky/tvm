@@ -14,7 +14,8 @@ if(PYTHON)
                        ${SIM_SRC}/insn_wrapper.cpp ${SIM_SRC}/insn_decoder.cpp
                        ${SIM_SRC}/controller.cpp ${SIM_SRC}/reservation_station.cpp
                        ${SIM_SRC}/alu.cpp ${SIM_SRC}/branch_unit.cpp ${SIM_SRC}/reg_file_mod.cpp
-                       ${SIM_SRC}/load_store_unit.cpp ${SIM_SRC}/sclr_buffer.cpp)
+                       ${SIM_SRC}/load_store_unit.cpp ${SIM_SRC}/sclr_buffer.cpp
+                       ${SIM_SRC}/future_file.cpp)
     add_library(nnpu SHARED ${NNPU_RUNTIME_SRCS} ${NNPU_SIM_COMMON} ${NNPU_S0SIM_SRC}
                             ${NNPU_S1SIM_SRC})
     target_include_directories(nnpu PUBLIC nnpu/include /usr/local/include nnpu/NNPUSim/include)
