@@ -34,13 +34,14 @@ with ScheduleProcHelper():
     out_host, _ = nnpu.utils.CopyBufToH(out_buf, 'out')
     
     s = nnpu.utils.create_schedule(out_host.op)
+    print(tvm.lower(s, [a, b, out_host], simple_mode=True))
+    
     xo, xi = s[prod_buf].split(prod_buf.op.axis[0], factor=gemm_shape[0])
     ro, ri = s[prod_buf].split(prod_buf.op.reduce_axis[0], factor=factor)
     #ri = prod_buf.op.reduce_axis[0]
     s[prod_buf].reorder(xo, ro, xi, ri)
     s[prod_buf].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, reduce=True, mode='inc',
                                               scope_out='acc'))
-    print(tvm.lower(s, [a, b, out_host], simple_mode=True))
     print(nnpu.lower(s, [a, b, out_host], simple_mode=True))
     
     func = nnpu.build(s, [a, b, out_host], 'nnpu', 'llvm', name='nnpu_func')
