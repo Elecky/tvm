@@ -338,7 +338,7 @@ const char * ToString(ALURegImmOp op)
     case ALURegImmOp::ModIU:
         return "ModIU";
     case ALURegImmOp::SLTIU:
-        return "SLUIU";
+        return "SLTIU";
     case ALURegImmOp::SEQI:
         return "SEQI";
     case ALURegImmOp::XORI:
