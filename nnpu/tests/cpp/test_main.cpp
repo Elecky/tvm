@@ -302,10 +302,10 @@ int main(int argc, char *(argv[]))
         }*/
     }
 
-    Byte arr[8];
+    std::unique_ptr<Byte[]> arr(new Byte[8]);
     for (size_t j = 0; j != 4; ++j)
     {
-        buffer->CopyTo(arr, 8 * j, 8);
+        buffer->CopyTo(arr.get(), 8 * j, 8);
 
         for (size_t i = 0; i != 8; ++i)
         {
