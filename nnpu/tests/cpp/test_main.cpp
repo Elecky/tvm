@@ -8,6 +8,10 @@
 #include <nnpusim/branch_unit.h>
 #include <nnpusim/load_store_unit.h>
 #include <nnpusim/sclr_buffer.h>
+#include <nnpusim/memory_queue.h>
+#include <nnpusim/data_read_unit.h>
+#include <nnpusim/vctr_calc_unit.h>
+#include <nnpusim/data_write_unit.h>
 #include <vector>
 
 using namespace nnpu;
@@ -151,6 +155,49 @@ std::vector<NNPUInsn> insert_sort_insns()
     return insns;
 }
 
+std::vector<NNPUInsn> vctr_test_insns()
+{
+    vector<NNPUInsn> insns;
+    using Li = nnpu::LiInsn;
+    using Binary = nnpu::ALUBinaryInsn;
+    using Store = nnpu::SclrStoreInsn;
+    using Load = nnpu::SclrLoadInsn;
+    using Unary = nnpu::ALURegImmInsn;
+
+    /*
+    insns.push_back(Li(1, 0));
+    insns.push_back(Li(3, 32));
+    insns.push_back(Unary(2, 1, 4, ALURegImmOp::SLTIU));
+    insns.push_back(BEZInsn(5, 2));
+
+    insns.push_back(Unary(1, 1, 1, ALURegImmOp::AddIU));
+    insns.push_back(Unary(4, 1, 8, ALURegImmOp::MulIU));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+
+    insns.push_back(JumpInsn(-5));
+    
+    insns.push_back(JumpInsn(0));*/
+
+    insns.push_back(Li(3, 32));
+    insns.push_back(Li(4, 0));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+    insns.push_back(Li(4, 8));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+    insns.push_back(Li(4, 16));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+    insns.push_back(Li(4, 24));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+
+    InsnDumper dumper;
+    for (auto &item : insns)
+    {
+        item.Call(dumper, cout);
+        cout << endl;
+    }
+
+    return insns;
+}
+
 WireData<bool> branchOut(int *i, int on)
 {
     if (*i == on)
@@ -171,7 +218,7 @@ int main(int argc, char *(argv[]))
     std::shared_ptr<InsnMemModule> IF(new InsnMemModule(wm, cfg));
     modules.push_back(IF);
     //cout << IF.get() << endl;
-    IF->SetInsns(insert_sort_insns());
+    IF->SetInsns(vctr_test_insns());
     IF->BindWires(wm);
 
     std::shared_ptr<InsnDecoder> ID(new InsnDecoder(wm, cfg));
@@ -200,11 +247,40 @@ int main(int argc, char *(argv[]))
     std::shared_ptr<SclrBuffer> sclrBuffer(new SclrBuffer(wm, cfg));
     sclrBuffer->BindWires(wm);
     modules.push_back(sclrBuffer);
+
+    std::shared_ptr<RAM> buffer(new RAM(1 << 20));
+    buffer->Memset(1, 0, 8);
+    buffer->Memset(2, 8, 8);
+    buffer->Memset(3, 16, 8);
+    buffer->Memset(4, 24, 8);
+    buffer->Memset(21, 32, 4);
+    buffer->Memset(7, 36, 4);
+
+    std::shared_ptr<MemoryQueue> MQ(new MemoryQueue(wm, cfg));
+    MQ->BindWires(wm);
+    modules.push_back(MQ);
+
+    std::shared_ptr<DataReadUnit> VRU(new DataReadUnit(wm, cfg, buffer, 
+                                        "vctr_calc_unit_busy", 
+                                        "vctr_read_unit"));
+    VRU->BindWires(wm);
+    modules.push_back(VRU);
+
+    std::shared_ptr<VctrCalcUnit> VCU(new VctrCalcUnit(wm, cfg));
+    VCU->BindWires(wm);
+    modules.push_back(VCU);
+
+    std::shared_ptr<DataWriteUnit> VWU(new DataWriteUnit(wm, cfg, buffer, 
+                                        "vctr_write_unit", 
+                                        "vctr_calc_unit_insn_out", 
+                                        "vctr_calc_unit_data_out"));
+    VWU->BindWires(wm);
+    modules.push_back(VWU);
     
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
     cout << "\n\n";
-    for (i = 0; i < 180; ++i)
+    for (i = 0; i < 50; ++i)
     {
         //cout << "end of cycle :" << i << endl;
         for (auto m : modules)
@@ -224,6 +300,18 @@ int main(int argc, char *(argv[]))
             m->Dump(DumpLevel::Brief, cout);
             //cout << endl;
         }*/
+    }
+
+    Byte arr[8];
+    for (size_t j = 0; j != 4; ++j)
+    {
+        buffer->CopyTo(arr, 8 * j, 8);
+
+        for (size_t i = 0; i != 8; ++i)
+        {
+            cout << static_cast<int>(arr[i]) << ' ';
+        }
+        cout << endl;
     }
 
     return 0;
