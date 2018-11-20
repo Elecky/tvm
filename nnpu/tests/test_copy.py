@@ -42,3 +42,5 @@ with (ScheduleProcHelper()):
     gt = np.reshape(gt, (2, 16, 2, 16))
     gt = np.transpose(gt, (0, 2, 1, 3))
     np.testing.assert_allclose(re_nd.asnumpy(), gt)
+
+    print('test passed')

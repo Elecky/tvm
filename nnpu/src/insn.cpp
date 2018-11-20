@@ -254,7 +254,7 @@ void BNEZInsn::Dump(ostream &os) const
     os << "BNEZ $" << CondReg << ", #" << Offset;
 }
 
-ALUBinaryInsn::ALUBinaryInsn(uint32_t _rdReg, uint32_t _rsReg, uint32_t _rtReg, ALUBinaryOp _op) :
+ALUBinaryInsn::ALUBinaryInsn(regNo_t _rdReg, regNo_t _rsReg, regNo_t _rtReg, ALUBinaryOp _op) :
     RdReg(_rdReg), RsReg(_rsReg), RtReg(_rtReg), Op(_op)
 {}
 
@@ -263,7 +263,7 @@ void ALUBinaryInsn::Dump(ostream &os) const
     os << ToString(Op) << " $" << RdReg << ", $" << RsReg << ", $" << RtReg;
 }
 
-SclrLoadInsn::SclrLoadInsn(regNo_t _rdReg, regNo_t _addrReg, uint32_t _offset) :
+SclrLoadInsn::SclrLoadInsn(regNo_t _rdReg, regNo_t _addrReg, reg_t _offset) :
     RdReg(_rdReg), AddrReg(_addrReg), Offset(_offset)
 {}
 
@@ -272,7 +272,7 @@ void SclrLoadInsn::Dump(ostream &os) const
     os << "Load.S $" << RdReg << ", ($" << AddrReg << " + " << Offset << ")";
 }
 
-SclrStoreInsn::SclrStoreInsn(regNo_t _rsReg, regNo_t _addrReg, uint32_t _offset) :
+SclrStoreInsn::SclrStoreInsn(regNo_t _rsReg, regNo_t _addrReg, reg_t _offset) :
    RsReg(_rsReg),  AddrReg(_addrReg), Offset(_offset)
 {
 }

@@ -218,7 +218,7 @@ int main(int argc, char *(argv[]))
     std::shared_ptr<InsnMemModule> IF(new InsnMemModule(wm, cfg));
     modules.push_back(IF);
     //cout << IF.get() << endl;
-    IF->SetInsns(vctr_test_insns());
+    IF->SetInsns(insert_sort_insns());
     IF->BindWires(wm);
 
     std::shared_ptr<InsnDecoder> ID(new InsnDecoder(wm, cfg));
@@ -280,7 +280,7 @@ int main(int argc, char *(argv[]))
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
     cout << "\n\n";
-    for (i = 0; i < 50; ++i)
+    for (i = 0; i < 200; ++i)
     {
         //cout << "end of cycle :" << i << endl;
         for (auto m : modules)
@@ -302,6 +302,7 @@ int main(int argc, char *(argv[]))
         }*/
     }
 
+    /*
     std::unique_ptr<Byte[]> arr(new Byte[8]);
     for (size_t j = 0; j != 4; ++j)
     {
@@ -312,7 +313,7 @@ int main(int argc, char *(argv[]))
             cout << static_cast<int>(arr[i]) << ' ';
         }
         cout << endl;
-    }
+    }*/
 
     return 0;
 }

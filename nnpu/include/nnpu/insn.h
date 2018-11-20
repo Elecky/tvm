@@ -17,7 +17,7 @@ namespace nnpu
 // the K-V list type to store register values.
 using KVList_t = std::unordered_map<regNo_t, reg_t>;
 using dst_pair_t = std::pair<bool, regNo_t>;
-using branch_off_t = std::pair<bool, int32_t>;
+using branch_off_t = std::pair<bool, reg_t>;
 
 /*
 * instruction type, similar to opcode in MIPS instruction
@@ -49,9 +49,9 @@ public:
     * \brief the unary vector instruction operation, like the Funct in MIPS insn.
     */
     VctrUnaryOp Op;
-    uint32_t VctrOutAddrReg;
-    uint32_t VctrInAddrReg;
-    uint32_t ElemCountReg;
+    regNo_t VctrOutAddrReg;
+    regNo_t VctrInAddrReg;
+    regNo_t ElemCountReg;
 
     ModeCode Mode;
 
@@ -59,8 +59,8 @@ public:
     VctrUnaryInsn() = default;
 
     /* constructor */
-    VctrUnaryInsn(VctrUnaryOp _op, uint32_t _vctrOutAddrReg, uint32_t _vctrInAddrReg, 
-        uint32_t _elemCountReg, ModeCode _mode) :
+    VctrUnaryInsn(VctrUnaryOp _op, regNo_t _vctrOutAddrReg, regNo_t _vctrInAddrReg, 
+        regNo_t _elemCountReg, ModeCode _mode) :
         Op(_op), VctrOutAddrReg(_vctrOutAddrReg), VctrInAddrReg(_vctrInAddrReg), 
         ElemCountReg(_elemCountReg), Mode(_mode)
     {}
@@ -109,19 +109,19 @@ struct DMACopyInsn
 public:
     // the DMA copy direction
     DMADIR Dir;
-    uint32_t HostPhyAddrReg;
-    uint32_t HostOffsetReg;
-    uint32_t DramAddrReg;
+    regNo_t HostPhyAddrReg;
+    regNo_t HostOffsetReg;
+    regNo_t DramAddrReg;
     /* copy size in byte
     */
-    uint32_t SizeReg;
+    regNo_t SizeReg;
 
     /* default constructor */
     DMACopyInsn() = default;
 
     /* constructor */
-    DMACopyInsn(DMADIR _dir, uint32_t _hostPhyAddrReg, uint32_t _hostOffsetReg, 
-        uint32_t _dramAddrReg, uint32_t _sizeReg) :
+    DMACopyInsn(DMADIR _dir, regNo_t _hostPhyAddrReg, regNo_t _hostOffsetReg, 
+        regNo_t _dramAddrReg, regNo_t _sizeReg) :
         Dir(_dir), HostPhyAddrReg(_hostPhyAddrReg), HostOffsetReg(_hostOffsetReg), 
         DramAddrReg(_dramAddrReg), SizeReg(_sizeReg)
     {}
@@ -156,16 +156,16 @@ public:
     // the copy direction
     LSDIR Dir;
 
-    uint32_t DramAddrReg;
-    uint32_t BufAddrReg;
+    regNo_t DramAddrReg;
+    regNo_t BufAddrReg;
     /* copy size in byte */
-    uint32_t SizeReg;
+    regNo_t SizeReg;
 
     /* default constructor */
     BufferLSInsn() = default;
 
     /* constructor */
-    BufferLSInsn(LSDIR _dir, uint32_t _dramAddrReg, uint32_t _bufAddrReg, uint32_t _sizeReg) :
+    BufferLSInsn(LSDIR _dir, regNo_t _dramAddrReg, regNo_t _bufAddrReg, regNo_t _sizeReg) :
         Dir(_dir), DramAddrReg(_dramAddrReg), BufAddrReg(_bufAddrReg), SizeReg(_sizeReg)
     {}
 
@@ -193,19 +193,19 @@ struct BufferCopyInsn
 public:
     BufferCopyInsn() = default;
 
-    BufferCopyInsn(uint32_t _dstAddrReg, uint32_t _dstStrideReg, 
-                   uint32_t _srcAddrReg, uint32_t _srcStrideReg,
-                   uint32_t _nUnitReg, uint32_t _unitBytes) :
+    BufferCopyInsn(regNo_t _dstAddrReg, regNo_t _dstStrideReg, 
+                   regNo_t _srcAddrReg, regNo_t _srcStrideReg,
+                   regNo_t _nUnitReg, uint32_t _unitBytes) :
         DstAddrReg(_dstAddrReg), DstStrideReg(_dstStrideReg),
         SrcAddrReg(_srcAddrReg), SrcStrideReg(_srcStrideReg),
         NUnitReg(_nUnitReg), UnitBytes(_unitBytes)
     {}
 
-    uint32_t DstAddrReg;
-    uint32_t DstStrideReg;
-    uint32_t SrcAddrReg;
-    uint32_t SrcStrideReg;
-    uint32_t NUnitReg;
+    regNo_t DstAddrReg;
+    regNo_t DstStrideReg;
+    regNo_t SrcAddrReg;
+    regNo_t SrcStrideReg;
+    regNo_t NUnitReg;
 
     uint32_t UnitBytes;
 
@@ -233,15 +233,15 @@ struct MemsetInsn
 public:
     MemsetInsn() = default;
 
-    MemsetInsn(uint32_t _addrReg, uint32_t _nUnitReg, uint32_t _strideReg,
+    MemsetInsn(regNo_t _addrReg, regNo_t _nUnitReg, regNo_t _strideReg,
                ModeCode _mode, double _imm) :
         AddrReg(_addrReg), NUnitReg(_nUnitReg), StrideReg(_strideReg),
         Mode(_mode), Imm(_imm)
     {}
 
-    uint32_t AddrReg;
-    uint32_t NUnitReg;
-    uint32_t StrideReg;
+    regNo_t AddrReg;
+    regNo_t NUnitReg;
+    regNo_t StrideReg;
 
     ModeCode Mode;  // can only be n or w.
     double Imm;
@@ -270,14 +270,14 @@ public:
     AccMemsetInsn() = default;
 
     AccMemsetInsn(uint32_t _nRow, uint32_t _nCol, 
-                  uint32_t _addrReg, uint32_t _rowStrideReg,
+                  regNo_t _addrReg, regNo_t _rowStrideReg,
                   ModeCode _mode, double _imm) :
         AddrReg(_addrReg), RowStrideReg(_rowStrideReg),
         NRow(_nRow), NCol(_nCol), Mode(_mode), Imm(_imm)
     {}
 
-    uint32_t AddrReg;
-    uint32_t RowStrideReg;
+    regNo_t AddrReg;
+    regNo_t RowStrideReg;
 
     uint32_t NRow, NCol;
     ModeCode Mode;  // can only be n or w.
@@ -305,13 +305,13 @@ public:
 struct LiInsn
 {
 public:
-    uint32_t ResReg;
-    uint32_t Imm;
+    regNo_t ResReg;
+    reg_t Imm;
 
     /* default constructor */
     LiInsn() = default;
 
-    LiInsn(uint32_t _resReg, uint32_t _imm) : ResReg(_resReg), Imm(_imm)
+    LiInsn(regNo_t _resReg, reg_t _imm) : ResReg(_resReg), Imm(_imm)
     {}
 
     /*!
@@ -359,9 +359,9 @@ public:
     GemmInsn() = default;
 
     GemmInsn(uint32_t _nRowOut, uint32_t _factor, uint32_t _nColOut, 
-             uint32_t _outAddrReg, uint32_t _outRowStrideReg,
-             uint32_t _in1AddrReg, uint32_t _in1RowStrideReg,
-             uint32_t _in2AddrReg, uint32_t _in2RowStrideReg, ModeCode _mode,
+             regNo_t _outAddrReg, regNo_t _outRowStrideReg,
+             regNo_t _in1AddrReg, regNo_t _in1RowStrideReg,
+             regNo_t _in2AddrReg, regNo_t _in2RowStrideReg, ModeCode _mode,
              bool _toAccBuf, bool _doAcc)
             : NRowOut(_nRowOut), Factor(_factor), NColOut(_nColOut),
               OutAddrReg(_outAddrReg), OutRowStrideReg(_outRowStrideReg),
@@ -378,12 +378,12 @@ public:
     uint32_t Factor;
     uint32_t NColOut;
 
-    uint32_t OutAddrReg;
-    uint32_t OutRowStrideReg;
-    uint32_t In1AddrReg;
-    uint32_t In1RowStrideReg;
-    uint32_t In2AddrReg;
-    uint32_t In2RowStrideReg;
+    regNo_t OutAddrReg;
+    regNo_t OutRowStrideReg;
+    regNo_t In1AddrReg;
+    regNo_t In1RowStrideReg;
+    regNo_t In2AddrReg;
+    regNo_t In2RowStrideReg;
 
     bool ToAccBuf;  // write to accumulation buffer or not.
     bool DoAcc;  // do accumulation or not.
@@ -416,17 +416,17 @@ struct VctrBinaryInsn
 public:
     VctrBinaryInsn() = default;
 
-    VctrBinaryInsn(VctrBinaryOp _op, uint32_t _outAddrReg, uint32_t _in1AddrReg, 
-        uint32_t _in2AddrReg, uint32_t _size, ModeCode _mode) :
+    VctrBinaryInsn(VctrBinaryOp _op, regNo_t _outAddrReg, regNo_t _in1AddrReg, 
+        regNo_t _in2AddrReg, uint32_t _size, ModeCode _mode) :
         Op(_op), OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
         Size(_size), Mode(_mode)
     {}
 
     VctrBinaryOp Op;
 
-    uint32_t OutAddrReg;
-    uint32_t In1AddrReg;
-    uint32_t In2AddrReg;
+    regNo_t OutAddrReg;
+    regNo_t In1AddrReg;
+    regNo_t In2AddrReg;
 
     // this is not a register nor an immediate, its part of insn encoding.
     uint32_t Size;
@@ -455,7 +455,7 @@ struct VctrImmInsn
 public:
     VctrImmInsn() = default;
 
-    VctrImmInsn(VctrImmOp _op, uint32_t _outAddrReg, uint32_t _inAddrReg, 
+    VctrImmInsn(VctrImmOp _op, regNo_t _outAddrReg, regNo_t _inAddrReg, 
         double _Imm, uint32_t _size, ModeCode _mode) :
         Op(_op), OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Imm(_Imm),
         Size(_size), Mode(_mode)
@@ -463,8 +463,8 @@ public:
 
     VctrImmOp Op;
 
-    uint32_t OutAddrReg;
-    uint32_t InAddrReg;
+    regNo_t OutAddrReg;
+    regNo_t InAddrReg;
     double Imm;
 
     uint32_t Size;
@@ -492,16 +492,16 @@ struct MatImmInsn
 public:
     MatImmInsn() = default;
 
-    MatImmInsn(MatImmOp _op, uint32_t _outAddrReg, uint32_t _inAddrReg, 
-        double _Imm,uint32_t _nRow,uint32_t _nCol, ModeCode _mode) :
+    MatImmInsn(MatImmOp _op, regNo_t _outAddrReg, regNo_t _inAddrReg, 
+        double _Imm,uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
         Op(_op), OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Imm(_Imm),
         nRow(_nRow), nCol(_nCol), Mode(_mode)
     {}
 
     MatImmOp Op;
 
-    uint32_t OutAddrReg;
-    uint32_t InAddrReg;
+    regNo_t OutAddrReg;
+    regNo_t InAddrReg;
 
     double Imm;
     uint32_t nRow;
@@ -528,15 +528,15 @@ struct VctrDotProdInsn
 public:
     VctrDotProdInsn() = default;
 
-    VctrDotProdInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, 
-        uint32_t _in2AddrReg, uint32_t _size, ModeCode _mode) :
+    VctrDotProdInsn(regNo_t _outAddrReg, regNo_t _in1AddrReg, 
+        regNo_t _in2AddrReg, uint32_t _size, ModeCode _mode) :
         OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
         Size(_size), Mode(_mode)
     {}
 
-    uint32_t OutAddrReg;
-    uint32_t In1AddrReg;
-    uint32_t In2AddrReg;
+    regNo_t OutAddrReg;
+    regNo_t In1AddrReg;
+    regNo_t In2AddrReg;
 
     // this is not a register nor an immediate, its part of insn encoding.
     uint32_t Size;
@@ -565,13 +565,13 @@ struct VctrReduceInsn
 public:
     VctrReduceInsn() = default;
 
-    VctrReduceInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, 
+    VctrReduceInsn(regNo_t _outAddrReg, regNo_t _inAddrReg, 
                    ReduceOp _op, uint32_t _size, ModeCode _mode) :
         OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Op(_op), Size(_size), Mode(_mode)
     {}
 
-    uint32_t OutAddrReg;
-    uint32_t InAddrReg;
+    regNo_t OutAddrReg;
+    regNo_t InAddrReg;
 
     // this is not a register nor an immediate, its part of insn encoding.
     ReduceOp Op;
@@ -601,21 +601,21 @@ struct MatBinaryInsn
 public:
     MatBinaryInsn() = default;
 
-    MatBinaryInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in2AddrReg,
-                  uint32_t _outRowStrideReg, uint32_t _in1RowStrideReg, uint32_t _in2RowStrideReg,
+    MatBinaryInsn(regNo_t _outAddrReg, regNo_t _in1AddrReg, regNo_t _in2AddrReg,
+                  regNo_t _outRowStrideReg, regNo_t _in1RowStrideReg, regNo_t _in2RowStrideReg,
                   MatBinaryOp _op, uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
         OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
         OutRowStrideReg(_outRowStrideReg), In1RowStrideReg(_in1RowStrideReg), 
         In2RowStrideReg(_in2RowStrideReg), Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
-    uint32_t OutAddrReg;
-    uint32_t In1AddrReg;
-    uint32_t In2AddrReg;
+    regNo_t OutAddrReg;
+    regNo_t In1AddrReg;
+    regNo_t In2AddrReg;
 
-    uint32_t OutRowStrideReg;
-    uint32_t In1RowStrideReg;
-    uint32_t In2RowStrideReg;
+    regNo_t OutRowStrideReg;
+    regNo_t In1RowStrideReg;
+    regNo_t In2RowStrideReg;
 
     // the following fileds are part of insn encoding.
     MatBinaryOp Op;
@@ -642,16 +642,16 @@ struct MatReduceRowInsn
 public:
     MatReduceRowInsn() = default;
 
-    MatReduceRowInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, uint32_t _inRowStrideReg,
+    MatReduceRowInsn(regNo_t _outAddrReg, regNo_t _inAddrReg, regNo_t _inRowStrideReg,
                      ReduceOp _op, uint32_t _nRow, uint32_t _nCol, 
                      bool _toAccBuf, bool _doAcc, ModeCode _mode) :
         OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), InRowStrideReg(_inRowStrideReg),
         Op(_op), NRow(_nRow), NCol(_nCol), ToAccBuf(_toAccBuf), DoAcc(_doAcc), Mode(_mode)
     {}
 
-    uint32_t OutAddrReg;
-    uint32_t InAddrReg;
-    uint32_t InRowStrideReg;
+    regNo_t OutAddrReg;
+    regNo_t InAddrReg;
+    regNo_t InRowStrideReg;
 
     // the following fileds are part of insn encoding.
     ReduceOp Op;
@@ -680,14 +680,14 @@ struct MatReduceColInsn
 public:
     MatReduceColInsn() = default;
 
-    MatReduceColInsn(uint32_t _outAddrReg, uint32_t _inAddrReg, ReduceOp _op,
+    MatReduceColInsn(regNo_t _outAddrReg, regNo_t _inAddrReg, ReduceOp _op,
         uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
         OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Op(_op),
         NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
-    uint32_t OutAddrReg;
-    uint32_t InAddrReg;
+    regNo_t OutAddrReg;
+    regNo_t InAddrReg;
 
     // the following fileds are part of insn encoding.
     ReduceOp Op;
@@ -717,20 +717,20 @@ struct MatVctrInsn
 public:
     MatVctrInsn() = default;
 
-    MatVctrInsn(uint32_t _outAddrReg, uint32_t _outRowStrideReg, 
-                uint32_t _matAddrReg, uint32_t _matRowStrideReg,
-                uint32_t _vctrAddrReg, MatVctrOp _op, uint32_t _nRow, uint32_t _nCol, 
+    MatVctrInsn(regNo_t _outAddrReg, regNo_t _outRowStrideReg, 
+                regNo_t _matAddrReg, regNo_t _matRowStrideReg,
+                regNo_t _vctrAddrReg, MatVctrOp _op, uint32_t _nRow, uint32_t _nCol, 
                 ModeCode _mode) :
         OutAddrReg(_outAddrReg), OutRowStrideReg(_outRowStrideReg), 
         MatAddrReg(_matAddrReg), MatRowStrideReg(_matRowStrideReg),
         VctrAddrReg(_vctrAddrReg), Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
     {}
 
-    uint32_t OutAddrReg;
-    uint32_t OutRowStrideReg;
-    uint32_t MatAddrReg;
-    uint32_t MatRowStrideReg;
-    uint32_t VctrAddrReg;
+    regNo_t OutAddrReg;
+    regNo_t OutRowStrideReg;
+    regNo_t MatAddrReg;
+    regNo_t MatRowStrideReg;
+    regNo_t VctrAddrReg;
 
     MatVctrOp Op;
     uint32_t NRow, NCol;
@@ -759,8 +759,8 @@ struct MatRowDotInsn
 public:
     MatRowDotInsn() = default;
 
-    MatRowDotInsn(uint32_t _outAddrReg, uint32_t _in1AddrReg, uint32_t _in1RowStrideReg,
-                  uint32_t _in2AddrReg, uint32_t _in2RowStrideReg,
+    MatRowDotInsn(regNo_t _outAddrReg, regNo_t _in1AddrReg, regNo_t _in1RowStrideReg,
+                  regNo_t _in2AddrReg, regNo_t _in2RowStrideReg,
                   uint32_t _nRow, uint32_t _nCol, 
                   bool _toAccBuf, bool _doAcc, ModeCode _mode) :
         OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In1RowStrideReg(_in1RowStrideReg),
@@ -768,11 +768,11 @@ public:
         NRow(_nRow), NCol(_nCol), toAccBuf(_toAccBuf), doAcc(_doAcc), Mode(_mode)
     {}
 
-    uint32_t OutAddrReg;
-    uint32_t In1AddrReg;
-    uint32_t In1RowStrideReg;
-    uint32_t In2AddrReg;
-    uint32_t In2RowStrideReg;
+    regNo_t OutAddrReg;
+    regNo_t In1AddrReg;
+    regNo_t In1RowStrideReg;
+    regNo_t In2AddrReg;
+    regNo_t In2RowStrideReg;
 
     // the following fileds are part of insn encoding.
     uint32_t NRow, NCol;  // the total elements in both matrix.
@@ -803,15 +803,15 @@ struct VctrSclrInsn
 public:
     VctrSclrInsn() = default;
 
-    VctrSclrInsn(uint32_t _outAddrReg, uint32_t _vctrAddrReg, uint32_t _sclrAddrReg,
+    VctrSclrInsn(regNo_t _outAddrReg, regNo_t _vctrAddrReg, regNo_t _sclrAddrReg,
                  uint32_t _size, VctrSclrOp _op, ModeCode _mode) :
         OutAddrReg(_outAddrReg), VctrAddrReg(_vctrAddrReg), SclrAddrReg(_sclrAddrReg),
         Op(_op), Size(_size), Mode(_mode)
     {}
 
-    uint32_t OutAddrReg;
-    uint32_t VctrAddrReg;
-    uint32_t SclrAddrReg;
+    regNo_t OutAddrReg;
+    regNo_t VctrAddrReg;
+    regNo_t SclrAddrReg;
 
     // the following fileds are part of insn encoding.
     VctrSclrOp Op;
@@ -838,19 +838,19 @@ struct CopyAcc2BufInsn
 public:
     CopyAcc2BufInsn() = default;
 
-    CopyAcc2BufInsn(uint32_t _dstAddrReg, uint32_t _dstStrideReg, 
-                   uint32_t _srcAddrReg, uint32_t _srcStrideReg,
-                   uint32_t _nUnitReg, uint32_t _unitBytes) :
+    CopyAcc2BufInsn(regNo_t _dstAddrReg, regNo_t _dstStrideReg, 
+                   regNo_t _srcAddrReg, regNo_t _srcStrideReg,
+                   regNo_t _nUnitReg, uint32_t _unitBytes) :
         DstAddrReg(_dstAddrReg), DstStrideReg(_dstStrideReg),
         SrcAddrReg(_srcAddrReg), SrcStrideReg(_srcStrideReg),
         NUnitReg(_nUnitReg), UnitBytes(_unitBytes)
     {}
 
-    uint32_t DstAddrReg;
-    uint32_t DstStrideReg;
-    uint32_t SrcAddrReg;
-    uint32_t SrcStrideReg;
-    uint32_t NUnitReg;
+    regNo_t DstAddrReg;
+    regNo_t DstStrideReg;
+    regNo_t SrcAddrReg;
+    regNo_t SrcStrideReg;
+    regNo_t NUnitReg;
 
     uint32_t UnitBytes;
 
@@ -896,11 +896,11 @@ struct JumpInsn
 {
     JumpInsn() = default;
 
-    JumpInsn(int32_t _offset):
+    JumpInsn(reg_t _offset):
         Offset(_offset)
     {}
 
-    int32_t Offset;
+    reg_t Offset;
 
     void Dump(std::ostream &os) const;
 
@@ -922,11 +922,11 @@ struct BEZInsn
 {
     BEZInsn() = default;
 
-    BEZInsn(int32_t _offset, uint32_t _condReg) :
+    BEZInsn(reg_t _offset, regNo_t _condReg) :
         Offset(_offset), CondReg(_condReg)
     {}
 
-    int32_t Offset;
+    reg_t Offset;
     regNo_t CondReg;
 
     void Dump(std::ostream &os) const;
@@ -951,11 +951,11 @@ struct BNEZInsn
 {
     BNEZInsn() = default;
 
-    BNEZInsn(int32_t _offset, uint32_t _condReg) :
+    BNEZInsn(reg_t _offset, regNo_t _condReg) :
         Offset(_offset), CondReg(_condReg)
     {}
 
-    int32_t Offset;
+    reg_t Offset;
     regNo_t CondReg;
 
     void Dump(std::ostream &os) const;
@@ -981,7 +981,7 @@ struct ALUBinaryInsn
 {
     ALUBinaryInsn() = default;
 
-    ALUBinaryInsn(uint32_t _rdReg, uint32_t _rsReg, uint32_t _rtReg, ALUBinaryOp _op);
+    ALUBinaryInsn(regNo_t _rdReg, regNo_t _rsReg, regNo_t _rtReg, ALUBinaryOp _op);
 
     regNo_t RdReg;
     regNo_t RsReg, RtReg;
@@ -1046,12 +1046,12 @@ struct SclrLoadInsn
 {
     SclrLoadInsn() = default;
 
-    SclrLoadInsn(regNo_t _rdReg, regNo_t _addrReg, uint32_t _offset);
+    SclrLoadInsn(regNo_t _rdReg, regNo_t _addrReg, reg_t _offset);
 
     regNo_t RdReg;
     regNo_t AddrReg;
 
-    uint32_t Offset;
+    reg_t Offset;
 
     void Dump(std::ostream &os) const;
 
@@ -1076,12 +1076,12 @@ struct SclrStoreInsn
 {
     SclrStoreInsn() = default;
 
-    SclrStoreInsn(regNo_t _rsReg, regNo_t _addrReg, uint32_t _offset);
+    SclrStoreInsn(regNo_t _rsReg, regNo_t _addrReg, reg_t _offset);
 
     regNo_t RsReg;
     regNo_t AddrReg;
 
-    uint32_t Offset;
+    reg_t Offset;
 
     void Dump(std::ostream &os) const;
 
