@@ -18,7 +18,8 @@ if(PYTHON)
                        ${SIM_SRC}/future_file.cpp ${SIM_SRC}/memory_queue.cpp
                        ${SIM_SRC}/data_read_unit.cpp ${SIM_SRC}/address_range.cpp
                        ${SIM_SRC}/vctr_calc_unit.cpp ${SIM_SRC}/data_write_unit.cpp
-                       ${SIM_SRC}/DMA_copy_buffer_LS_unit.cpp)
+                       ${SIM_SRC}/DMA_copy_buffer_LS_unit.cpp
+                       ${SIM_SRC}/buffer_copy_set_unit.cpp)
     add_library(nnpu SHARED ${NNPU_RUNTIME_SRCS} ${NNPU_SIM_COMMON} ${NNPU_S0SIM_SRC}
                             ${NNPU_S1SIM_SRC})
     target_include_directories(nnpu PUBLIC nnpu/include /usr/local/include nnpu/NNPUSim/include)
