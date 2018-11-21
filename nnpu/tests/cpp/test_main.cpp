@@ -13,6 +13,7 @@
 #include <nnpusim/vctr_calc_unit.h>
 #include <nnpusim/data_write_unit.h>
 #include <vector>
+#include <nnpusim/DMA_copy_buffer_LS_unit.h>
 
 using namespace nnpu;
 using namespace std;
@@ -178,6 +179,10 @@ std::vector<NNPUInsn> vctr_test_insns()
     
     insns.push_back(JumpInsn(0));*/
 
+    insns.push_back(Li(0, 0));
+    insns.push_back(Li(1, 40));
+    insns.push_back(BufferLSInsn(LSDIR::Load, 0, 0, 1));
+
     insns.push_back(Li(3, 32));
     insns.push_back(Li(4, 0));
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
@@ -187,6 +192,9 @@ std::vector<NNPUInsn> vctr_test_insns()
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
     insns.push_back(Li(4, 24));
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+
+    insns.push_back(Li(1, 32));
+    insns.push_back(BufferLSInsn(LSDIR::Store, 0, 0, 1));
 
     InsnDumper dumper;
     for (auto &item : insns)
@@ -218,7 +226,7 @@ int main(int argc, char *(argv[]))
     std::shared_ptr<InsnMemModule> IF(new InsnMemModule(wm, cfg));
     modules.push_back(IF);
     //cout << IF.get() << endl;
-    IF->SetInsns(insert_sort_insns());
+    IF->SetInsns(vctr_test_insns());
     IF->BindWires(wm);
 
     std::shared_ptr<InsnDecoder> ID(new InsnDecoder(wm, cfg));
@@ -249,18 +257,14 @@ int main(int argc, char *(argv[]))
     modules.push_back(sclrBuffer);
 
     std::shared_ptr<RAM> buffer(new RAM(1 << 20));
-    buffer->Memset(1, 0, 8);
-    buffer->Memset(2, 8, 8);
-    buffer->Memset(3, 16, 8);
-    buffer->Memset(4, 24, 8);
-    buffer->Memset(21, 32, 4);
-    buffer->Memset(7, 36, 4);
 
     std::shared_ptr<MemoryQueue> MQ(new MemoryQueue(wm, cfg));
     MQ->BindWires(wm);
     modules.push_back(MQ);
 
-    std::shared_ptr<DataReadUnit> VRU(new DataReadUnit(wm, cfg, buffer, 
+    std::shared_ptr<ScratchpadHolder> holder(new ScratchpadHolder(cfg, buffer));
+
+    std::shared_ptr<DataReadUnit> VRU(new DataReadUnit(wm, cfg, holder, 
                                         "vctr_calc_unit_busy", 
                                         "vctr_read_unit"));
     VRU->BindWires(wm);
@@ -270,12 +274,24 @@ int main(int argc, char *(argv[]))
     VCU->BindWires(wm);
     modules.push_back(VCU);
 
-    std::shared_ptr<DataWriteUnit> VWU(new DataWriteUnit(wm, cfg, buffer, 
+    std::shared_ptr<DataWriteUnit> VWU(new DataWriteUnit(wm, cfg, holder, 
                                         "vctr_write_unit", 
                                         "vctr_calc_unit_insn_out", 
                                         "vctr_calc_unit_data_out"));
     VWU->BindWires(wm);
     modules.push_back(VWU);
+
+    std::shared_ptr<RAM> dram(new RAM(1 << 25));
+    dram->Memset(1, 0, 8);
+    dram->Memset(2, 8, 8);
+    dram->Memset(3, 16, 8);
+    dram->Memset(4, 24, 8);
+    dram->Memset(21, 32, 4);
+    dram->Memset(7, 36, 4);
+
+    std::shared_ptr<DMACopyBufferLSUnit> dmaUnit(new DMACopyBufferLSUnit(wm, cfg, holder, dram));
+    dmaUnit->BindWires(wm);
+    modules.push_back(dmaUnit);
     
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
@@ -302,18 +318,18 @@ int main(int argc, char *(argv[]))
         }*/
     }
 
-    /*
+    
     std::unique_ptr<Byte[]> arr(new Byte[8]);
     for (size_t j = 0; j != 4; ++j)
     {
-        buffer->CopyTo(arr.get(), 8 * j, 8);
+        dram->CopyTo(arr.get(), 8 * j, 8);
 
         for (size_t i = 0; i != 8; ++i)
         {
             cout << static_cast<int>(arr[i]) << ' ';
         }
         cout << endl;
-    }*/
+    }
 
     return 0;
 }

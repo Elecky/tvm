@@ -40,6 +40,7 @@ with ScheduleProcHelper():
     ro, ri = s[prod_buf].split(prod_buf.op.reduce_axis[0], factor=factor)
     #ri = prod_buf.op.reduce_axis[0]
     s[prod_buf].reorder(xo, ro, xi, ri)
+    print(tvm.lower(s, [a, b, out_host], simple_mode=True))
     s[prod_buf].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, reduce=True, mode='inc',
                                               scope_out='acc'))
     print(nnpu.lower(s, [a, b, out_host], simple_mode=True))

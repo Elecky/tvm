@@ -13,7 +13,8 @@ set(NNPU_S1SIM_SRC test_main.cpp ${SIM_SRC}/common/bit_packer.cpp
                    ${SIM_SRC}/sclr_buffer.cpp ${SIM_SRC}/ram.cpp 
                    ${SIM_SRC}/future_file.cpp ${SIM_SRC}/memory_queue.cpp
                    ${SIM_SRC}/address_range.cpp ${SIM_SRC}/data_read_unit.cpp
-                   ${SIM_SRC}/vctr_calc_unit.cpp ${SIM_SRC}/data_write_unit.cpp)
+                   ${SIM_SRC}/vctr_calc_unit.cpp ${SIM_SRC}/data_write_unit.cpp
+                   ${SIM_SRC}/DMA_copy_buffer_LS_unit.cpp)
 # include directories
 include_directories("../../../include")
 include_directories("../../../dlpack/include")
