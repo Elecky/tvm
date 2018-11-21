@@ -9,6 +9,7 @@ the instruction set definitions of nnpu simulator
 #include <iostream>
 #include <dmlc/logging.h>
 #include <nnpusim/typedef.h>
+#include <nnpusim/common/data_types.h>
 #include <unordered_map>
 
 namespace nnpu
@@ -29,11 +30,6 @@ enum class InsnType
     Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ, ALUBinary, SclrLoad, SclrStore, BNEZ,
     ALURegImm
 };
-
-/*!
- * Mode type for instructios, which indicates the input, output data type.
-*/
-enum class ModeCode { N, W, Dec, Inc };
 
 ModeCode ModeFromInt(uint32_t mode);
 
