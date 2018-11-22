@@ -14,6 +14,7 @@
 #include <nnpusim/data_write_unit.h>
 #include <vector>
 #include <nnpusim/DMA_copy_buffer_LS_unit.h>
+#include <nnpusim/buffer_copy_set_unit.h>
 
 using namespace nnpu;
 using namespace std;
@@ -191,6 +192,9 @@ std::vector<NNPUInsn> vctr_test_insns()
     insns.push_back(Li(4, 16));
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
     insns.push_back(Li(4, 24));
+    insns.push_back(Li(5, 8));
+    insns.push_back(Li(1, 1));
+    insns.push_back(MemsetInsn(4, 5, 1, ModeCode::N, 100));
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
 
     insns.push_back(Li(1, 32));
@@ -285,7 +289,7 @@ int main(int argc, char *(argv[]))
     dram->Memset(1, 0, 8);
     dram->Memset(2, 8, 8);
     dram->Memset(3, 16, 8);
-    dram->Memset(4, 24, 8);
+    //dram->Memset(4, 24, 8);
     dram->Memset(21, 32, 4);
     dram->Memset(7, 36, 4);
 
@@ -293,6 +297,10 @@ int main(int argc, char *(argv[]))
     dmaUnit->BindWires(wm);
     modules.push_back(dmaUnit);
     
+    std::shared_ptr<BufferCopySetUnit> bcsu(new BufferCopySetUnit(wm, cfg, holder));
+    bcsu->BindWires(wm);
+    modules.push_back(bcsu);
+
     int i;
     //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
     cout << "\n\n";
