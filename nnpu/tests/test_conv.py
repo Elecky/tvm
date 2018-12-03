@@ -27,23 +27,17 @@ with ScheduleProcHelper():
     k_buf, _ = nnpu.utils.CopyHtoBuf(kernel, 'kernel')
 
     out_shape = (shape[0] - kshape[0] + 1, shape[1] - kshape[1] + 1)
-    imd1_shape = (out_shape[0], out_shape[1], kshape[0], kshape[1], shape[-1] / factor, kshape[2])
-    k = tvm.reduce_axis((0, factor), 'k0')
+    imd1_shape = (out_shape[0], out_shape[1], kshape[0], kshape[1], kshape[2])
+    k = tvm.reduce_axis((0, shape[2]), 'k0')
     imd1 = tvm.compute(imd1_shape, 
-                    lambda x, y, i, j, p, oc:
-                        tvm.sum(k_buf[i, j, oc, p * factor + k].astype(dtype_w) * 
-                                f_buf[x + i, y + j, p * factor + k].astype(dtype_w)
+                    lambda x, y, i, j, oc:
+                        tvm.sum(k_buf[i, j, oc, k].astype(dtype_w) * 
+                                f_buf[x + i, y + j, k].astype(dtype_w)
                                 , axis=k),
                     'imd1')
-    nnpu.utils.MarkScope(imd1)
-    # sum all gemm parts up
-    imd2_shape = (out_shape[0], out_shape[1], kshape[0], kshape[1], kshape[2])
-    k = tvm.reduce_axis((0, shape[-1] / factor), 'k1')
-    imd2 = tvm.compute(imd2_shape,
-                    lambda x, y, i, j, oc:
-                        tvm.sum(imd1[x, y, i, j, k, oc], axis = k),
-                    'imd2')
-    nnpu.utils.MarkScope(imd2)
+    nnpu.utils.MarkScope(imd1, 'acc')
+    # copy to scratchpad
+    imd2 = nnpu.utils.CopyAccToBuf(imd1, 'imd2')
 
     # sum 
     imd3_shape = (out_shape[0], out_shape[1], kshape[0], kshape[2])
@@ -65,22 +59,19 @@ with ScheduleProcHelper():
     res_host, _ = nnpu.CopyBufToH(imd4, 'res')
     s = nnpu.create_schedule(res_host.op)
     # tensorize
-    oco, oci = s[imd1].split(imd1.op.axis[5], factor = gemm_shape[0])
-    s[imd1].tensorize(oci, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', reduce=True))
-    
-    oco, oci = s[imd2].split(imd2.op.axis[4], factor=nvctr_unit)
-    ko, ki = s[imd2].split(imd2.op.reduce_axis[0], factor=1)
-    x, y, kx, ky = imd2.op.axis[0:4]
-    s[imd2].reorder(x, y, kx, ky, oco, ko, ki, oci)
-    s[imd2].tensorize(ki, env.intrins.get('VAddMerge', mode='w'))
-    # schedule
-    s[imd1].compute_at(s[imd2], ko)
+    oco, ro, oci, ri = s[imd1].tile(imd1.op.axis[4], imd1.op.reduce_axis[0], gemm_shape[0], factor)
+    s[imd1].tensorize(oci, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', 
+                                                   reduce=True, scope_out='acc'))
 
     oco, oci = s[imd3].split(imd3.op.axis[3], factor=nvctr_unit)
     ko, ki = s[imd3].split(imd3.op.reduce_axis[0], factor=1)
     x, y, kx = imd3.op.axis[0:3]
     s[imd3].reorder(x, y, kx, oco, ko, ki, oci)
     s[imd3].tensorize(ki, env.intrins.get('VAddMerge', mode='w'))
+
+    #schedule
+    s[imd2].compute_at(s[imd3], kx)
+    s[imd1].compute_at(s[imd3], kx)
 
     oco, oci = s[imd4].split(imd4.op.axis[2], factor=nvctr_unit)
     ko, ki = s[imd4].split(imd4.op.reduce_axis[0], factor=1)
