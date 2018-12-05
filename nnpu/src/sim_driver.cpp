@@ -13,6 +13,7 @@ also declares the base simulator interface.
 #include <yaml-cpp/yaml.h>
 #include <nnpusim/S0Simulator.h>
 #include <tvm/runtime/registry.h>
+#include <nnpusim/s1_simulator.h>
 
 using std::shared_ptr;
 
@@ -181,7 +182,9 @@ std::shared_ptr<nnpu::Simulator> NNPUDevAlloc(nnpu::DevType type, YAML::Node cfg
     {
     case Type::S0:
         return std::make_shared<nnpu::S0Simulator>(cfg);
-        break;
+
+    case Type::S1:
+        return std::make_shared<nnpu::S1Simulator>(cfg);
 
     default:
         return nullptr;

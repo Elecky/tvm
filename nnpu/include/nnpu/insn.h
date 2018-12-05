@@ -1102,7 +1102,7 @@ struct NNPUInsn {
 public:
     NNPUInsn(InsnType type) : Type(type) {}
 
-    const InsnType Type;
+    InsnType Type;
 
     // instruction union
     union {
