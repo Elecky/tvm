@@ -8,6 +8,7 @@ if(PYTHON)
     set(SIM_SRC nnpu/NNPUSim/src/)
     set(NNPU_SIM_COMMON ${SIM_SRC}/common/bit_packer.cpp ${SIM_SRC}/common/bit_packer_factory.cpp
                         ${SIM_SRC}/common/bit_wrapper.cpp ${SIM_SRC}/common/wire.cpp
+                        ${SIM_SRC}/common/data_types.cpp
                         )
     set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/S0Simulator.cpp)
     set(NNPU_S1SIM_SRC ${SIM_SRC}/sim_module.cpp ${SIM_SRC}/insn_mem.cpp
@@ -18,7 +19,7 @@ if(PYTHON)
                        ${SIM_SRC}/future_file.cpp ${SIM_SRC}/memory_queue.cpp
                        ${SIM_SRC}/data_read_unit.cpp ${SIM_SRC}/address_range.cpp
                        ${SIM_SRC}/vctr_calc_unit.cpp ${SIM_SRC}/data_write_unit.cpp
-                       ${SIM_SRC}/DMA_copy_buffer_LS_unit.cpp
+                       ${SIM_SRC}/mat_calc_unit.cpp ${SIM_SRC}/DMA_copy_buffer_LS_unit.cpp
                        ${SIM_SRC}/buffer_copy_set_unit.cpp ${SIM_SRC}/s1_simulator.cpp)
     add_library(nnpu SHARED ${NNPU_RUNTIME_SRCS} ${NNPU_SIM_COMMON} ${NNPU_S0SIM_SRC}
                             ${NNPU_S1SIM_SRC})
