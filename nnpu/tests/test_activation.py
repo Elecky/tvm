@@ -7,7 +7,7 @@ import math
     
 with (ScheduleProcHelper()):
     env = nnpu.get_env()
-    nnpu.set_device(env)
+    nnpu.set_device(env, type='S1')
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
     assert dtype_w == 'float32', 'when testing activation function, float dtype is needed'
@@ -68,3 +68,4 @@ with (ScheduleProcHelper()):
     print(res)
     gt = gt / np.sum(gt)
     np.testing.assert_allclose(res, gt, rtol=1e-6)
+    print('test passed')

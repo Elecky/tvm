@@ -55,8 +55,9 @@ ModeCode ModeFromInt(uint32_t mode)
 
 void VctrUnaryInsn::Dump(ostream& os) const
 {
-    os << "V" << ToString(this->Op) << "." << mode2str(this->Mode) << " $" << this->VctrOutAddrReg 
-       << ", $" << this->VctrInAddrReg << ", $" << this->ElemCountReg;
+    os << "V" << ToString(this->Op) << '_' << Size << "." << mode2str(this->Mode) 
+       << " $" << this->VctrOutAddrReg 
+       << ", $" << this->VctrInAddrReg;
 }
 
 void DMACopyInsn::Dump(ostream& os) const
@@ -566,7 +567,6 @@ KVList_t VctrUnaryInsn::GetRegMap() const
     KVList_t res;
     res[VctrOutAddrReg] = 0;
     res[VctrInAddrReg] = 0;
-    res[ElemCountReg] = 0;
 
     return res;
 }
