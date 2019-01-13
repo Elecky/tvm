@@ -6,7 +6,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env)
+    nnpu.set_device(env, type='S1')
     a = tvm.placeholder((16,16), env.cfg['dtype_n'], 'a')
     sph = ScheduleProcHelper()
     Imm = tvm.const(7, env.cfg['dtype_n'])
@@ -28,11 +28,11 @@ def test():
     s = tvm.create_schedule([add_host.op,mul_host.op,rsub_host.op])
     sph.Transform(s)
     s[add_buf].tensorize(s[add_buf].op.axis[0], env.intrins.get('MAddI', 
-                            shape=(16,16), imm_val=Imm.value, mode='n'))
+                            shape=(16,16), imm_value=Imm.value, mode='n'))
     s[mul_buf].tensorize(s[mul_buf].op.axis[0], env.intrins.get('MMulI', 
-                            shape=(16,16), imm_val=Imm.value, mode='inc'))
+                            shape=(16,16), imm_value=Imm.value, mode='inc'))
     s[rsub_buf].tensorize(s[rsub_buf].op.axis[0], env.intrins.get('ISubM', 
-                            shape=(16,16), imm_val=Imm.value, mode='n'))
+                            shape=(16,16), imm_value=Imm.value, mode='n'))
     print(nnpu.lower(s, [a,add_host,mul_host,rsub_host], simple_mode=True))
     func = nnpu.build(s, [a,add_host,mul_host,rsub_host], 'nnpu', 'llvm', name='nnpu_vmuli')
     ctx = tvm.nd.TVMContext(13, 0)
@@ -54,5 +54,7 @@ def test():
     print('rsub result is: ')
     print(rsub_nd.asnumpy())
     np.testing.assert_allclose(rsub_nd.asnumpy(), Imm.value - a_np )
+    print('test passed')
+
 if __name__ == '__main__':
     test()

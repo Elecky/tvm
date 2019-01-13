@@ -6,7 +6,7 @@ import numpy as np
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    nnpu.set_device(env)
+    nnpu.set_device(env, type='S1')
     shape = (48, 48)
     insn_shape = (16, 16)
 
