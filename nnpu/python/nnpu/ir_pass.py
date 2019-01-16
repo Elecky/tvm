@@ -6,6 +6,7 @@ from .environment import get_env
 import tvm
 from helper import dtype_bytes as get_dtype_bytes
 from topi import util
+import utils
 
 # some helper functions
 def mark_coproc_scope(stmt):
@@ -500,3 +501,94 @@ def inject_accTobuffer(stmt_in):
         return body
     
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.copy_acc2buf, _inject_copy)
+
+# functions related to lift_coproc_scope ir pass starts from here.
+def _is_coproc_scope_attr(op):
+    return (isinstance(op, tvm.stmt.AttrStmt) and
+            op.attr_key == 'coproc_scope')
+
+def _check_coproc_scope_attr(op):
+    """ if op is an 'coproc_scope' AttrStmt, return op,
+        this will stop traversal down this op;
+        otherwise return None, to continue traversal.
+    """
+    if (_is_coproc_scope_attr(op)):
+        return op
+    else:
+        return None
+
+def _make_coproc_scope_attr(value, body):
+    env = get_env()
+    node = env.nnpu_axis
+    return tvm.make.AttrStmt(node, "coproc_scope", value, body)
+
+def _lift_coproc_scope_attr(op):
+    """ if every sub-node of op is 'coproc_scope' AttrStmt,
+        and have same attribute value, then lift this AttrStmt;
+        otherwise return None to keep original node.
+    """
+    # TODO: we did't check whether 'expr's can be evaluated on co-processor
+    # such as extent of a For stmt.
+    if (isinstance(op, tvm.stmt.For)):
+        if (_is_coproc_scope_attr(op.body)):
+            # print('!!!!!!! trying to replace')
+            value = op.body.value
+            # it is an error to use op.body = op.body.body to replace a body of 
+            # one node, so we have to recreate one for node.
+            body = tvm.make.For(op.loop_var, op.min, op.extent, op.for_type, 0, op.body.body)
+            body = _make_coproc_scope_attr(value, body)
+            return body
+    elif (isinstance(op, tvm.stmt.Block)):
+        if (_is_coproc_scope_attr(op.first) and
+            _is_coproc_scope_attr(op.rest) and
+            utils.isEqual(op.first.value, op.rest.value)):
+            value = op.first.value
+            body = tvm.make.Block(op.first.body, op.rest.body)
+            body = _make_coproc_scope_attr(value, body)
+            return body
+        elif (_is_coproc_scope_attr(op.first) and
+            isinstance(op.rest, tvm.stmt.Block) and
+            _is_coproc_scope_attr(op.rest.first) and
+            utils.isEqual(op.first.value, op.rest.first.value)):
+            # this is a special case that appears in real TVM AST for NNPU.
+            # we use T to indicate coproc_scope AttrStmt nodes, F as other nodes.
+            # then this is the condition that a subtree is like:
+            # Block(T, Block(T, F))
+            # and we convert it into:
+            # Block(Block(T, T), F)
+            value = op.first.value
+            first = tvm.make.Block(op.first.body,
+                                   op.rest.first.body)
+            first = _make_coproc_scope_attr(value, first)
+            body = tvm.make.Block(first, op.rest.rest)
+            return body
+    elif (isinstance(op, tvm.stmt.ProducerConsumer)):
+        if (_is_coproc_scope_attr(op.body)):
+            value = op.body.value
+            body = tvm.make.ProducerConsumer(op.func, op.is_producer, op.body.body)
+            body = _make_coproc_scope_attr(value, body)
+            return body
+    elif (isinstance(op, tvm.stmt.IfThenElse)):
+        if (not op.else_case.defined()):
+            if (_is_coproc_scope_attr(op.then_case)):
+                value = op.then_case.value
+                body = tvm.make.IfThenElse(op.condition, op.then_case.body)
+                body = _make_coproc_scope_attr(value, body)
+                return body
+        elif (_is_coproc_scope_attr(op.then_case) and
+              _is_coproc_scope_attr(op.else_case) and
+              utils.isEqual(op.then_case.value, op.else_case.value)):
+            value = op.then_case.value
+            body = tvm.make.IfThenElse(op.condition, 
+                                       op.then_case.body,
+                                       op.else_case.body)
+            body = _make_coproc_scope_attr(value, body)
+            return body
+
+    return None
+    
+
+def lift_coproc_scope(stmt):
+    stmt = tvm.ir_pass.IRTransform(stmt, _check_coproc_scope_attr, 
+                                   _lift_coproc_scope_attr, [])
+    return stmt
