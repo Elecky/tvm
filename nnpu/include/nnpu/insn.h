@@ -28,7 +28,7 @@ enum class InsnType
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
     MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy,
     Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ, ALUBinary, SclrLoad, SclrStore, BNEZ,
-    ALURegImm
+    ALURegImm,VReduceKey
 };
 
 ModeCode ModeFromInt(uint32_t mode);
@@ -480,7 +480,33 @@ public:
         return {false, 0};
     }
 };
+struct VReduceKeyInsn
+{
+public:
+    VReduceKeyInsn() = default;
+    VReduceKeyInsn(regNo_t _out1AddrReg,regNo_t _out2AddrReg, regNo_t _inAddrReg, 
+        uint32_t _size, ModeCode _mode) :
+         Out1AddrReg(_out1AddrReg),Out2AddrReg(_out2AddrReg), InAddrReg(_inAddrReg), 
+        Size(_size), Mode(_mode)
+    {}
 
+    regNo_t Out1AddrReg;
+    regNo_t Out2AddrReg;
+    regNo_t InAddrReg;
+    uint32_t Size;
+    ModeCode Mode;
+    void Dump(std::ostream& os) const;
+    KVList_t GetRegMap() const;
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
+};
 enum class MatImmOp { Add,Mul,RSub/* greater than merge */ };
 const char* ToString(MatImmOp value);
 struct MatImmInsn
@@ -1140,6 +1166,8 @@ public:
 
         VctrSclrInsn VctrSclr;
 
+        VReduceKeyInsn VReduceKey;
+
         BufferCopyInsn BufferCopy;
 
         MemsetInsn Memset;
@@ -1215,6 +1243,9 @@ public:
 
         case InsnType::VctrBinary:
             return functor(this->VctrBinary, std::forward<TArgs>(args)...);
+
+        case InsnType::VReduceKey:
+            return functor(this->VReduceKey, std::forward<TArgs>(args)...);
         
         case InsnType::VctrImm:
             return functor(this->VctrImm, std::forward<TArgs>(args)...);
@@ -1377,6 +1408,9 @@ public:
     {}
 
     NNPUInsn(const ALURegImmInsn &_insn) : Type(InsnType::ALURegImm), ALURegImm(_insn)
+    {}
+
+    NNPUInsn(const VReduceKeyInsn &_insn) : Type(InsnType::VReduceKey), VReduceKey(_insn)
     {}
 };
 

@@ -375,6 +375,22 @@ void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut,
     queue->EmplaceBack(gemm);
 }
 
+void NNPU_VReduceKey(uint32_t out1Addr, uint32_t out2Addr, uint32_t inAddr, uint32_t size, uint32_t mode)
+{
+    using Li = nnpu::LiInsn;
+    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+
+    // load 3 addresses
+    queue->EmplaceBack(Li(0, out1Addr));
+    queue->EmplaceBack(Li(1, out2Addr));
+
+    queue->EmplaceBack(Li(2, inAddr));
+    // create a gemm instruction
+    nnpu::VReduceKeyInsn reducekey(0,1,2,size,ModeFromInt(mode));
+
+    queue->EmplaceBack(reducekey);
+}
+
 static bool DumpInsn = true;
 using tvm::runtime::TVMArgs;
 using tvm::runtime::TVMRetValue;

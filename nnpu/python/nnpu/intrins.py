@@ -650,6 +650,70 @@ class IntrinManager(object):
         self.intrin_ctors['VReduceMax'] = vctr_reduce
         self.intrin_ctors['VReduceMin'] = vctr_reduce
 
+        def vctr_reduce_key(intrin_op, scope_in1='uni', scope_out1='uni',scope_out2='uni', mode='inc'):
+            env = self.env
+            cfg = self.env.cfg
+
+            scope_in1 = self.get_scope(scope_in1)
+            scope_out1 = self.get_scope(scope_out1)
+            scope_out2 = self.get_scope(scope_out2)
+            dtype_in, dtype_out = self.mode2dtype(mode)
+            
+            # the name should contain all parameters
+            name = intrin_op + ';' + scope_in1 +  ';' + scope_out1 + ';' +scope_out2 + ';' + mode
+
+            if (name in self.intrin_cache):
+                return self.intrin_cache[name]
+
+            shape = (5,cfg['vector_unit']['size'])
+
+            op_in1 = tvm.placeholder(shape, dtype=dtype_in, name='in1')
+            k = tvm.reduce_axis((0, shape[1]), 'k')
+            extern_func = 'NNPU_VReduceKey'
+            def fcombine(x, y):
+                lhs = tvm.select((x[1] >= y[1]), x[0], y[0])
+                rhs = tvm.select((x[1] >= y[1]), x[0], y[0])
+                return lhs,rhs
+
+            def fidentity(t0, t1):
+                return tvm.const(-1, t0), tvm.min_value(t1)
+
+            argmax = tvm.comm_reducer(fcombine, fidentity, name='argmax')
+            out1 , out2 = tvm.compute((5,), lambda i: argmax((op_in1[i,k], op_in1[4,k]), axis=k), 'out')
+
+            in1_buf = self.decl_buffer(op_in1, scope_in1, 'in1_buf')
+            out1_buf = tvm.decl_buffer(
+                out1.shape, out1.dtype, 'out1_buf', scope=scope_out1,
+                data_alignment=dtype_bytes(out1.dtype), offset_factor=1)
+            out2_buf = tvm.decl_buffer(
+                out2.shape, out2.dtype, 'out2_buf', scope=scope_out2,
+                data_alignment=dtype_bytes(out2.dtype), offset_factor=1)
+
+            
+            def lower_func(ins, outs):
+                din1 = ins[0]
+                dout1 = outs[0]
+                dout2 = outs[1]
+                irb = tvm.ir_builder.create()
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
+                irb.emit(tvm.call_extern("int32", extern_func,
+                            dout1.access_ptr('w', 'uint32'),
+                            dout2.access_ptr('w', 'uint32'),
+                            din1.access_ptr('r', 'uint32'),
+                            shape[0]*shape[1],
+                            self.get_mode_code(mode)
+                            ))
+                
+                return irb.get()
+
+            return tvm.decl_tensor_intrin(out1.op, lower_func,
+                                          name=name,
+                                          binds={op_in1: in1_buf,
+                                                 out1: out1_buf,
+                                                 out2: out2_buf})
+        
+        self.intrin_ctors['VReduceKey'] = vctr_reduce_key
+
         def mat_binary(intrin_op, shape, scope_in1='uni', scope_in2='uni', scope_out='uni',
                        mode='n'):
             env = self.env

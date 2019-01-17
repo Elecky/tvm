@@ -38,7 +38,8 @@ def _load_lib():
                             modify the path here!')
     
     try:
-        return [ctypes.CDLL(lib_path[0], ctypes.RTLD_GLOBAL)]
+        print(lib_path)
+        return [ctypes.CDLL(lib_path[0],ctypes.RTLD_GLOBAL)]
     except OSError as err:
         print(err.strerror)
         raise RuntimeError('libnnpu not loaded')

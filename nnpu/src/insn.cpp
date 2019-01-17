@@ -58,7 +58,10 @@ void VctrUnaryInsn::Dump(ostream& os) const
     os << "V" << ToString(this->Op) << "." << mode2str(this->Mode) << " $" << this->VctrOutAddrReg 
        << ", $" << this->VctrInAddrReg << ", $" << this->ElemCountReg;
 }
-
+void VReduceKeyInsn::Dump(ostream& os) const
+{
+    os<<"VReduceKey"<<", $"<<this->Out1AddrReg<<", $"<<this->Out2AddrReg<<", $"<<this->InAddrReg;
+}
 void DMACopyInsn::Dump(ostream& os) const
 {
     os << "DMACopy" << ToString(this->Dir) << " $" << this->HostPhyAddrReg << ", $"
@@ -638,6 +641,15 @@ KVList_t GemmInsn::GetRegMap() const
     res[In2AddrReg] = 0;
     res[In2RowStrideReg] = 0;
 
+    return res;
+}
+
+KVList_t VReduceKeyInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[Out1AddrReg] = 0;
+    res[Out2AddrReg] = 0;
+    res[InAddrReg] = 0;
     return res;
 }
 
