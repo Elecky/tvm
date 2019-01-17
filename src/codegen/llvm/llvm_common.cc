@@ -116,7 +116,8 @@ void ParseLLVMTargetOptions(const std::string& target_str,
 
 llvm::TargetMachine*
 GetLLVMTargetMachine(const std::string& target_str,
-                     bool allow_null) {
+                     bool allow_null,
+                     llvm::Reloc::Model reloc_model) {
   std::string target_triple, mcpu, mattr;
   llvm::TargetOptions opt;
 
@@ -142,7 +143,7 @@ GetLLVMTargetMachine(const std::string& target_str,
     return nullptr;
   }
   llvm::TargetMachine* tm = target->createTargetMachine(
-      target_triple, mcpu, mattr, opt, llvm::Reloc::PIC_);
+      target_triple, mcpu, mattr, opt, reloc_model);
   return tm;
 }
 
