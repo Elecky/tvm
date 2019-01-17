@@ -429,8 +429,8 @@ def _build_for_device(flist, target, target_host):
                 print(fsplits[0].body)
                 for i, x in enumerate(fsplits[1:], 1):
                     print('device func {0}'.format(i))
+                    print(x.args)
                     print(x.body)
-                exit()
             
             fhost.append(fsplits[0])
             for x in fsplits[1:]:

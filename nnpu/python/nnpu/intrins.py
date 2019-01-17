@@ -4,6 +4,25 @@ from helper import dtype_bytes, convert_scope
 
 class IntrinManager(object):
 
+    def make_intrin_call(self, dtype, name, *args):
+        """ Build a llvm.NNPU intrinsic function call who has side-effect.
+
+        Parameters
+        ----------
+        dtype : str
+            The data type of the result. can be void to indicate no return value.
+
+        name : str
+            The name of the llvm intrinsic function 'without' llvm.NNPU prefix.
+
+        args : list
+            Poistional arguments.
+        """
+        name = 'llvm.NNPU.' + name
+        return tvm.call_llvm_intrin_with_side_effect(
+                        dtype, name, tvm.const(len(args), 'uint32'), *args
+                    )
+
     def __init__(self, env):
         self.intrin_ctors = {}
         # the intrin cache is an dict from name to registered intrin
@@ -44,7 +63,7 @@ class IntrinManager(object):
                     expr = lambda i: tvm.exp(op_in[i]).astype(dtype_out)
                 else:
                     expr = lambda i: tvm.exp(op_in[i])
-                extern_func = 'NNPU_VEXP'
+                intrin_func = 'NNPU_VEXP'
             elif (intrin_op == 'VLog'):
                 if (mode == 'inc'):
                     expr = lambda i: tvm.log(op_in[i].astype(dtype_out))
@@ -52,7 +71,7 @@ class IntrinManager(object):
                     expr = lambda i: tvm.log(op_in[i]).astype(dtype_out)
                 else:
                     expr = lambda i: tvm.log(op_in[i])
-                extern_func = 'NNPU_VLOG'
+                intrin_func = 'NNPU_VLOG'
             else:
                 raise ValueError('unsupported vctr unary intrin op')
             
@@ -65,7 +84,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
+                irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr("w", 'uint32'),
                             din.access_ptr("r", 'uint32'),
                             cfg['vector_unit']['size'],
@@ -115,25 +134,25 @@ class IntrinManager(object):
 
             if (intrin_op == 'VAddI'):
                 expr = expr_template(op_in, imm, lambda x, y: x + y)
-                extern_func = 'NNPU_VAddI'
+                intrin_func = 'NNPU_VAddI'
             elif (intrin_op == 'VSubI'):
                 expr = expr_template(op_in, imm, lambda x, y: x - y)
-                extern_func = 'NNPU_VSubI'
+                intrin_func = 'NNPU_VSubI'
             elif (intrin_op == 'VMulI'):
                 expr = expr_template(op_in, imm, lambda x, y: x * y)
-                extern_func = 'NNPU_VMulI'
+                intrin_func = 'NNPU_VMulI'
             elif (intrin_op == 'VDivI'):
                 expr = expr_template(op_in, imm, lambda x, y: x / y)
-                extern_func = 'NNPU_VDivI'
+                intrin_func = 'NNPU_VDivI'
             elif (intrin_op == 'VGTMI'):
                 expr = expr_template(op_in, imm, lambda x, y: tvm.select(x > y, x, y))
-                extern_func = 'NNPU_VGTMI'
+                intrin_func = 'NNPU_VGTMI'
             elif (intrin_op == 'ISubV'):
                 expr = expr_template(op_in,imm, lambda x, y: y - x)
-                extern_func = 'NNPU_ISubV'
+                intrin_func = 'NNPU_ISubV'
             elif (intrin_op == 'IDivV'):
                 expr = expr_template(op_in,imm,lambda x , y : y / x)
-                extern_func = 'NNPU_IDivV'
+                intrin_func = 'NNPU_IDivV'
             else:
                 raise ValueError('unsupported vctr Imm intrin op')
             out = tvm.compute(out_shape, expr,
@@ -144,7 +163,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
+                irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr("w", 'uint32'),
                             din.access_ptr("r", 'uint32'),
                             str(imm_value),
@@ -328,13 +347,13 @@ class IntrinManager(object):
             # due to the limitation of tvm, we have 3 conditions to consider.
             if (intrin_op == 'MAddI'):
                 expr = expr_template(in1, imm, lambda x, y: x + y)
-                extern_func = 'NNPU_MAddI'
+                intrin_func = 'NNPU_MAddI'
             elif (intrin_op == 'MMulI'):
                 expr = expr_template(in1, imm, lambda x, y: x * y)
-                extern_func = 'NNPU_MMulI'
+                intrin_func = 'NNPU_MMulI'
             elif (intrin_op == 'ISubM'):
                 expr = expr_template(in1, imm, lambda x, y: y - x )
-                extern_func = 'NNPU_ISubM'
+                intrin_func = 'NNPU_ISubM'
             out = tvm.compute((nRow, nCol), expr, name='out')
             in1_buf = self.decl_buffer(in1, scope_in, 'in')
             out_buf = self.decl_buffer(out, scope_out, 'out')
@@ -343,7 +362,7 @@ class IntrinManager(object):
                 dout = outs[0]
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
+                irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din.access_ptr('r', 'uint32'),
                             str(imm_value),nRow, nCol, 
@@ -390,20 +409,20 @@ class IntrinManager(object):
 
             if (intrin_op == 'VAddV'):
                 expr = expr_template(in1, in2, lambda x, y: x + y)
-                extern_func = 'NNPU_VAddV'
+                intrin_func = 'VAddV'
             elif (intrin_op == 'VSubV'):
                 expr = expr_template(in1, in2, lambda x, y: x - y)
-                extern_func = 'NNPU_VSubV'
+                intrin_func = 'VSubV'
             elif (intrin_op == 'VMulV'):
                 expr = expr_template(in1, in2, lambda x, y: x * y)
-                extern_func = 'NNPU_VMulV'
+                intrin_func = 'VMulV'
             elif (intrin_op == 'VDivV'):
                 expr = expr_template(in1, in2, lambda x, y: x / y)
-                extern_func = 'NNPU_VDivV'
+                intrin_func = 'VDivV'
             elif (intrin_op == 'VGTMV'):
                 expr = expr_template(in1, in2, 
                                     lambda x, y: tvm.select(x > y, x, y))
-                extern_func = 'NNPU_VGTMV'
+                intrin_func = 'VGTMV'
             else:
                 raise ValueError('unhandled intrin_op in vctr_binary')
 
@@ -417,7 +436,7 @@ class IntrinManager(object):
                 dout = outs[0]
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
+                irb.emit(self.make_intrin_call("void", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din1.access_ptr('r', 'uint32'),
                             din2.access_ptr('r', 'uint32'),
@@ -469,15 +488,15 @@ class IntrinManager(object):
             if (intrin_op == 'VAddMerge'):
                 expr = lambda *i: tvm.sum(in1(k, *i), axis=k)
                 num = '0'
-                extern_func = 'NNPU_VAddV'
+                intrin_func = 'NNPU_VAddV'
             elif(intrin_op == 'VMulMerge'):
                 expr = lambda *i: tvm.sum(in1(k, *i), axis=k)
                 num = '1'
-                extern_func = 'NNPU_VMulV'
+                intrin_func = 'NNPU_VMulV'
             elif(intrin_op == 'VGTMMerge'):
                 expr = lambda *i: tvm.sum(in1(k, *i), axis=k)
                 num='-INFINITY'
-                extern_func = 'NNPU_VGTMV'
+                intrin_func = 'NNPU_VGTMV'
             else:
                 raise ValueError('unsupported op in vctr_merge: ' + intrin_op)
             
@@ -501,7 +520,7 @@ class IntrinManager(object):
                 def comp():
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                    irb.emit(tvm.call_extern("int32", extern_func,
+                    irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din.access_ptr('r', 'uint32'),
                             dout.access_ptr('r', 'uint32'),
@@ -610,13 +629,13 @@ class IntrinManager(object):
             k = tvm.reduce_axis((0, shape[0]), 'k')
             if (intrin_op == 'VReduceSum'):
                 expr = expr_template(op_in, tvm.sum, k)
-                extern_func = 'NNPU_VctrReduceSum'
+                intrin_func = 'NNPU_VctrReduceSum'
             elif (intrin_op == 'VReduceMax'):
                 expr = expr_template(op_in, tvm.max, k)
-                extern_func = 'NNPU_VctrReduceMax'
+                intrin_func = 'NNPU_VctrReduceMax'
             elif (intrin_op == 'VReduceMin'):
                 expr = expr_template(op_in, tvm.min, k)
-                extern_func = 'NNPU_VctrReduceMin'
+                intrin_func = 'NNPU_VctrReduceMin'
             else:
                 raise ValueError("unimplemented vctr reduce op")
             out = tvm.compute((1,), expr, 'out')
@@ -632,7 +651,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
+                irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din1.access_ptr('r', 'uint32'),
                             shape[0],
@@ -685,13 +704,13 @@ class IntrinManager(object):
 
             if (intrin_op == 'MAddM'):
                 expr = expr_template(in1, in2, lambda x, y: x + y)
-                extern_func = 'NNPU_MAddM'
+                intrin_func = 'NNPU_MAddM'
             elif (intrin_op == 'MSubM'):
                 expr = expr_template(in1, in2, lambda x, y: x - y)
-                extern_func = 'NNPU_MSubM'
+                intrin_func = 'NNPU_MSubM'
             elif (intrin_op == 'MMulM'):
                 expr = expr_template(in1, in2, lambda x, y: x * y)
-                extern_func = 'NNPU_MMulM'
+                intrin_func = 'NNPU_MMulM'
             else:
                 raise ValueError('unsupported mat binary op')
             out = tvm.compute(shape, expr, 'out')
@@ -706,7 +725,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
+                irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr('w', 'uint32'), 
                             dout.strides[0] * dtype_bytes(dtype_out),
                             din1.access_ptr('r', 'uint32'), 
@@ -757,11 +776,11 @@ class IntrinManager(object):
             if (intrin_op == 'MAddMerge'):
                 expr = lambda i,j: tvm.sum(in1[k, i,j], axis=k)
                 num = '0'
-                extern_func = 'NNPU_MAddM'
+                intrin_func = 'NNPU_MAddM'
             elif(intrin_op == 'MMulMerge'):
                 expr = lambda i,j: tvm.sum(in1[k, i,j], axis=k)
                 num = '1'
-                extern_func = 'NNPU_MMulM'
+                intrin_func = 'NNPU_MMulM'
             else:
                 raise ValueError('unsupported op in mat_merge: ' + intrin_op)
             
@@ -780,7 +799,7 @@ class IntrinManager(object):
                 def comp():
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                    irb.emit(tvm.call_extern("int32", extern_func,
+                    irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din.access_ptr('r', 'uint32'),
                             dout.access_ptr('r', 'uint32'),
@@ -831,7 +850,7 @@ class IntrinManager(object):
             k = tvm.reduce_axis((0, nCol), 'k')
             if (intrin_op == 'MReduceSumRow'):
                 expr = expr_template(op_in, tvm.sum, k)
-                extern_func = 'NNPU_MReduceSumRow'
+                intrin_func = 'NNPU_MReduceSumRow'
             else:
                 raise ValueError('unsupported mat reduce row op')
             
@@ -850,7 +869,7 @@ class IntrinManager(object):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     ptr_mode = 'rw' if doAcc else 'w'
-                    irb.emit(tvm.call_extern("int32", extern_func,
+                    irb.emit(tvm.call_extern("int32", intrin_func,
                                 dout.access_ptr(ptr_mode, 'uint32'),
                                 din1.access_ptr('r', 'uint32'), 
                                 din1.strides[0] * dtype_bytes(dtype_in),
@@ -907,13 +926,13 @@ class IntrinManager(object):
             
             if (intrin_op == 'MAddV'):
                 expr = expr_template(mat_in, vctr_in, lambda x, y: x + y)
-                extern_func = 'NNPU_MAddV'
+                intrin_func = 'NNPU_MAddV'
             elif (intrin_op == 'MSubV'):
                 expr = expr_template(mat_in, vctr_in, lambda x, y: x - y)
-                extern_func = 'NNPU_MSubV'
+                intrin_func = 'NNPU_MSubV'
             elif (intrin_op == 'MMulV'):
                 expr = expr_template(mat_in, vctr_in, lambda x, y: x * y)
-                extern_func = 'NNPU_MMulV'
+                intrin_func = 'NNPU_MMulV'
             else:
                 raise ValueError('unsupported mat vctr intrin op')
 
@@ -929,7 +948,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
+                irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             dout.strides[0] * dtype_bytes(dtype_out),
                             din1.access_ptr('r', 'uint32'),
@@ -1057,26 +1076,26 @@ class IntrinManager(object):
 
             if (intrin_op == 'VAddS'):
                 expr = expr_template(in1, in2, lambda x, y: x + y)
-                extern_func = 'NNPU_VAddS'
+                intrin_func = 'NNPU_VAddS'
             elif (intrin_op == 'VSubS'):
                 expr = expr_template(in1, in2, lambda x, y: x - y)
-                extern_func = 'NNPU_VSubS'
+                intrin_func = 'NNPU_VSubS'
             elif (intrin_op == 'VMulS'):
                 expr = expr_template(in1, in2, lambda x, y: x * y)
-                extern_func = 'NNPU_VMulS'
+                intrin_func = 'NNPU_VMulS'
             elif (intrin_op == 'VDivS'):
                 expr = expr_template(in1, in2, lambda x, y: x / y)
-                extern_func = 'NNPU_VDivS'
+                intrin_func = 'NNPU_VDivS'
             elif (intrin_op == 'VGTMS'):
                 expr = expr_template(in1, in2, 
                                     lambda x, y: tvm.select(x > y, x, y))
-                extern_func = 'NNPU_VGTMS'
+                intrin_func = 'NNPU_VGTMS'
             elif (intrin_op == 'SSubV'):
                 expr = expr_template(in1, in2, lambda x, y: y - x)
-                extern_func = 'NNPU_SSubV'
+                intrin_func = 'NNPU_SSubV'
             elif (intrin_op == 'SDivV'):
                 expr = expr_template(in1, in2, lambda x, y: y / x)
-                extern_func = 'NNPU_SDivV'
+                intrin_func = 'NNPU_SDivV'
             else:
                 raise ValueError('unhandled intrin_op in vctr_binary')
 
@@ -1094,7 +1113,7 @@ class IntrinManager(object):
                 dout = outs[0]
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(tvm.call_extern("int32", extern_func,
+                irb.emit(tvm.call_extern("int32", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din1.access_ptr('r', 'uint32'),
                             din2.access_ptr('r', 'uint32'),

@@ -153,10 +153,12 @@ def inject_dma_intrin(stmt_in):
                         #src_index
             dst_index = dst_index # access_ptr includes elem_offset already
             # NNPU_DMALoad(src_buf_addr, src_buf_offset, dst_phy_addr, dst_phy_offset, bytes)
-            body = tvm.call_extern('int32', 'NNPU_DMALoad', 
-                        src.data, util.simplify(src_index - src_pad_offset) * dtype_bytes,
-                        dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
-                        dst_shape[-1] * dtype_bytes)
+            body = tvm.call_llvm_intrin_with_side_effect(
+                            'void', "llvm.NNPU.DMALoad", tvm.const(4, 'uint32'),
+                            src.data, 
+                            util.simplify(src_index - src_pad_offset) * dtype_bytes,
+                            dst.access_ptr('w', 'uint32') + dst_index * dtype_bytes,
+                            dst_shape[-1] * dtype_bytes)
 
             # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
             body = tvm.make.Evaluate(body)
@@ -168,7 +170,6 @@ def inject_dma_intrin(stmt_in):
                     src_shape[i], 0, 0, body)  # fortype = serial
             
             body = mark_coproc_scope(body)
-
             return body
 
         elif (src.scope == env.dram_scope and dst.scope == 'global'):
@@ -203,10 +204,12 @@ def inject_dma_intrin(stmt_in):
             dst_index = dst_index + dst.elem_offset #if dst.elem_offset.defined() else \
                         #dst_index
             # NNPU_DMAStore(dst_phy_addr, dst_phy_offset, src_buf_addr, src_buf_offset, length)
-            body = tvm.call_extern('int32', 'NNPU_DMAStore', 
-                        dst.data, dst_index * dtype_bytes,
-                        src.access_ptr('r', 'uint32'), 
-                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
+            body = tvm.call_llvm_intrin_with_side_effect(
+                        'void', "llvm.NNPU.DMAStore", tvm.const(4, 'uint32'),
+                        dst.data, 
+                        dst_index * dtype_bytes,
+                        src.access_ptr('r', 'uint32') + 
+                            util.simplify(src_index - src_pad_offset) * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
             # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
@@ -292,10 +295,11 @@ def inject_scratchpad_ls(stmt_in):
             src_index = src_index # access_ptr includes elem_offset already
             dst_index = dst_index # access_ptr includes elem_offset already
             # NNPU_ScratchpadLoad(dram_phy_addr, dram_phy_offset, dst_phy_addr, dst_phy_offset, length)
-            body = tvm.call_extern('int32', 'NNPU_ScratchpadLoad', 
-                        src.access_ptr('r', 'uint32'), 
-                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
-                        dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
+            body = tvm.call_llvm_intrin_with_side_effect(
+                        'void', "llvm.NNPU.ScratchpadLoad", tvm.const(3, 'uint32'),
+                        src.access_ptr('r', 'uint32') +
+                            util.simplify(src_index - src_pad_offset) * dtype_bytes,
+                        dst.access_ptr('w', 'uint32') + dst_index * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
             # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
@@ -343,10 +347,11 @@ def inject_scratchpad_ls(stmt_in):
             # NNPU_ScratchpadStore(dram_phy_addr, dram_phy_offset, src_phy_addr, src_phy_offset, length)
             #print([util.get_const_int(st) for st in src.strides])
             #print(src.data)
-            body = tvm.call_extern('int32', 'NNPU_ScratchpadStore', 
-                        dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
-                        src.access_ptr('r', 'uint32'), 
-                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
+            body = tvm.call_llvm_intrin_with_side_effect(
+                        'void', "llvm.NNPU.ScratchpadStore", tvm.const(3, 'uint32'),
+                        dst.access_ptr('w', 'uint32') + dst_index * dtype_bytes,
+                        src.access_ptr('r', 'uint32') + 
+                            util.simplify(src_index - src_pad_offset) * dtype_bytes,
                         dst_shape[-1] * dtype_bytes)
 
             # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
@@ -417,13 +422,15 @@ def inject_scratchpad_copy(stmt_in):
         dst_index = 0 if (dst_index is None) else dst_index
 
         # use the last loop as inner body
-        body = tvm.call_extern('int32', 'NNPU_ScratchpadCopy', 
-                    dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
+        body = tvm.call_llvm_intrin_with_side_effect(
+                    'void', "llvm.NNPU.ScratchpadCopy", tvm.const(6, 'uint32'),
+                    dst.access_ptr('w', 'uint32') + dst_index * dtype_bytes,
                     dst_strides[-1] * dtype_bytes,
-                    src.access_ptr('r', 'uint32'), 
-                    util.simplify(src_index - src_pad_offset) * dtype_bytes,
+                    src.access_ptr('r', 'uint32') +
+                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
                     src_strides[-1] * dtype_bytes,
-                    dtype_bytes, dst_shape[-1])
+                    dtype_bytes, 
+                    dst_shape[-1])
         # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
         body = tvm.make.Evaluate(body)
 
@@ -483,13 +490,15 @@ def inject_accTobuffer(stmt_in):
         dst_index = 0 if (dst_index is None) else dst_index
 
         # use the last loop as inner body
-        body = tvm.call_extern('int32', 'NNPU_CopyAccToBuffer', 
-                    dst.access_ptr('w', 'uint32'), dst_index * dtype_bytes,
+        body = tvm.call_llvm_intrin_with_side_effect(
+                    'void', "llvm.NNPU.CopyAccToBuffer", tvm.const(6, 'uint32'),
+                    dst.access_ptr('w', 'uint32') + dst_index * dtype_bytes,
                     dst_strides[-1] * dtype_bytes,
-                    src.access_ptr('r', 'uint32'), 
-                    util.simplify(src_index - src_pad_offset) * dtype_bytes,
+                    src.access_ptr('r', 'uint32') +
+                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
                     src_strides[-1] * dtype_bytes,
-                    dtype_bytes, dst_shape[-1])
+                    dtype_bytes, 
+                    dst_shape[-1])
         # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
         body = tvm.make.Evaluate(body)
 

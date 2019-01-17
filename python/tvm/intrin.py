@@ -178,6 +178,45 @@ def call_llvm_intrin(dtype, name, *args):
     assert llvm_id != 0, "%s is not an LLVM intrinsic" % name
     return call_pure_intrin(dtype, 'llvm_intrin', tvm.const(llvm_id, 'uint32'), *args)
 
+def call_llvm_intrin_with_side_effect(dtype, name, num_signature, *args):
+    """ Build expression by calling an llvm intrinsic function with side-effect.
+        since pure_intrin will be removed by remove_nop ir pass.
+        note: the corresponding code generation implemented in CodeGenNNPU only.
+
+    Parameters
+    ----------
+    dtype : str
+       The data type of the result. can be void to indicate function has no return value.
+
+    name : str
+       The name of the llvm intrinsic function.
+    
+    num_signature : int
+       I am not sure, I just splitted it from args. 
+       In call_llvm_intrin this is an implict argument at the front of args.
+
+    args : list
+       Poistional arguments.
+
+    Returns
+    -------
+    call : Expr
+        The call expression.
+    """
+    import tvm
+    if (dtype == 'void'):
+        has_return = tvm.const(0, 'uint32')
+        dtype = 'int32'  # because Halide IR has no void type, we have to set it int32.
+    else:
+        has_return = tvm.const(1, 'uint32')
+    llvm_id = tvm.codegen.llvm_lookup_intrinsic_id(name)
+    assert llvm_id != 0, "%s is not an LLVM intrinsic" % name
+    return call_intrin(dtype, 'llvm_intrin_with_side_effct', 
+                       tvm.const(llvm_id, 'uint32'), 
+                       num_signature, 
+                       has_return, 
+                       *args)
+    
 
 def exp(x):
     """Take exponetial of input x.
