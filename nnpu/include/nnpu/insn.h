@@ -47,8 +47,8 @@ public:
     VctrUnaryOp Op;
     regNo_t VctrOutAddrReg;
     regNo_t VctrInAddrReg;
-    regNo_t ElemCountReg;
 
+    uint32_t Size;
     ModeCode Mode;
 
     /* default constructor */
@@ -56,9 +56,9 @@ public:
 
     /* constructor */
     VctrUnaryInsn(VctrUnaryOp _op, regNo_t _vctrOutAddrReg, regNo_t _vctrInAddrReg, 
-        regNo_t _elemCountReg, ModeCode _mode) :
+        uint32_t _size, ModeCode _mode) :
         Op(_op), VctrOutAddrReg(_vctrOutAddrReg), VctrInAddrReg(_vctrInAddrReg), 
-        ElemCountReg(_elemCountReg), Mode(_mode)
+        Size(_size), Mode(_mode)
     {}
 
     /*!

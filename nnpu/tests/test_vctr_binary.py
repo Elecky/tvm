@@ -49,6 +49,7 @@ def test():
 
 
     print(nnpu.lower(s, [a, b, c_host, mul_host, gtm_host], simple_mode=True))
+    exit()
     func = nnpu.build(s, [a, b, c_host, mul_host, gtm_host], 'nnpu', 'llvm', name='nnpu_exp')
 
 

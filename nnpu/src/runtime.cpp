@@ -223,12 +223,9 @@ void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint
     // vector in address into $1
     nnpu::LiInsn li2(1, vctr_in_addr);
     queue->EmplaceBack(li2);
-    // element count into $2
-    nnpu::LiInsn li3(2, len);
-    queue->EmplaceBack(li3);
 
     // create a vctr exp instruction: VEXP $0, $1, $2
-    nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, 2, ModeFromInt(mode));
+    nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, len, ModeFromInt(mode));
     queue->EmplaceBack(exp);
 }
 void NNPU_VLOG(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode)

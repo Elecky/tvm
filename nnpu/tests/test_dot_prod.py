@@ -6,7 +6,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env)
+    nnpu.set_device(env, type='S1')
 
     a = tvm.placeholder((4, 16), 'int16', 'a')
     b = tvm.placeholder((16, ), 'int16', 'b')

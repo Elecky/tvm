@@ -419,6 +419,7 @@ def _build_for_device(flist, target, target_host):
             func = ir_pass.ThreadSync(func, "warp")
             warp_size = target.thread_warp_size
             func = ir_pass.LowerThreadAllreduce(func, warp_size)
+            # TODO: implement our own spliter.
             fsplits = [s for s in ir_pass.SplitHostDevice(func)]
             fhost.append(fsplits[0])
             for x in fsplits[1:]:
@@ -430,6 +431,7 @@ def _build_for_device(flist, target, target_host):
         else:
             raise ValueError("unknown function type %d" % func.func_type)
 
+    # TODO: May need some special handling!!
     for i, func in enumerate(fdevice):
         warp_size = target.thread_warp_size
         fdevice[i] = ir_pass.LowerWarpMemory(func, warp_size)

@@ -122,3 +122,36 @@ def create_schedule(*args, **kwargs):
     s = tvm.create_schedule(*args, **kwargs)
     ScheduleProcHelper.current.Transform(s)
     return s
+
+def isEqual(expr1, expr2):
+    """ Verifies both expr1 and expr2 are immediate value andare equal.
+
+    Parameters
+    ----------
+    expr1 : tvm.Expr or int
+        The input expression.
+
+    expr2 : tvm.Expr or int
+        The input expression.
+
+    Returns
+    -------
+    pred: equal or not.
+    """
+    val1 = None
+    if isinstance(expr1, int):
+        val1 = expr1
+    if not isinstance(expr1, (tvm.expr.IntImm, tvm.expr.UIntImm)):
+        expr1 = tvm.ir_pass.Simplify(expr1)
+    if isinstance(expr1, (tvm.expr.IntImm, tvm.expr.UIntImm)):
+        val1 = expr1.value
+    
+    val2 = None
+    if isinstance(expr2, int):
+        val2 = expr2
+    if not isinstance(expr2, (tvm.expr.IntImm, tvm.expr.UIntImm)):
+        expr2 = tvm.ir_pass.Simplify(expr2)
+    if isinstance(expr2, (tvm.expr.IntImm, tvm.expr.UIntImm)):
+        val2 = expr2.value
+
+    return val1 == val2
