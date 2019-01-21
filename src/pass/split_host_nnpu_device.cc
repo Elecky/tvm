@@ -202,6 +202,8 @@ class NNPUHostDeviceSplitter : public IRMutator {
     }
     for (Var v : m.undefined_) {
       if (!v.type().is_handle()) {
+        CHECK(v.type().is_int()) 
+          << ", NNPU backend only supportes variable buffer or int argument";
         n->args.push_back(v);
       }
     }

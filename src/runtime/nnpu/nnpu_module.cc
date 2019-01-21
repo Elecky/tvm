@@ -84,8 +84,21 @@ void NNPUWrappedFunc::operator()(TVMArgs args,
     CHECK(handleToPhyAddr != nullptr);
     for (int i = 0; i < args.num_args - 1; ++i)
     {
-        os << "\n arg" << i << " = " << (int64_t)(*handleToPhyAddr)((void*)args[i]);
+        switch (args.type_codes[i])
+        {
+        case kHandle:
+            os << "\n arg" << i << "[handle] = " << (int64_t)(*handleToPhyAddr)((void*)args[i]);
+            break;
+        
+        case kDLInt:
+            os << "\n arg" << i << "[int] = " << static_cast<int32_t>(args[i]);
+            break;
+
+        default:
+            CHECK(false) << "unexpected argument type";
+        }
     }
+    // the last argument is coproc scope.
     os << "\n coproc_scope = " << static_cast<int>(args[5]) << std::endl;
 }
 
