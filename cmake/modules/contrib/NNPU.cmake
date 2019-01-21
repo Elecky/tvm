@@ -29,3 +29,6 @@ if(PYTHON)
 else()
   message(STATUS "Cannot found python in env, NNPU build is skipped..")
 endif()
+
+file(GLOB RUNTIME_NNPU_SRCS src/runtime/nnpu/*.cc)
+list(APPEND RUNTIME_SRCS ${RUNTIME_NNPU_SRCS})

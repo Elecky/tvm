@@ -375,11 +375,27 @@ void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut,
 static bool DumpInsn = true;
 using tvm::runtime::TVMArgs;
 using tvm::runtime::TVMRetValue;
-static TVM_ATTRIBUTE_UNUSED auto &__register_dev__ =
+static TVM_ATTRIBUTE_UNUSED auto &__register_set_dump_ =
     ::tvm::runtime::Registry::Register("nnpu.set_dump", true)
         .set_body([](TVMArgs args, TVMRetValue *rv) {
             if (args.size() >= 1)
                 DumpInsn = static_cast<bool>(args[0]);
+        });
+
+uint32_t NNPU_Handle2PhyAddr(void *handle)
+{
+    auto buffer = nnpu::DataBuffer::FromHandle(handle);
+    return buffer->phy_addr();
+}
+
+static TVM_ATTRIBUTE_UNUSED auto &__register_handleTophyAddr_ =
+    ::tvm::runtime::Registry::Register("nnpu.handleToPhyAddr", true)
+        .set_body([](TVMArgs args, TVMRetValue *rv) {
+            CHECK(args.num_args >= 1) << ", ecpected one argument";
+            CHECK(rv != nullptr) << ", empty return address";
+
+            (*rv) = static_cast<int64_t>(
+                        NNPU_Handle2PhyAddr(static_cast<void*>(args[0])));
         });
 
 void NNPUSynchronize(uint32_t timeout)

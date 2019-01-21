@@ -192,14 +192,13 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
   std::string asm_code(data_asm.begin(), data_asm.end());
   // std::cout << "The generate asm is:\n";
   // std::cout << asm_code;
-  // exit(0); // instant exit to see the generated IR and asm.
   return NNPUModuleCreate(asm_code, ExtractFuncInfo(funcs), ll);
 }
 
 TVM_REGISTER_API("codegen.build_nnpu")
     .set_body([](TVMArgs args, TVMRetValue *rv) {
       *rv = BuildNNPU(args[0], args[1]);
-    });
+    }); 
 
 } // namespace codegen
 } // namespace tvm
