@@ -37,14 +37,9 @@ public:
 
     std::string GetSource(const std::string& format) final;
 
-    const std::string& GetAsmCode() const
+    const char* GetAsmCodeCStr() const
     {
-        return asm_code;
-    };
-
-    std::string GetAsmCode()
-    {
-        return asm_code;
+        return asm_code.c_str();
     };
 
 private:
@@ -77,29 +72,69 @@ private:
 void NNPUWrappedFunc::operator()(TVMArgs args, 
                                  TVMRetValue *rv) const 
 {
-    auto &os = LOG(INFO);
-    os << "\n NNPUWrappedFunc called, function name = " << func_name_
-       << "\n argc = " << args.num_args << ", arguments = ";
+    // auto &os = LOG(INFO);
+    // os << "\n NNPUWrappedFunc called, function name = " << func_name_
+    //    << "\n argc = " << args.num_args << ", arguments = ";
     auto handleToPhyAddr =  tvm::runtime::Registry::Get("nnpu.handleToPhyAddr");
     CHECK(handleToPhyAddr != nullptr);
+
+    // for (int i = 0; i < args.num_args - 1; ++i)
+    // {
+    //     switch (args.type_codes[i])
+    //     {
+    //     case kHandle:
+    //         os << "\n arg" << i << "[handle] = " << (int64_t)(*handleToPhyAddr)((void*)args[i]);
+    //         break;
+        
+    //     case kDLInt:
+    //         os << "\n arg" << i << "[int] = " << static_cast<int32_t>(args[i]);
+    //         break;
+
+    //     default:
+    //         CHECK(false) << "unexpected argument type";
+    //     }
+    // }
+    // // the last argument is coproc scope.
+    // os << "\n coproc_scope = " << static_cast<int>(args[5]) << std::endl;
+
+    const std::size_t num_args = args.num_args + 2;  // args plus asm code and functions name.
+    std::unique_ptr<TVMValue[]> values(new TVMValue[num_args]);
+    std::unique_ptr<int[]> type_codes(new int[num_args]);
+
+    auto ptr = std::dynamic_pointer_cast<NNPUModule>(sptr_);
+
+    values[0].v_str = ptr->GetAsmCodeCStr();
+    type_codes[0] = kStr;
+    values[1].v_str = func_name_.c_str();
+    type_codes[1] = kStr;
+    values[2].v_int64 = static_cast<int>(args[args.num_args - 1]);
+    type_codes[2] = kDLInt;
+
     for (int i = 0; i < args.num_args - 1; ++i)
     {
+        int32_t val;
         switch (args.type_codes[i])
         {
         case kHandle:
-            os << "\n arg" << i << "[handle] = " << (int64_t)(*handleToPhyAddr)((void*)args[i]);
+            val = (*handleToPhyAddr)((void*)args[i]);
             break;
         
         case kDLInt:
-            os << "\n arg" << i << "[int] = " << static_cast<int32_t>(args[i]);
+            val = static_cast<int32_t>(args[i]);
             break;
 
         default:
             CHECK(false) << "unexpected argument type";
         }
+
+        values[i + 3].v_int64 = val;
+        type_codes[i + 3] = kDLInt;
     }
-    // the last argument is coproc scope.
-    os << "\n coproc_scope = " << static_cast<int>(args[5]) << std::endl;
+
+    auto assembleAndRun = Registry::Get("nnpu.assemble_and_run");
+    CHECK(assembleAndRun != nullptr)
+        << ", NNPU runtime function nnpu.assemble_and_run not registered";
+    assembleAndRun->CallPacked(TVMArgs(values.get(), type_codes.get(), num_args), nullptr);
 }
 
 PackedFunc NNPUModule::GetFunction(

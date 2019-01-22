@@ -11,6 +11,8 @@ NNPU runtime
 #include <dmlc/logging.h>
 #include <dmlc/thread_local.h>
 #include <tvm/runtime/registry.h>
+#include <vector>
+#include <sstream>
 
 static const bool kBufferCoherent = false;
 
@@ -97,76 +99,54 @@ struct DataBuffer
     uint32_t phy_addr_;
 };
 
-
-/* implemention of nnpu::InsnQueue*/
 using std::vector;
+using std::string;
 
-// the instruction queue, stores instruction when doing JIT compilation.
-class InsnQueue
+string Trim(string str)
+{
+    auto first = str.find_first_not_of(' ');
+    if (first == string::npos)
+    {
+        return string();
+    }
+    else
+    {
+        string res = str.substr(first);
+        auto last = res.find_last_not_of(' ');
+        res.resize(last + 1);
+        return res;
+    }
+}
+
+class NNPUAssembler
 {
 public:
-    /* 
-    *  InsnQueue default constructor.
-    *  currently does nothing
-    */
-    InsnQueue()
-    {}
+    NNPUAssembler() = default;
 
-    /* get a thread local InsnQueue object pointer
-    */
-    static InsnQueue* ThreadLocal()
-    {
-        // use dmlc ThreadLocal library to achieve thread local
-        return dmlc::ThreadLocalStore<InsnQueue>::Get();
-    }
-
-    template <typename T>
-    void PushInsn(T&& arg)
-    {
-        insnQueue.push_back(arg);
-    }
-
-    template <typename ... Ts>
-    void EmplaceBack(Ts&& ... args)
-    {
-        insnQueue.emplace_back(args...);
-    }
-
-    /* reset the instruction queue, which clears all instructions alread in it.
-    */
-    void Reset()
-    {
-        // simply clears the underline vector.
-        insnQueue.clear();
-    }
-
-    vector<NNPUInsn>& GetInsns()
-    {
-        return insnQueue;
-    }
-
-    /*!
-    * \brief dump all instructions(string repr) into ostream.
-    * \param os, the ostream into which to dump the instructions.
-    */
-    void Dump(std::ostream& os)
-    {
-        InsnDumper dumper;
-
-        for (auto& insn : insnQueue)
-        {
-            insn.Call(dumper, os);
-            os << std::endl;
-        }
-    }
+    /*
+     * \brief assemble the asm code, creating instructions.
+     * \param asm_str the assembly code string.
+     */
+    void Assemble(string asm_str);
 
 private:
-    vector<NNPUInsn> insnQueue;
+    vector<NNPUInsn> insns;
 };
 
-} // namespace nnpu
+void NNPUAssembler::Assemble(string asm_str)
+{
+    std::stringstream ss(asm_str);
+    constexpr std::size_t bufferSize = 1024;
+    std::unique_ptr<char[]> buffer(new char[bufferSize]);
 
-using nnpu::ModeFromInt;
+    while (ss.getline(buffer.get(), bufferSize))
+    {
+        string raw = string(buffer.get());
+        string line = Trim(raw);
+    }
+}
+
+}  // end namespace nnpu
 
 // the following 3 functions are from tvm.vta, used for managing driver buffers.
 void *NNPUBufferAlloc(size_t size)
@@ -213,168 +193,13 @@ void NNPUBufferCopy(const void *from,
     }
 }
 
-void NNPU_VEXP(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode)
-{
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // load vector out address into $0
-    nnpu::LiInsn li1(0, vctr_out_addr);
-    queue->EmplaceBack(li1);
-    // vector in address into $1
-    nnpu::LiInsn li2(1, vctr_in_addr);
-    queue->EmplaceBack(li2);
-
-    // create a vctr exp instruction: VEXP $0, $1, $2
-    nnpu::VctrUnaryInsn exp(nnpu::VctrUnaryOp::Exp, 0, 1, len, ModeFromInt(mode));
-    queue->EmplaceBack(exp);
-}
-void NNPU_VLOG(uint32_t vctr_out_addr, uint32_t vctr_in_addr, uint32_t len, uint32_t mode)
-{
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // load vector out address into $0
-    nnpu::LiInsn li1(0, vctr_out_addr);
-    queue->EmplaceBack(li1);
-    // vector in address into $1
-    nnpu::LiInsn li2(1, vctr_in_addr);
-    queue->EmplaceBack(li2);
-    // element count into $2
-    nnpu::LiInsn li3(2, len);
-    queue->EmplaceBack(li3);
-
-    // create a vctr log instruction: VLOG $0, $1, $2
-    nnpu::VctrUnaryInsn log(nnpu::VctrUnaryOp::Log, 0, 1, 2, ModeFromInt(mode));
-    queue->EmplaceBack(log);
-}
-
-void NNPU_DMALoad(void *host_buf_addr, uint32_t host_buf_offset,
-                  nnpu_dram_addr_t dst_phy_addr, uint32_t dst_phy_offset,
-                  uint32_t size)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // load host buffer physical address and offset into $0 and $1
-    nnpu::DataBuffer *buffer = nnpu::DataBuffer::FromHandle(host_buf_addr);
-    Li liAddr1(0, buffer->phy_addr());
-    queue->EmplaceBack(liAddr1);
-    Li liOff1(1, host_buf_offset);
-    queue->EmplaceBack(liOff1);
-
-    // load dram address into $2
-    Li liAddr2(2, dst_phy_addr + dst_phy_offset);
-    queue->EmplaceBack(liAddr2);
-
-    // load copy size in byte into $3
-    Li liSize(3, size);
-    queue->EmplaceBack(liSize);
-    // create a DMA load instruction: DMALoad $0, $1, $2, $3
-    nnpu::DMACopyInsn copyInsn(nnpu::DMADIR::HtoD, 0, 1, 2, 3);
-    queue->EmplaceBack(copyInsn);
-}
-
-void NNPU_DMAStore(void *host_buf_addr, uint32_t host_buf_offset,
-                  nnpu_dram_addr_t src_phy_addr, uint32_t src_phy_offset,
-                  uint32_t size)
-{  
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // load host buffer physical address and offset into $0 and $1
-    nnpu::DataBuffer *buffer = nnpu::DataBuffer::FromHandle(host_buf_addr);
-    Li liAddr1(0, buffer->phy_addr());
-    queue->EmplaceBack(liAddr1);
-    Li liOff1(1, host_buf_offset);
-    queue->EmplaceBack(liOff1);
-
-    // load dram address into $2
-    Li liAddr2(2, src_phy_addr + src_phy_offset);
-    queue->EmplaceBack(liAddr2);
-
-    // load copy size in byte into $3
-    Li liSize(3, size);
-    queue->EmplaceBack(liSize);
-    // create a DMA load instruction: DMALoad $0, $1, $2, $3
-    nnpu::DMACopyInsn copyInsn(nnpu::DMADIR::DtoH, 0, 1, 2, 3);
-    queue->EmplaceBack(copyInsn);
-}
-
-void NNPU_ScratchpadLoad(nnpu_dram_addr_t src_phy_addr, uint32_t src_offset,
-                        nnpu_buf_addr_t dst_phy_addr, uint32_t dst_offset,
-                        uint32_t size)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // load dram address into $0
-    Li liAddr1(0, src_phy_addr + src_offset);
-    queue->EmplaceBack(liAddr1);
-
-    // load scratchpad address into $1
-    Li liAddr2(1, dst_phy_addr + dst_offset);
-    queue->EmplaceBack(liAddr2);
-
-    // $2 <- size
-    Li liSize(2, size);
-    queue->EmplaceBack(liSize);
-
-    // create a scratchpad load instruction: load.b $0, $1, $2
-    nnpu::BufferLSInsn load(nnpu::LSDIR::Load, 0, 1, 2);
-    queue->EmplaceBack(load);
-}
-
-void NNPU_ScratchpadStore(nnpu_dram_addr_t dst_phy_addr, uint32_t dst_offset,
-                        nnpu_buf_addr_t src_phy_addr, uint32_t src_offset,
-                        uint32_t size)
-{  
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // load dram address into $0
-    Li liAddr1(0, dst_phy_addr + dst_offset);
-    queue->EmplaceBack(liAddr1);
-
-    // load scratchpad address into $1
-    Li liAddr2(1, src_phy_addr + src_offset);
-    queue->EmplaceBack(liAddr2);
-
-    // $2 <- size
-    Li liSize(2, size);
-    queue->EmplaceBack(liSize);
-
-    // create a scratchpad load instruction: load.b $0, $1, $2
-    nnpu::BufferLSInsn load(nnpu::LSDIR::Store, 0, 1, 2);
-    queue->EmplaceBack(load);
-}
-
-void NNPU_Gemm(uint32_t nRowOut, uint32_t factor, uint32_t nColOut, 
-               uint32_t outAddr, uint32_t outRowStride,
-               uint32_t in1Addr, uint32_t in1RowStride,
-               uint32_t in2Addr, uint32_t in2RowStride, uint32_t mode,
-               bool toAccBuf, bool acc)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // load 3 addresses
-    queue->EmplaceBack(Li(0, outAddr));
-    queue->EmplaceBack(Li(1, outRowStride));
-
-    queue->EmplaceBack(Li(2, in1Addr));
-    queue->EmplaceBack(Li(3, in1RowStride));
-
-    queue->EmplaceBack(Li(4, in2Addr));
-    queue->EmplaceBack(Li(5, in2RowStride));
-
-    // create a gemm instruction
-    nnpu::GemmInsn gemm(nRowOut, factor, nColOut, 0, 1, 2, 3, 4, 5, 
-                        ModeFromInt(mode), toAccBuf, acc);
-    queue->EmplaceBack(gemm);
-}
+using std::vector;
+using std::string;
 
 static bool DumpInsn = true;
 using tvm::runtime::TVMArgs;
 using tvm::runtime::TVMRetValue;
+
 static TVM_ATTRIBUTE_UNUSED auto &__register_set_dump_ =
     ::tvm::runtime::Registry::Register("nnpu.set_dump", true)
         .set_body([](TVMArgs args, TVMRetValue *rv) {
@@ -382,7 +207,7 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_set_dump_ =
                 DumpInsn = static_cast<bool>(args[0]);
         });
 
-uint32_t NNPU_Handle2PhyAddr(void *handle)
+static uint32_t NNPU_Handle2PhyAddr(void *handle)
 {
     auto buffer = nnpu::DataBuffer::FromHandle(handle);
     return buffer->phy_addr();
@@ -398,513 +223,46 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_handleTophyAddr_ =
                         NNPU_Handle2PhyAddr(static_cast<void*>(args[0])));
         });
 
-void NNPUSynchronize(uint32_t timeout)
+extern "C" void NNPU_AssembleAndRun(
+                    string asm_code, 
+                    string func_name, 
+                    int coproc_scope,
+                    std::vector<int32_t> args)
 {
-    LOG(INFO) << "Sync" << std::endl;
-
-    //LOG(INFO) << "instructions to run: " << std::endl;
-
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    nnpu::StallInsn stall;
-    queue->EmplaceBack(stall);
-
-    if (DumpInsn)
-        nnpu::InsnQueue::ThreadLocal()->Dump(LOG(INFO) << std::endl);
-
-    NNPU_Run(queue->GetInsns());
-}
-
-void NNPU_VctrBinary(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
-                    uint32_t size, uint32_t mode, nnpu::VctrBinaryOp op)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    Li li2(1, in1Addr);
-    queue->EmplaceBack(li2);
-    Li li3(2, in2Addr);
-    queue->EmplaceBack(li3);
-
-    nnpu::VctrBinaryInsn insn(op, 0, 1, 2, size, ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-double str_to_double(const char* S){
-    std::stringstream st;
-    double Imm = 0;
-    if(!memcmp(S,"-INFINITY",strlen(S))) 
-        return Imm = std::numeric_limits<double>::min();
-    else if(!memcmp(S,"INFINITY",strlen(S)))
-        return Imm = std::numeric_limits<double>::max();
-    st<<S;
-    st>>Imm;
-    return Imm;
-}
-
-void NNPU_VctrImm(uint32_t outAddr, uint32_t inAddr, double Imm, 
-                    uint32_t size, uint32_t mode, nnpu::VctrImmOp op)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    Li li2(1, inAddr);
-    queue->EmplaceBack(li2);
-    nnpu::VctrImmInsn insn(op, 0, 1, Imm, size, ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_MatImm(uint32_t outAddr, uint32_t inAddr, double Imm, 
-                    uint32_t nRow,uint32_t nCol, uint32_t mode, nnpu::MatImmOp op)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    Li li2(1, inAddr);
-    queue->EmplaceBack(li2);
-    nnpu::MatImmInsn insn(op, 0, 1, Imm, nRow, nCol , ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_MAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::Add);
-}
-
-void NNPU_MMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::Mul);
-}
-
-void NNPU_ISubM(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t nRow,uint32_t nCol, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_MatImm(outAddr, inAddr, Imm, nRow , nCol, mode, nnpu::MatImmOp::RSub);
-}
-
-void NNPU_VAddI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Add);
-}
-
-void NNPU_VSubI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Sub);
-}
-
-void NNPU_ISubV(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::RSub);
-}
-
-void NNPU_VMulI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Mul);
-}
-
-void NNPU_VDivI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::Div);
-}
-
-void NNPU_IDivV(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_VctrImm(outAddr, inAddr ,Imm, size, mode, nnpu::VctrImmOp::RDiv);
-}
-
-void NNPU_VGTMI(uint32_t outAddr, uint32_t inAddr, const char* ImmS, uint32_t size, uint32_t mode)
-{
-    double Imm = str_to_double(ImmS);
-    NNPU_VctrImm(outAddr, inAddr, Imm, size, mode, nnpu::VctrImmOp::GTM);
-}
-
-void NNPU_VAddV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
-{
-    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::Add);
-}
-
-void NNPU_VSubV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
-{
-    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::Sub);
-}
-
-void NNPU_VMulV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
-{
-    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::Mul);
-}
-
-void NNPU_VDivV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
-{
-    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::Div);
-}
-
-void NNPU_VGTMV(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, uint32_t size, uint32_t mode)
-{
-    NNPU_VctrBinary(outAddr, in1Addr, in2Addr, size, mode, nnpu::VctrBinaryOp::GTM);
-}
-
-void NNPU_VctrDotProd(uint32_t outAddr, uint32_t in1Addr, uint32_t in2Addr, 
-                      uint32_t size, uint32_t mode)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    Li li2(1, in1Addr);
-    queue->EmplaceBack(li2);
-    Li li3(2, in2Addr);
-    queue->EmplaceBack(li3);
-
-    nnpu::VctrDotProdInsn insn(0, 1, 2, size, ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_VctrReduce(uint32_t outAddr, uint32_t inAddr, nnpu::ReduceOp op, uint32_t size, uint32_t mode)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    Li li2(1, inAddr);
-    queue->EmplaceBack(li2);
-    
-    nnpu::VctrReduceInsn insn(0, 1, op, size, ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_VctrReduceSum(uint32_t outAddr, uint32_t inAddr, uint32_t size, uint32_t mode)
-{
-    NNPU_VctrReduce(outAddr, inAddr, nnpu::ReduceOp::Sum, size, mode);
-}
-
-void NNPU_VctrReduceMax(uint32_t outAddr, uint32_t inAddr, uint32_t size, uint32_t mode)
-{
-    NNPU_VctrReduce(outAddr, inAddr, nnpu::ReduceOp::Max, size, mode);
-}
-
-void NNPU_VctrReduceMin(uint32_t outAddr, uint32_t inAddr, uint32_t size, uint32_t mode)
-{
-    NNPU_VctrReduce(outAddr, inAddr, nnpu::ReduceOp::Min, size, mode);
-}
-
-void NNPU_MatBinary(uint32_t outAddr, uint32_t outRowStride, 
-                uint32_t in1Addr, uint32_t in1RowStride,
-                uint32_t in2Addr, uint32_t in2RowStride,
-                uint32_t nRow, uint32_t nCol, nnpu::MatBinaryOp op, uint32_t mode)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    queue->EmplaceBack(Li(1, outRowStride));
-    Li li3(2, in1Addr);
-    queue->EmplaceBack(li3);
-    queue->EmplaceBack(Li(3, in1RowStride));
-    Li li5(4, in2Addr);
-    queue->EmplaceBack(li5);
-    queue->EmplaceBack(Li(5, in2RowStride));
-    
-    nnpu::MatBinaryInsn insn(0, 2, 4, 1, 3, 5, op, nRow, nCol, nnpu::ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_MAddM(uint32_t outAddr, uint32_t outRowStride, 
-                uint32_t in1Addr, uint32_t in1RowStride,
-                uint32_t in2Addr, uint32_t in2RowStride,
-                uint32_t nRow, uint32_t nCol, uint32_t mode)
-{
-    NNPU_MatBinary(outAddr, outRowStride, in1Addr, in1RowStride, in2Addr, in2RowStride,
-                  nRow, nCol, nnpu::MatBinaryOp::Add, mode);
-}
-
-void NNPU_MSubM(uint32_t outAddr, uint32_t outRowStride, 
-                uint32_t in1Addr, uint32_t in1RowStride,
-                uint32_t in2Addr, uint32_t in2RowStride,
-                uint32_t nRow, uint32_t nCol, uint32_t mode)
-{
-    NNPU_MatBinary(outAddr, outRowStride, in1Addr, in1RowStride, in2Addr, in2RowStride,
-                  nRow, nCol, nnpu::MatBinaryOp::Sub, mode);
-}
-
-void NNPU_MMulM(uint32_t outAddr, uint32_t outRowStride, 
-                uint32_t in1Addr, uint32_t in1RowStride,
-                uint32_t in2Addr, uint32_t in2RowStride,
-                uint32_t nRow, uint32_t nCol, uint32_t mode)
-{
-    NNPU_MatBinary(outAddr, outRowStride, in1Addr, in1RowStride, in2Addr, in2RowStride,
-                  nRow, nCol, nnpu::MatBinaryOp::Mul, mode);
-}
-
-void NNPU_MReduce(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride, nnpu::ReduceOp op, 
-                  uint32_t nRow, uint32_t nCol, uint32_t mode, bool toAccBuf, bool doAcc,
-                  bool isRow)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    Li li2(1, inAddr);
-    queue->EmplaceBack(li2);
-    queue->EmplaceBack(Li(2, inRowStride));
-
-    if (isRow)
+    auto &os = LOG(INFO);
+    os << "NNPU runtime function: NNPU_AssembleAndRun";
+    os << "\n call args:\n  [";
+    for (auto it : args)
     {
-        nnpu::MatReduceRowInsn insn(0, 1, 2, op, nRow, nCol, 
-                                    toAccBuf, doAcc, ModeFromInt(mode));
-        queue->EmplaceBack(insn);
+        os << it << ", ";
     }
-    else
-    {
-        nnpu::MatReduceColInsn insn(0, 1, op, nRow, nCol, ModeFromInt(mode));
-        queue->EmplaceBack(insn);
-    }
+    os << "]\n coproc scope = " << coproc_scope;
+    os << "\n calling function [" << func_name;
+    os << "] in asm code: \n";
+    os << asm_code;
 }
 
-void NNPU_MReduceSumRow(uint32_t outAddr, uint32_t inAddr, uint32_t inRowStride,
-                        uint32_t nRow, uint32_t nCol, uint32_t mode, 
-                        bool toAccBuf, bool doAcc)
-{
-    NNPU_MReduce(outAddr, inAddr, inRowStride, nnpu::ReduceOp::Sum, nRow, nCol, 
-                 mode, toAccBuf, doAcc, true);
-}
+static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
+    ::tvm::runtime::Registry::Register("nnpu.assemble_and_run", true)
+        .set_body([](TVMArgs args, TVMRetValue *rv) {
+            CHECK_GE(args.num_args, 3) << ", ecpected at least 3 arguments";
+            CHECK_EQ(args.type_codes[0], kStr) 
+                << ", expecting 1st argument to be assembly code [string]";
+            CHECK_EQ(args.type_codes[1], kStr)
+                << ", expecting 2nd argument to be function name [string]";
+            CHECK_EQ(args.type_codes[2], kDLInt)
+                << ", expecting 3rd argument to be coproc scope [int]";
 
-void NNPU_MatVctrRow(uint32_t outAddr, uint32_t outRowStride,
-                    uint32_t matAddr, uint32_t matRowStride,
-                    uint32_t vctrAddr, nnpu::MatVctrOp op, 
-                    uint32_t nRow, uint32_t nCol, uint32_t mode)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
+            std::vector<int32_t> dev_args;  // arguments to be passed to device function.
+            for (int i = 3; i < args.num_args; ++i)
+            {
+                CHECK_EQ(args.type_codes[i], kDLInt)
+                    << ", only int type arguments can be passed to NNPU device";
+                dev_args.push_back(static_cast<int32_t>(args[i]));
+            }
 
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    queue->EmplaceBack(Li(1, outRowStride));
-    Li li2(2, matAddr);
-    queue->EmplaceBack(li2);
-    queue->EmplaceBack(Li(3, matRowStride));
-    Li li3(4, vctrAddr);
-    queue->EmplaceBack(li3);
-
-    nnpu::MatVctrInsn insn(0, 1, 2, 3, 4, op, nRow, nCol, ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_MAddV(uint32_t outAddr, uint32_t outRowStride,
-                uint32_t matAddr, uint32_t matRowStride,
-                uint32_t vctrAddr, uint32_t nRow, uint32_t nCol, uint32_t mode)
-{
-    NNPU_MatVctrRow(outAddr, outRowStride, matAddr, matRowStride, vctrAddr,
-                    nnpu::MatVctrOp::Add, nRow, nCol, mode);
-}
-
-void NNPU_MSubV(uint32_t outAddr, uint32_t outRowStride,
-                uint32_t matAddr, uint32_t matRowStride,
-                uint32_t vctrAddr, uint32_t nRow, uint32_t nCol, uint32_t mode)
-{
-    NNPU_MatVctrRow(outAddr, outRowStride, matAddr, matRowStride, vctrAddr,
-                    nnpu::MatVctrOp::Sub, nRow, nCol, mode);
-}
-
-void NNPU_MMulV(uint32_t outAddr, uint32_t outRowStride,
-                uint32_t matAddr, uint32_t matRowStride,
-                uint32_t vctrAddr, uint32_t nRow, uint32_t nCol, uint32_t mode)
-{
-    NNPU_MatVctrRow(outAddr, outRowStride, matAddr, matRowStride, vctrAddr,
-                    nnpu::MatVctrOp::Mul, nRow, nCol, mode);
-}
-
-void NNPU_MRowDot(uint32_t outAddr, uint32_t in1Addr, uint32_t in1RowStride,
-                  uint32_t in2Addr, uint32_t in2RowStride,
-                  uint32_t nRow, uint32_t nCol, uint32_t mode,
-                  bool toAccBuf, bool doAcc)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    queue->EmplaceBack(Li(1, in1Addr));
-    queue->EmplaceBack(Li(2, in1RowStride));
-    queue->EmplaceBack(Li(3, in2Addr));
-    queue->EmplaceBack(Li(4, in2RowStride));
-
-    nnpu::MatRowDotInsn insn(0, 1, 2, 3, 4, nRow, nCol, toAccBuf, doAcc, ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_VctrSclr(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
-                   nnpu::VctrSclrOp op, uint32_t size, uint32_t mode)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    // assign 3 addresses
-    Li li1(0, outAddr);
-    queue->EmplaceBack(li1);
-    Li li2(1, vctrAddr);
-    queue->EmplaceBack(li2);
-    Li li3(2, sclrAddr);
-    queue->EmplaceBack(li3);
-
-    nnpu::VctrSclrInsn insn(0, 1, 2, size, op, ModeFromInt(mode));
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_VAddS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
-                uint32_t size, uint32_t mode)
-{
-    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::Add, size, mode);
-}
-
-void NNPU_VSubS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
-                uint32_t size, uint32_t mode)
-{
-    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::Sub, size, mode);
-}
-
-void NNPU_VMulS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
-                uint32_t size, uint32_t mode)
-{
-    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::Mul, size, mode);
-}
-
-void NNPU_VDivS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
-                uint32_t size, uint32_t mode)
-{
-    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::Div, size, mode);
-}
-
-void NNPU_VGTMS(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
-                uint32_t size, uint32_t mode)
-{
-    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::GTM, size, mode);
-}
-
-void NNPU_SSubV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
-                uint32_t size, uint32_t mode)
-{
-    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::RSub, size, mode);
-}
-
-void NNPU_SDivV(uint32_t outAddr, uint32_t vctrAddr, uint32_t sclrAddr, 
-                uint32_t size, uint32_t mode)
-{
-    NNPU_VctrSclr(outAddr, vctrAddr, sclrAddr, nnpu::VctrSclrOp::RDiv, size, mode);
-}
-
-void NNPU_ScratchpadCopy(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride,
-                         uint32_t srcAddr, int32_t srcOffset, uint32_t srcStride,
-                         uint32_t elemBytes, uint32_t nElem)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    if (dstStride == elemBytes && srcStride == elemBytes)
-    {
-        // if this is a compact copy.
-        nElem = elemBytes * nElem;
-        elemBytes = 1;
-        dstStride = 1;
-        srcStride = 1;
-    }
-
-    // assign 5 addresses and strides
-    Li li1(0, dstAddr + dstOffset);
-    queue->EmplaceBack(li1);
-    Li li2(1, dstStride);
-    queue->EmplaceBack(li2);
-    Li li3(2, srcAddr + srcOffset);
-    queue->EmplaceBack(li3);
-    Li li4(3, srcStride);
-    queue->EmplaceBack(li4);
-    Li li5(4, nElem);
-    queue->EmplaceBack(li5);
-
-    nnpu::BufferCopyInsn insn(0, 1, 2, 3, 4, elemBytes);
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_CopyAccToBuffer(uint32_t dstAddr, int32_t dstOffset, uint32_t dstStride,
-                         uint32_t srcAddr, int32_t srcOffset, uint32_t srcStride,
-                         uint32_t elemBytes, uint32_t nElem)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    if (dstStride == elemBytes && srcStride == elemBytes)
-    {
-        // if this is a compact copy.
-        nElem = elemBytes * nElem;
-        elemBytes = 1;
-        dstStride = 1;
-        srcStride = 1;
-    }
-
-    // assign 5 addresses and strides
-    Li li1(0, dstAddr + dstOffset);
-    queue->EmplaceBack(li1);
-    Li li2(1, dstStride);
-    queue->EmplaceBack(li2);
-    Li li3(2, srcAddr + srcOffset);
-    queue->EmplaceBack(li3);
-    Li li4(3, srcStride);
-    queue->EmplaceBack(li4);
-    Li li5(4, nElem);
-    queue->EmplaceBack(li5);
-
-    nnpu::CopyAcc2BufInsn insn(0, 1, 2, 3, 4, elemBytes);
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_Memset(uint32_t addr, uint32_t nUnit, uint32_t stride, const char *val, uint32_t mode)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-    Li li1(0, addr);
-    queue->EmplaceBack(li1);
-    Li li2(1, nUnit);
-    queue->EmplaceBack(li2);
-    Li li3(2, stride);
-    queue->EmplaceBack(li3);
-    double imm=str_to_double(val);
-    nnpu::MemsetInsn insn(0, 1, 2, ModeFromInt(mode), imm);
-    queue->EmplaceBack(insn);
-}
-
-void NNPU_AccMemset(uint32_t addr, uint32_t rowStride, uint32_t nRow, uint32_t nCol,
-                    const char *val, uint32_t mode)
-{
-    using Li = nnpu::LiInsn;
-    nnpu::InsnQueue* queue = nnpu::InsnQueue::ThreadLocal();
-
-    queue->EmplaceBack(Li(0, addr));
-    queue->EmplaceBack(Li(1, rowStride));
-
-    nnpu::AccMemsetInsn insn(nRow, nCol, 0, 1, ModeFromInt(mode), str_to_double(val));
-    queue->EmplaceBack(insn);
-}
+            NNPU_AssembleAndRun(args[0].operator std::__cxx11::string(), 
+                                args[1].operator std::__cxx11::string(),
+                                static_cast<int>(args[2]),
+                                dev_args);
+        });
