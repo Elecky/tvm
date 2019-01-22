@@ -4,7 +4,7 @@ from helper import dtype_bytes, convert_scope
 
 class IntrinManager(object):
 
-    def make_intrin_call(self, dtype, name, *args):
+    def make_intrin_call(self, dtype, name, *args, **kwargs):
         """ Build a llvm.NNPU intrinsic function call who has side-effect.
 
         Parameters
@@ -14,13 +14,21 @@ class IntrinManager(object):
 
         name : str
             The name of the llvm intrinsic function 'without' llvm.NNPU prefix.
+        
+        num_signature : int
+            I don't sure what this is, maybe used with overloaded llvm intrinsic
+                function matching.
 
         args : list
             Poistional arguments.
         """
         name = 'llvm.NNPU.' + name
+        if ('num_signature' in kwargs):
+            num_signature = kwargs['num_signature']
+        else:
+            num_signature = 0
         return tvm.call_llvm_intrin_with_side_effect(
-                        dtype, name, tvm.const(len(args), 'uint32'), *args
+                        dtype, name, tvm.const(num_signature, 'uint32'), *args
                     )
 
     def __init__(self, env):

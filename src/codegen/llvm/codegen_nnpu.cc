@@ -119,14 +119,12 @@ llvm::Value *CodeGenNNPU::VisitExpr_(const Call *op)
       return_type = LLVMType(op->type);
     else
       return_type = t_void_;
-    // if (sig_type.size() > 0 && return_type != sig_type[0])
-    // {
-    //   sig_type.insert(sig_type.begin(), return_type);
-    //   LOG(INFO) << "----------we are adding return type";
-    // }
+    if (sig_type.size() > 0 && return_type != sig_type[0])
+    {
+      sig_type.insert(sig_type.begin(), return_type);
+    }
     llvm::Function *f = llvm::Intrinsic::getDeclaration(
-        // module_.get(), id, sig_type);
-        module_.get(), id);
+        module_.get(), id, sig_type);
     return builder_->CreateCall(f, arg_value);
   }
   else
@@ -171,9 +169,9 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
   llvm::raw_svector_ostream dest_asm(data_asm), dest_ll(data_ll);
   dest_asm.SetUnbuffered();
   dest_ll.SetUnbuffered();
-  // print ll
   module->print(dest_ll, nullptr);
   std::string ll(data_ll.begin(), data_ll.end());
+  // print ll
   // std::cout << "The generate LLVM IR is:\n";
   // std::cout << ll;
 
