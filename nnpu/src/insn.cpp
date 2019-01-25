@@ -242,17 +242,17 @@ void NOPInsn::Dump(ostream &os) const
 
 void JumpInsn::Dump(ostream &os) const
 {
-    os << "Jump #" << Offset;
+    os << "Jump #" << static_cast<int32_t>(Offset);
 }
 
 void BEZInsn::Dump(ostream &os) const
 {
-    os << "BEZ $" << CondReg << ", #" << Offset;
+    os << "BEZ $" << CondReg << ", #" << static_cast<int32_t>(Offset);
 }
 
 void BNEZInsn::Dump(ostream &os) const
 {
-    os << "BNEZ $" << CondReg << ", #" << Offset;
+    os << "BNEZ $" << CondReg << ", #" << static_cast<int32_t>(Offset);
 }
 
 void ALUBinaryInsn::Dump(ostream &os) const

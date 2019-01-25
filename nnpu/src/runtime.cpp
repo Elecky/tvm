@@ -102,9 +102,9 @@ struct DataBuffer
 using std::vector;
 using std::string;
 
-string Trim(string str)
+static string Trim(string str)
 {
-    auto first = str.find_first_not_of(' ');
+    auto first = str.find_first_not_of(" \t");
     if (first == string::npos)
     {
         return string();
@@ -112,16 +112,42 @@ string Trim(string str)
     else
     {
         string res = str.substr(first);
-        auto last = res.find_last_not_of(' ');
+        auto last = res.find_last_not_of(" \t");
         res.resize(last + 1);
         return res;
     }
 }
 
+static vector<string> Split(const string &str, const std::unordered_set<char> &delim)
+{
+    vector<string> parts;
+    string token;
+    for (const auto &c : str)
+    {
+        if (delim.count(c) == 0)
+        {
+            token.push_back(c);
+        }
+        else
+        {
+            if (token.length() != 0)
+            {
+                parts.push_back(move(token));
+                token = string();
+            }
+        }
+    }
+
+    if (token.size() != 0)
+        parts.push_back(move(token));
+
+    return parts;
+}
+
 class NNPUAssembler
 {
 public:
-    NNPUAssembler() = default;
+    NNPUAssembler();
 
     /*
      * \brief assemble the asm code, creating instructions.
@@ -129,12 +155,162 @@ public:
      */
     void Assemble(string asm_str);
 
+    /*
+     * \brief check whether a line of assembly code is asm directive.
+     * \param line: the line of assembly code.
+     * \return true if this line is directive.
+     */
+    bool IsDirective(const string &line)
+    {
+        return line.length() > 0 &&
+               line[0] == '.' &&
+               !IsLabel(line);
+    }
+
+    /*
+     * \brief check whether a line of assembly code is asm directive.
+     * \param line: the line of assembly code.
+     * \return true if this line is a label.
+     */
+    inline bool IsLabel(const string &line)
+    {
+        return line.length() > 0 && (*(line.end() - 1) == ':');
+    }
+
+    /*
+     * \brief get the assembled insns. Note: this functions will do a copy.
+     * \return vector of assembled insns.
+     */
+    inline vector<NNPUInsn> GetInsns() const
+    {
+        return insns;
+    }
+
 private:
     vector<NNPUInsn> insns;
+
+    // label string to address
+    std::unordered_map<string, std::size_t> labelAddr;
+
+    // a relocation record struct.
+    struct RelocRecord
+    {
+        std::size_t insnIdx;  // instruction index.
+        std::size_t RelocPtr;  // relative address from the beginning of NNPUInsn struct 
+                               // to offset field. 
+        string label;  // the label it should be relocated to.
+        bool IsRelative;  // relative or absolute relocate?
+        uint32_t Base;  // base address if relative relocate required.
+    };
+
+    enum class Segment { text, data, bss };  // the enum which indicates segment.
+
+    // relocation records.
+    vector<RelocRecord> relocRecords;
+
+    // subscribed handlers for different instructions, use unordered_map to do dispatching.
+    std::unordered_map<string, 
+                       void (NNPUAssembler::*)(
+                                const vector<string>&,
+                                const vector<string>&,
+                                const string&)> instrHandler;
+    
+    /*
+     * \brief parse a register operand, return the register No.
+     * \param token: register operand
+     * \return the register No.
+     */
+    regNo_t parseReg(const string &token);
+
+    /*
+     * \brief parse a memory operand, checks whether its offset is immediate value or label.
+     *        if offset is a label, corresponding relocation records will be created.
+     * \param token: the operand token.
+     * \param baseReg: return base regiser No. 
+     * \param offset: return immediate offset.
+     * \param rr: pointer to return relocation record,
+     *            the base, label and isRelative will be set occordingly.
+     *            caller should fill other fields and insert it into relocation list.
+     * \return is label offset? that is, is relocation record needed.
+     */
+    bool parseMemOperand(const string &token, 
+                         regNo_t &baseReg, uint32_t &offset,
+                         RelocRecord *rr);
+
+    // handlers for instructions.
+    // signatures for all those functions are:
+    // void (const vector<string> &functs, 
+    //       const vector<string> &tokens, 
+    //       const string &instr)
+    // whether tokens are the line of instruction splited by space and comma,
+    // and functs are the first token splitted by dot, instr are the original line of code.
+    void assembleLoad(const vector<string>&, const vector<string>&, const string&);
+    void assembleStore(const vector<string>&, const vector<string>&, const string&);
+    void assembleALUBinary(const vector<string>&, const vector<string>&, const string&);
+    void assembleALUUnary(const vector<string>&, const vector<string>&, const string&);
+    void assembleJump(const vector<string>&, const vector<string>&, const string&);
+    void assembleBZ(const vector<string>&, const vector<string>&, const string&);
+    void assembleDMA(const vector<string>&, const vector<string>&, const string&);
+    void assembleBufferLS(const vector<string>&, const vector<string>&, const string&);
+    void assembleVctrBinary(const vector<string>&, const vector<string>&, const string&);
+    void assembleRet(const vector<string>&, const vector<string>&, const string&);
+
+    static const std::unordered_set<char> tokenDelims;
+    static const std::unordered_set<char> functDelims;
 };
+
+const std::unordered_set<char> NNPUAssembler::tokenDelims = {',', ' ', '\t'};
+const std::unordered_set<char> NNPUAssembler::functDelims = {'.'};
+
+NNPUAssembler::NNPUAssembler()
+{
+    instrHandler.insert({"Load", &NNPUAssembler::assembleLoad});
+    instrHandler.insert({"Store", &NNPUAssembler::assembleStore});
+
+    static const std::unordered_set<string> aluBinaryOps 
+        { "AddU", "SubU", "MulU", "DivU", "ModU", "SLTU",
+          "SLT", "SEQ", "XOR", "And", "Or" };
+    for (auto &item : aluBinaryOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleALUBinary});
+    }
+
+    static const std::unordered_set<string> aluUnaryOps
+        { "AddIU", "MulIU", "DivIU", "ModIU", "SLTIU", "SLTI",
+          "SEQI", "XORI", "AndI", "OrI", "SHLI" };
+    for (auto &item : aluUnaryOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleALUUnary});
+    }
+
+    instrHandler.insert({"Jump", &NNPUAssembler::assembleJump});
+    instrHandler.insert({"BNEZ", &NNPUAssembler::assembleBZ});
+    instrHandler.insert({"BEZ", &NNPUAssembler::assembleBZ});
+    instrHandler.insert({"DMALoad", &NNPUAssembler::assembleDMA});
+    instrHandler.insert({"DMAStore", &NNPUAssembler::assembleDMA});
+    instrHandler.insert({"ScratchpadLoad", &NNPUAssembler::assembleBufferLS});
+    instrHandler.insert({"ScratchpadStore", &NNPUAssembler::assembleBufferLS});
+
+    static const std::unordered_set<string> vctrBinaryOps
+        { "VAddV", "VSubV", "VMulV", "VDivV", "VGTMV" };
+    for (auto &item : vctrBinaryOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleVctrBinary});
+    }
+
+    instrHandler.insert({"ret", &NNPUAssembler::assembleRet});
+}
 
 void NNPUAssembler::Assemble(string asm_str)
 {
+    // clear all states.
+    insns.clear();
+    labelAddr.clear();
+    relocRecords.clear();
+
+    // start 'assembling'
+    Segment segment = Segment::text;
+
     std::stringstream ss(asm_str);
     constexpr std::size_t bufferSize = 1024;
     std::unique_ptr<char[]> buffer(new char[bufferSize]);
@@ -143,7 +319,321 @@ void NNPUAssembler::Assemble(string asm_str)
     {
         string raw = string(buffer.get());
         string line = Trim(raw);
+
+        if (line.length() == 0)  // a empty line.
+        {
+            continue;
+        }
+
+        if (IsLabel(line))
+        {
+            CHECK(segment == Segment::text)
+                << ", only text segment is supported now";
+            // insert label into label address list,
+            // remove tailing ':' from this line to get label.
+            labelAddr.insert({line.substr(0, line.size() - 1), insns.size()});
+        }
+        else if (IsDirective(line))
+        {
+            CHECK(line != ".data" && line != ".bss")
+                << ", data and bss segment is not supported now";
+        }
+        else
+        {
+            // this is an instruction.
+            auto tokens = Split(line, tokenDelims);
+            CHECK_GT(tokens.size(), 0);
+
+            auto functs = Split(tokens[0], functDelims);
+            CHECK_GT(functs.size(), 0);
+
+            auto handleIt = instrHandler.find(functs[0]);
+            CHECK(handleIt != instrHandler.end()) 
+                << ", handler for instruction '" << functs[0]
+                << "' is not found";
+            
+            auto handlePtr = handleIt->second;
+            CHECK(handlePtr != nullptr)
+                << ", nullptr function pointer met";
+            (this->*handlePtr)(functs, tokens, line);
+        }
     }
+    // add a nop instruction in case of a label points to the end.
+    insns.emplace_back(JumpInsn(0));
+
+    // start relocating.
+    for (const auto &rr : relocRecords)
+    {
+        auto it = labelAddr.find(rr.label);
+        CHECK(it != labelAddr.end())
+            << "relocating target label not found";
+        uint32_t *ptr = reinterpret_cast<uint32_t*>(
+                            (reinterpret_cast<void*>(&insns[rr.insnIdx]) + rr.RelocPtr));
+        *(ptr) = rr.IsRelative ? it->second - rr.Base : it->second;
+    }
+
+    // std::cout << " assembled insn: ";
+    // InsnDumper dumper;
+    // for (auto &insn : insns)
+    // {
+    //     insn.Call(dumper, std::cout);
+    //     std::cout << std::endl;
+    // }
+
+    labelAddr.clear();
+    relocRecords.clear();
+}
+
+regNo_t NNPUAssembler::parseReg(const string &token)
+{
+    CHECK_GT(token.length(), 2)
+        << ", a register token should be at least 2 characters";
+    CHECK_EQ(token[0], '$') << ", register token always starts with a '$'";
+
+    if (isdigit(token[1]))
+    {
+        std::stringstream ss;
+        ss << token.c_str() + 1;
+        regNo_t regNo;
+        ss >> regNo;
+        return regNo;
+    }
+    else if (token[1] == 'g' || token[1] == 'G')
+    {
+        std::stringstream ss;
+        ss << token.c_str() + 2;
+        regNo_t regNo;
+        ss >> regNo;
+        return regNo;
+    }
+    else 
+    {
+        // registers that has special names.
+        static const std::unordered_map<string, regNo_t> nameToNo 
+                    { {"zero", 0}, {"sp", 1}, {"fp", 2} };
+        
+        string nameLCase(token.begin() + 1, token.end());
+        for (auto &c : nameLCase)
+        {
+            c = tolower(c);
+        }
+
+        auto it = nameToNo.find(nameLCase);
+        CHECK(it != nameToNo.end())
+            << ", unknown register name: " << nameLCase;
+        return it->second;
+    }
+}
+
+bool NNPUAssembler::parseMemOperand(const string &token, 
+                                    regNo_t &baseReg, uint32_t &offset,
+                                    RelocRecord *rr)
+{
+    auto lp = token.find('(');
+    CHECK(lp != string::npos)  
+        << ", '(' not found in memory address operand"
+        << ", the desired syntax is offset($base)";
+
+    baseReg = parseReg(token.substr(lp + 1, token.length() - lp - 2));
+    
+    if (lp != 0)
+    {
+        string offStr(token.substr(0, lp));
+        std::stringstream ss(offStr);
+        if (isdigit(token[0]))  // if offset is immediate value.
+        {
+            ss >> offset;
+            return false;
+        }
+        else  // this is a label
+        {
+            CHECK(rr != nullptr) << ", relocation needed but rr is nullptr";
+            rr->IsRelative = false;  // absolute relocate.
+            rr->label = offStr;
+            return true;
+        }
+    }
+    else
+        offset = 0;
+        return false;
+}
+
+void NNPUAssembler::assembleLoad(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 3) << ", ilegal syntax: " << instr;;
+
+    regNo_t rd = parseReg(tokens[1]);
+    insns.emplace_back(SclrLoadInsn(rd, 0, 0));
+
+    SclrLoadInsn &insn = insns.back().SclrLoad;
+    parseMemOperand(tokens[2], insn.AddrReg, insn.Offset, nullptr);
+}
+
+void NNPUAssembler::assembleStore(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    CHECK_EQ(tokens.size(), 3) << ", ilegal syntax: " << instr;;
+
+    regNo_t rs = parseReg(tokens[1]);
+    insns.emplace_back(SclrStoreInsn(rs, 0, 0));
+
+    SclrStoreInsn &insn = insns.back().SclrStore;
+    parseMemOperand(tokens[2], insn.AddrReg, insn.Offset, nullptr);
+}
+
+void NNPUAssembler::assembleALUBinary(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    static const std::unordered_map<string, ALUBinaryOp> Ops 
+        {   {"AddU", ALUBinaryOp::Add}, {"SLT", ALUBinaryOp::SLT},
+            {"SubU", ALUBinaryOp::Sub}, {"MulU", ALUBinaryOp::Mul},
+            {"DivU", ALUBinaryOp::DivU}, {"ModU", ALUBinaryOp::ModU},
+            {"SLTU", ALUBinaryOp::SLTU}, {"SEQ", ALUBinaryOp::SEQ},
+            {"XOR", ALUBinaryOp::XOR}, {"And", ALUBinaryOp::And},
+            {"Or", ALUBinaryOp::Or}
+        };
+
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;;
+    auto it = Ops.find(tokens[0]);
+    CHECK(it != Ops.end()) << ", instruction operation mapping not found";
+
+    insns.emplace_back(
+            ALUBinaryInsn(parseReg(tokens[1]), parseReg(tokens[2]),
+                          parseReg(tokens[3]), it->second));
+}
+
+void NNPUAssembler::assembleALUUnary(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    static const std::unordered_map<string, ALURegImmOp> Ops
+        {   {"AddIU", ALURegImmOp::AddIU}, {"MulIU", ALURegImmOp::MulIU},
+            {"DivIU", ALURegImmOp::DivIU}, {"ModIU", ALURegImmOp::ModIU},
+            {"SLTIU", ALURegImmOp::SLTIU}, {"SLTI", ALURegImmOp::SLTI},
+            {"SEQI", ALURegImmOp::SEQI},   {"XORI", ALURegImmOp::XORI},
+            {"AndI", ALURegImmOp::AndI},   {"OrI", ALURegImmOp::OrI},
+            {"SHLI", ALURegImmOp::SHLI}
+        };
+    
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+    auto it = Ops.find(tokens[0]);
+    CHECK(it != Ops.end()) << ", instruction operation mapping not found";
+
+    insns.emplace_back(
+            ALURegImmInsn(parseReg(tokens[1]), parseReg(tokens[2]),
+                          std::atoi(tokens[3].c_str()), it->second));
+}
+
+void NNPUAssembler::assembleJump(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    CHECK_EQ(tokens.size(), 2) << ", ilegal syntax: " << instr;
+    insns.emplace_back(JumpInsn(0));
+
+    RelocRecord rr;
+    rr.Base = insns.size() - 1;
+    rr.IsRelative = true;
+    rr.label = tokens[1];
+    rr.RelocPtr = offsetof(NNPUInsn, Jump.Offset);
+    rr.insnIdx = insns.size() - 1;
+    relocRecords.push_back(rr);
+}
+
+void NNPUAssembler::assembleBZ(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    CHECK_EQ(tokens.size(), 3) << ", ilegal syntax: " << instr;
+
+    RelocRecord rr;
+    rr.Base = insns.size();
+    rr.IsRelative = true;
+    rr.label = tokens[2];
+    rr.insnIdx = insns.size();
+
+    if (tokens[0] == "BNEZ")
+    {
+        insns.emplace_back(BNEZInsn(0, parseReg(tokens[1])));
+        rr.RelocPtr = offsetof(NNPUInsn, BNEZ.Offset);
+    }
+    else if (tokens[0] == "BEZ")
+    {
+        insns.emplace_back(BEZInsn(0, parseReg(tokens[1])));
+        rr.RelocPtr = offsetof(NNPUInsn, BEZ.Offset);
+    }
+    else
+        LOG(ERROR) << "unhandled branch type";
+    
+    relocRecords.push_back(rr);
+}
+
+void NNPUAssembler::assembleDMA(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    CHECK_EQ(tokens.size(), 5) << ", ilegal syntax: " << instr;
+    DMADIR dir;
+    if (tokens[0] == "DMALoad")
+        dir = DMADIR::HtoD;
+    else
+        dir = DMADIR::DtoH;
+    
+    insns.emplace_back(
+            DMACopyInsn(dir, parseReg(tokens[1]), parseReg(tokens[2]),
+                        parseReg(tokens[3]), parseReg(tokens[4])));
+}
+
+void NNPUAssembler::assembleBufferLS(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+
+    LSDIR dir = tokens[0] == "ScratchpadLoad" ? LSDIR::Load : LSDIR::Store;
+    insns.emplace_back(
+            BufferLSInsn(dir, parseReg(tokens[1]), parseReg(tokens[2]),
+                         parseReg(tokens[3])));
+}
+
+void NNPUAssembler::assembleVctrBinary(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 3) << ", ilegal syntax: " << instr;
+
+    static const std::unordered_map<string, VctrBinaryOp> Ops
+        { {"VAddV", VctrBinaryOp::Add}, {"VSubV", VctrBinaryOp::Sub},
+          {"VMulV", VctrBinaryOp::Mul}, {"VDivV", VctrBinaryOp::Div},
+          {"VGTMV", VctrBinaryOp::GTM} };
+    auto it = Ops.find(functs[0]);
+    CHECK(it != Ops.end()) << ", vector binary op not found for " << functs[0];
+
+    insns.emplace_back(
+            VctrBinaryInsn(it->second, parseReg(tokens[1]),
+                           parseReg(tokens[2]), parseReg(tokens[3]),
+                           std::atoi(functs[1].c_str()), 
+                           ModeFromInt(atoi(functs[2].c_str())) ));
+}
+
+void NNPUAssembler::assembleRet(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    insns.emplace_back(StallInsn());
 }
 
 }  // end namespace nnpu
@@ -229,17 +719,36 @@ extern "C" void NNPU_AssembleAndRun(
                     int coproc_scope,
                     std::vector<int32_t> args)
 {
-    auto &os = LOG(INFO);
-    os << "NNPU runtime function: NNPU_AssembleAndRun";
-    os << "\n call args:\n  [";
-    for (auto it : args)
+    // auto &os = LOG(INFO);
+    // os << "NNPU runtime function: NNPU_AssembleAndRun";
+    // os << "\n call args:\n  [";
+    // for (auto it : args)
+    // {
+    //     os << it << ", ";
+    // }
+    // os << "]\n coproc scope = " << coproc_scope;
+    // os << "\n calling function [" << func_name;
+    // os << "] in asm code: \n";
+    // os << asm_code;
+
+    // os << "begin assembling\n";
+
+    nnpu::NNPUAssembler assembler;
+    assembler.Assemble(asm_code);
+
+    // assign arguments.
+    auto sim = nnpu::Simulator::ThreadLocal();
+    uint32_t fp = sim->GetSclrMemSize() - args.size() * sizeof(uint32_t);
+    // LOG(INFO) << "FP = " << fp << std::endl;
+    for (std::size_t i = 0; i != args.size(); ++i)
     {
-        os << it << ", ";
+        sim->WriteSclrMem(fp + i * sizeof(uint32_t), args[i]);
     }
-    os << "]\n coproc scope = " << coproc_scope;
-    os << "\n calling function [" << func_name;
-    os << "] in asm code: \n";
-    os << asm_code;
+    sim->WriteRegister(0, 0);
+    sim->WriteRegister(1, fp);
+    sim->WriteRegister(2, fp);
+
+    sim->Run(assembler.GetInsns());
 }
 
 static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =

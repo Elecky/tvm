@@ -424,13 +424,13 @@ def _build_for_device(flist, target, target_host):
             if (target.target_name == 'nnpu'):
                 print('trying to split')
                 fsplits = [s for s in ir_pass.NNPUSplitHostDevice(func)]
-                print(len(fsplits))
-                print('host func:')
-                print(fsplits[0].body)
-                for i, x in enumerate(fsplits[1:], 1):
-                    print('device func {0}'.format(i))
-                    print(x.args)
-                    print(x.body)
+                # print(len(fsplits))
+                # print('host func:')
+                # print(fsplits[0].body)
+                # for i, x in enumerate(fsplits[1:], 1):
+                #     print('device func {0}'.format(i))
+                #     print(x.args)
+                #     print(x.body)
             
             fhost.append(fsplits[0])
             for x in fsplits[1:]:
