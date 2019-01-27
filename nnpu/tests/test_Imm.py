@@ -48,7 +48,12 @@ def test():
     print(nnpu.lower(s, [a,c_host,sub_host,mul_host,div_host,gtm_host,rsub_host], simple_mode=True))
     func = nnpu.build(s, [a,c_host,sub_host,mul_host,div_host,gtm_host,rsub_host], 'nnpu', 'llvm', name='nnpu_vmuli')
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
 
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
+    
     ctx = tvm.nd.TVMContext(13, 0)
 
     a_np = np.random.randint(size=(16, ), dtype=a.dtype, low = 3, high = 122)

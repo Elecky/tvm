@@ -29,6 +29,12 @@ def test():
 
     func = nnpu.build(s, [a, b_host], 'nnpu', 'llvm', name='nnpu_exp')
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
+
     ctx = tvm.nd.TVMContext(13, 0)
     a_np = np.random.randint(size=(16, 16), dtype=a.dtype, low = 0, high = 127)
     a_nd = tvm.nd.array(a_np, ctx)

@@ -34,6 +34,12 @@ with (ScheduleProcHelper()):
 
     re_nd = tvm.nd.array(np.zeros((2, 2, 16, 16), dtype=tile_host.dtype), ctx)
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
+    
     func(a_nd, re_nd)
 
     #print(a_nd)

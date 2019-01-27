@@ -40,6 +40,11 @@ def test():
     print(nnpu.lower(s, [a, b, sum_host, sub_host, mul_host], simple_mode=True))
     func = nnpu.build(s, [a, b, sum_host, sub_host, mul_host], 'nnpu', 'llvm', name='nnpu_func')
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
 
     ctx = tvm.nd.TVMContext(13, 0)
 

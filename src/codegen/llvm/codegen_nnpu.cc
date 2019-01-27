@@ -172,8 +172,8 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
   module->print(dest_ll, nullptr);
   std::string ll(data_ll.begin(), data_ll.end());
   // print ll
-  // std::cout << "The generate LLVM IR is:\n";
-  // std::cout << ll;
+  std::cout << "The generate LLVM IR is:\n";
+  std::cout << ll;
 
   // emit asm
   llvm::legacy::PassManager pass;
@@ -188,8 +188,8 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
 #endif
   pass.run(*module);
   std::string asm_code(data_asm.begin(), data_asm.end());
-  // std::cout << "The generate asm is:\n";
-  // std::cout << asm_code;
+  std::cout << "The generate asm is:\n";
+  std::cout << asm_code;
   return NNPUModuleCreate(asm_code, ExtractFuncInfo(funcs), ll);
 }
 

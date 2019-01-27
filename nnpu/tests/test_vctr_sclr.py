@@ -80,6 +80,12 @@ def test():
     rdiv_nd = tvm.nd.array(np.zeros((16, )).astype(rdiv_host.dtype), ctx)
     gtm_nd = tvm.nd.array(np.zeros((16, )).astype(gtm_host.dtype), ctx)
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
+
     func(a_nd, b_nd, c_nd, sub_nd, mul_nd, rsub_nd, div_nd, rdiv_nd, gtm_nd)
     print('a = ')
     print(a_np)

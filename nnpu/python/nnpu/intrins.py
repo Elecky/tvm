@@ -589,7 +589,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", 'VctrDotProd',
+                irb.emit(self.make_intrin_call("void", 'VDotV',
                             dout.access_ptr('w', 'uint32'),
                             din1.access_ptr('r', 'uint32'),
                             din2.access_ptr('r', 'uint32'),
@@ -1203,6 +1203,6 @@ class IntrinManager(object):
                 addr,
                 rowStride,
                 nRow, nCol,
-                str(val), self.get_mode_code(mode)
+                val, self.get_mode_code(mode)
                 ))
         return irb.get()
