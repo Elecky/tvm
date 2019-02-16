@@ -523,7 +523,7 @@ class IntrinManager(object):
                 dout = outs[0]
 
                 init = self.emit_memset(dout.access_ptr('w', 'uint32'), shape_out[-1], 
-                            dtype_bytes(dtype_out), tvm.const(num, 'float64') , mode)
+                            dtype_bytes(dtype_out), num , mode)
 
                 def comp():
                     irb = tvm.ir_builder.create()
@@ -1186,7 +1186,8 @@ class IntrinManager(object):
         return res
     
     def emit_memset(self, addr, nUnit, stride, val, mode):
-        val = tvm.const(val, 'float64')
+        if (not val is tvm.expr.FloatImm):
+            val = tvm.const(val, 'float64')
         irb = tvm.ir_builder.create()
         irb.scope_attr(self.env.nnpu_axis, "coproc_scope", 0)
         irb.emit(self.make_intrin_call("void", 'Memset',
@@ -1196,7 +1197,8 @@ class IntrinManager(object):
         return irb.get()
 
     def emit_acc_init(self, addr, nRow, nCol, rowStride, mode, val=0.0):
-        val = tvm.const(val, 'float64')
+        if (not val is tvm.expr.FloatImm):
+            val = tvm.const(val, 'float64')
         irb = tvm.ir_builder.create()
         irb.scope_attr(self.env.nnpu_axis, "coproc_scope", 0)
         irb.emit(self.make_intrin_call("void", 'AccMemset',
