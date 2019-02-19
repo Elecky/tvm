@@ -220,7 +220,7 @@ private:
      * \param token: register operand
      * \return the register No.
      */
-    regNo_t parseReg(const string &token);
+    static regNo_t parseReg(const string &token);
 
     /*
      * \brief parse a memory operand, checks whether its offset is immediate value or label.
@@ -236,6 +236,22 @@ private:
     bool parseMemOperand(const string &token, 
                          regNo_t &baseReg, uint32_t &offset,
                          RelocRecord *rr);
+
+    inline static int32_t parseInt(const string &token)
+    {
+        return std::atoi(token.c_str());
+    }
+
+    inline static double parseDouble(const string &token)
+    {
+        return std::stod(token.c_str());
+    }
+
+    inline static bool parseBool(const string &token)
+    {
+        assert(token.length() == 1 && ", a boolean value should be either T or F");
+        return token[0] == 'T';
+    }
 
     // handlers for instructions.
     // signatures for all those functions are:
@@ -254,6 +270,15 @@ private:
     void assembleBufferLS(const vector<string>&, const vector<string>&, const string&);
     void assembleVctrBinary(const vector<string>&, const vector<string>&, const string&);
     void assembleRet(const vector<string>&, const vector<string>&, const string&);
+    void assembleMemset(const vector<string>&, const vector<string>&, const string&);
+    void assembleVDotV(const vector<string>&, const vector<string>&, const string&);
+    void assembleGEMM(const vector<string>&, const vector<string>&, const string&);
+    void assembleAccMemset(const vector<string>&, const vector<string>&, const string&);
+    void assembleCopyAccToBuffer(const vector<string>&, const vector<string>&, const string&);
+    void assembleMatImm(const vector<string>&, const vector<string>&, const string&);
+    void assembleVctrImm(const vector<string>&, const vector<string>&, const string&);
+    void assembleMatReduce(const vector<string>&, const vector<string>&, const string&);
+    void assembleVctrSclr(const vector<string>&, const vector<string>&, const string&);
 
     static const std::unordered_set<char> tokenDelims;
     static const std::unordered_set<char> functDelims;
@@ -299,6 +324,40 @@ NNPUAssembler::NNPUAssembler()
     }
 
     instrHandler.insert({"ret", &NNPUAssembler::assembleRet});
+
+    instrHandler.insert({"Memset", &NNPUAssembler::assembleMemset});
+
+    instrHandler.insert({"VDotV", &NNPUAssembler::assembleVDotV});
+
+    instrHandler.insert({"GEMM", &NNPUAssembler::assembleGEMM});
+
+    instrHandler.insert({"AccMemset", &NNPUAssembler::assembleAccMemset});
+
+    instrHandler.insert({"CopyAccToBuffer", &NNPUAssembler::assembleCopyAccToBuffer});
+
+    static const std::unordered_set<string> matImmOps
+        { "MAddI", "MMulI", "ISubM" };
+    for (auto &item : matImmOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleMatImm});
+    }
+
+    static const std::unordered_set<string> vctrImmOps
+        { "VAddI", "VSubI", "VMulI", "VDivI", "VGTMI", "ISubV",
+          "IDivV" };
+    for (auto &item : vctrImmOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleVctrImm});
+    }
+
+    instrHandler.insert({"MReduceSumRow", &NNPUAssembler::assembleMatReduce});
+
+    static const std::unordered_set<string> vctrSclrOps
+        { "VAddS", "VSubS", "VMulS", "VDivS", "VGTMS", "SSubV", "SDivV"};
+    for (auto &item : vctrSclrOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleVctrSclr});
+    }
 }
 
 void NNPUAssembler::Assemble(string asm_str)
@@ -625,8 +684,9 @@ void NNPUAssembler::assembleVctrBinary(
     insns.emplace_back(
             VctrBinaryInsn(it->second, parseReg(tokens[1]),
                            parseReg(tokens[2]), parseReg(tokens[3]),
-                           std::atoi(functs[1].c_str()), 
-                           ModeFromInt(atoi(functs[2].c_str())) ));
+                           parseInt(functs[1]), 
+                           ModeFromInt(parseInt(functs[2]) ))
+    );
 }
 
 void NNPUAssembler::assembleRet(const vector<string> &functs, 
@@ -634,6 +694,171 @@ void NNPUAssembler::assembleRet(const vector<string> &functs,
                                  const string &instr)
 {
     insns.emplace_back(StallInsn());
+}
+
+void NNPUAssembler::assembleMemset(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 5) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 2) << ", ilegal syntax: " << instr;
+
+    insns.emplace_back(
+        MemsetInsn(parseReg(tokens[1]) /* addr */, parseReg(tokens[2]) /* nUnit */,
+                    parseReg(tokens[3]) /* stride */, ModeFromInt(parseInt(functs[1])),
+                    parseDouble(tokens[4]) /* value to set */)
+    );
+}
+
+void NNPUAssembler::assembleVDotV(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 3) << ", ilegal syntax: " << instr;
+
+    insns.emplace_back(
+        VctrDotProdInsn(parseReg(tokens[1]) /*out addr*/, parseReg(tokens[2]) /*in1 addr*/,
+                        parseReg(tokens[3]) /*in2 addr*/, parseInt(functs[1]) /*size*/,
+                        ModeFromInt(parseInt(functs[2])) /*mode*/)
+    );
+}
+
+void NNPUAssembler::assembleGEMM(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 7) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 7) << ", ilegal syntax: " << instr;
+
+    insns.emplace_back(
+        GemmInsn(parseInt(functs[1]) /*nRowOut*/, parseInt(functs[2]) /*factor*/,
+                parseInt(functs[3]) /*nColOut*/, 
+                parseReg(tokens[1]) /*out addr*/, parseReg(tokens[2]),
+                parseReg(tokens[3]) /*in1 addr*/, parseReg(tokens[4]),
+                parseReg(tokens[5]) /*in2 addr*/, parseReg(tokens[6]),
+                ModeFromInt(parseInt(functs[4])),
+                parseBool(functs[5]) /*toAcc*/, parseBool(functs[6]) /*doAcc*/)
+    );
+}
+
+void NNPUAssembler::assembleAccMemset(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 4) << ", ilegal syntax: " << instr;
+
+    insns.emplace_back(
+        AccMemsetInsn(parseInt(functs[1]) /*nRow*/, parseInt(functs[2]) /*nCol*/,
+                    parseReg(tokens[1]) /*addr*/, parseReg(tokens[2]) /*stride*/,
+                    ModeFromInt(parseInt(functs[3])) /*mode*/,
+                    parseDouble(tokens[3]) /*value*/)
+    );
+}
+
+void NNPUAssembler::assembleCopyAccToBuffer(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 6) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 2) << ", ilegal syntax: " << instr;
+
+    insns.emplace_back(
+        CopyAcc2BufInsn(parseReg(tokens[1]) /*dst addr*/, parseReg(tokens[2]),
+                        parseReg(tokens[3]) /*src addr*/, parseReg(tokens[4]),
+                        parseReg(tokens[5]), parseInt(functs[1]))
+    );
+}
+
+void NNPUAssembler::assembleMatImm(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 4) << ", ilegal syntax: " << instr;
+
+    static const std::unordered_map<string, MatImmOp> Ops
+    { {"MAddI", MatImmOp::Add}, {"MMulI", MatImmOp::Mul},
+      {"ISubM", MatImmOp::RSub} };
+    
+    auto it = Ops.find(functs[0]);
+    CHECK(it != Ops.end()) << ", unhandled MatImm op: " << functs[0];
+
+    insns.emplace_back(
+        MatImmInsn(it->second, parseReg(tokens[1]) /*out addr*/,
+                    parseReg(tokens[2]) /*in addr*/, parseDouble(tokens[3]) /*imm value*/,
+                    parseInt(functs[1]) /*nRow*/, parseInt(functs[2]) /*nCol*/,
+                    ModeFromInt(parseInt(functs[3])) /*mode*/)
+    );
+}
+
+void NNPUAssembler::assembleVctrImm(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 3) << ", ilegal syntax: " << instr;
+
+    static const std::unordered_map<string, VctrImmOp> Ops
+    { 
+        {"VAddI", VctrImmOp::Add}, {"VSubI", VctrImmOp::Sub},
+        {"VMulI", VctrImmOp::Mul}, {"VDivI", VctrImmOp::Div},
+        {"VGTMI", VctrImmOp::GTM}, {"ISubV", VctrImmOp::RSub},
+        {"IDivV", VctrImmOp::RDiv}
+    };
+    
+    auto it = Ops.find(functs[0]);
+    CHECK(it != Ops.end()) << ", unhandled VctrImm op: " << functs[0];
+
+    insns.emplace_back(
+        VctrImmInsn(it->second /*op*/, parseReg(tokens[1]) /*out addr*/,
+                    parseReg(tokens[2]) /*in addr*/, parseDouble(tokens[3]),
+                    parseInt(functs[1]) /*size*/, 
+                    ModeFromInt(parseInt(functs[2])) /*mode*/)
+    );
+}
+
+void NNPUAssembler::assembleMatReduce(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 6) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs[0], "MReduceSumRow") << ", unhandled matrix reduce op: " << functs[0];
+
+    insns.emplace_back(
+        MatReduceRowInsn(parseReg(tokens[1]) /*out addr*/, parseReg(tokens[2]) /*in addr*/,
+                        parseReg(tokens[3]) /*in stride*/,
+                        ReduceOp::Sum,
+                        parseInt(functs[1]) /*nRow*/, parseInt(functs[2]) /*nCol*/,
+                        parseBool(functs[4]) /*toAcc*/, parseBool(functs[5]) /*doAcc*/,
+                        ModeFromInt(parseInt(functs[3])) /*mode*/)
+    );
+}
+
+void NNPUAssembler::assembleVctrSclr(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 3) << ", ilegal syntax: " << instr;
+
+    static const std::unordered_map<string, VctrSclrOp> Ops
+        {   {"VAddS", VctrSclrOp::Add}, {"VSubS", VctrSclrOp::Sub},
+            {"VMulS", VctrSclrOp::Mul}, {"VDivS", VctrSclrOp::Div},
+            {"VGTMS", VctrSclrOp::GTM}, {"SSubV", VctrSclrOp::RSub},
+            {"SDivV", VctrSclrOp::RDiv},
+        };
+    auto it = Ops.find(functs[0]);
+    CHECK(it != Ops.end()) << ", unhandled vector scalar op: " << functs[0];
+
+    insns.emplace_back(
+        VctrSclrInsn(parseReg(tokens[1]) /*out addr*/, parseReg(tokens[2]) /*vctr in addr*/,
+                    parseReg(tokens[3]) /*sclr in addr*/,
+                    parseInt(functs[1]) /*size*/, it->second /*op*/,
+                    ModeFromInt(parseInt(functs[2])) /*mode*/)
+    );
 }
 
 }  // end namespace nnpu
@@ -686,7 +911,7 @@ void NNPUBufferCopy(const void *from,
 using std::vector;
 using std::string;
 
-static bool DumpInsn = true;
+static bool DumpInsn = false;
 using tvm::runtime::TVMArgs;
 using tvm::runtime::TVMRetValue;
 
@@ -748,7 +973,20 @@ extern "C" void NNPU_AssembleAndRun(
     sim->WriteRegister(1, fp);
     sim->WriteRegister(2, fp);
 
-    sim->Run(assembler.GetInsns());
+    auto insns = assembler.GetInsns();
+
+    if (DumpInsn)
+    {
+        nnpu::InsnDumper dumper;
+        auto &os = LOG(INFO) << "Dumping instructions: ";
+        for (auto &insn : insns)
+        {
+            insn.Call(dumper, os);
+            os << '\n';
+        }
+    }
+
+    sim->Run(insns);
 }
 
 static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
