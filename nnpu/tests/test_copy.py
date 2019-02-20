@@ -6,7 +6,7 @@ import numpy as np
     
 with (ScheduleProcHelper()):
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
     a = tvm.placeholder((32, 32), dtype_w, 'a')

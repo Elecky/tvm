@@ -77,6 +77,7 @@ def test():
     print('mul result is ')
     print(mul_nd.asnumpy())
     np.testing.assert_allclose(mul_nd.asnumpy(), a_np.astype(dtype_w) * b_np)
+    print('test passed')
 
 if __name__ == '__main__':
     test()

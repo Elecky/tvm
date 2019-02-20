@@ -14,6 +14,8 @@ NNPU runtime
 #include <vector>
 #include <sstream>
 
+#define DeclareAssembleFunc(funcName) void funcName(const vector<string>&, const vector<string>&, const string&)
+
 static const bool kBufferCoherent = false;
 
 namespace nnpu
@@ -260,25 +262,31 @@ private:
     //       const string &instr)
     // whether tokens are the line of instruction splited by space and comma,
     // and functs are the first token splitted by dot, instr are the original line of code.
-    void assembleLoad(const vector<string>&, const vector<string>&, const string&);
-    void assembleStore(const vector<string>&, const vector<string>&, const string&);
-    void assembleALUBinary(const vector<string>&, const vector<string>&, const string&);
-    void assembleALUUnary(const vector<string>&, const vector<string>&, const string&);
-    void assembleJump(const vector<string>&, const vector<string>&, const string&);
-    void assembleBZ(const vector<string>&, const vector<string>&, const string&);
-    void assembleDMA(const vector<string>&, const vector<string>&, const string&);
-    void assembleBufferLS(const vector<string>&, const vector<string>&, const string&);
-    void assembleVctrBinary(const vector<string>&, const vector<string>&, const string&);
-    void assembleRet(const vector<string>&, const vector<string>&, const string&);
-    void assembleMemset(const vector<string>&, const vector<string>&, const string&);
-    void assembleVDotV(const vector<string>&, const vector<string>&, const string&);
-    void assembleGEMM(const vector<string>&, const vector<string>&, const string&);
-    void assembleAccMemset(const vector<string>&, const vector<string>&, const string&);
-    void assembleCopyAccToBuffer(const vector<string>&, const vector<string>&, const string&);
-    void assembleMatImm(const vector<string>&, const vector<string>&, const string&);
-    void assembleVctrImm(const vector<string>&, const vector<string>&, const string&);
-    void assembleMatReduce(const vector<string>&, const vector<string>&, const string&);
-    void assembleVctrSclr(const vector<string>&, const vector<string>&, const string&);
+    DeclareAssembleFunc(assembleLoad);
+    DeclareAssembleFunc(assembleStore);
+    DeclareAssembleFunc(assembleALUBinary);
+    DeclareAssembleFunc(assembleALUUnary);
+    DeclareAssembleFunc(assembleJump);
+    DeclareAssembleFunc(assembleBZ);
+    DeclareAssembleFunc(assembleDMA);
+    DeclareAssembleFunc(assembleBufferLS);
+    DeclareAssembleFunc(assembleVctrBinary);
+    DeclareAssembleFunc(assembleRet);
+    DeclareAssembleFunc(assembleMemset);
+    DeclareAssembleFunc(assembleVDotV);
+    DeclareAssembleFunc(assembleGEMM);
+    DeclareAssembleFunc(assembleAccMemset);
+    DeclareAssembleFunc(assembleCopyAccToBuffer);
+    DeclareAssembleFunc(assembleMatImm);
+    DeclareAssembleFunc(assembleVctrImm);
+    DeclareAssembleFunc(assembleMatReduce);
+    DeclareAssembleFunc(assembleVctrSclr);
+    DeclareAssembleFunc(assembleVctrUnary);
+    DeclareAssembleFunc(assembleVctrReduce);
+    DeclareAssembleFunc(assembleMatRowDot);
+    DeclareAssembleFunc(assembleMatBinary);
+    DeclareAssembleFunc(assembleCopy);
+    DeclareAssembleFunc(assembleMatVctr);
 
     static const std::unordered_set<char> tokenDelims;
     static const std::unordered_set<char> functDelims;
@@ -292,7 +300,7 @@ NNPUAssembler::NNPUAssembler()
     instrHandler.insert({"Load", &NNPUAssembler::assembleLoad});
     instrHandler.insert({"Store", &NNPUAssembler::assembleStore});
 
-    static const std::unordered_set<string> aluBinaryOps 
+    static const vector<string> aluBinaryOps 
         { "AddU", "SubU", "MulU", "DivU", "ModU", "SLTU",
           "SLT", "SEQ", "XOR", "And", "Or" };
     for (auto &item : aluBinaryOps)
@@ -300,7 +308,7 @@ NNPUAssembler::NNPUAssembler()
         instrHandler.insert({item, &NNPUAssembler::assembleALUBinary});
     }
 
-    static const std::unordered_set<string> aluUnaryOps
+    static const vector<string> aluUnaryOps
         { "AddIU", "MulIU", "DivIU", "ModIU", "SLTIU", "SLTI",
           "SEQI", "XORI", "AndI", "OrI", "SHLI" };
     for (auto &item : aluUnaryOps)
@@ -316,7 +324,7 @@ NNPUAssembler::NNPUAssembler()
     instrHandler.insert({"ScratchpadLoad", &NNPUAssembler::assembleBufferLS});
     instrHandler.insert({"ScratchpadStore", &NNPUAssembler::assembleBufferLS});
 
-    static const std::unordered_set<string> vctrBinaryOps
+    static const vector<string> vctrBinaryOps
         { "VAddV", "VSubV", "VMulV", "VDivV", "VGTMV" };
     for (auto &item : vctrBinaryOps)
     {
@@ -335,14 +343,14 @@ NNPUAssembler::NNPUAssembler()
 
     instrHandler.insert({"CopyAccToBuffer", &NNPUAssembler::assembleCopyAccToBuffer});
 
-    static const std::unordered_set<string> matImmOps
+    static const vector<string> matImmOps
         { "MAddI", "MMulI", "ISubM" };
     for (auto &item : matImmOps)
     {
         instrHandler.insert({item, &NNPUAssembler::assembleMatImm});
     }
 
-    static const std::unordered_set<string> vctrImmOps
+    static const vector<string> vctrImmOps
         { "VAddI", "VSubI", "VMulI", "VDivI", "VGTMI", "ISubV",
           "IDivV" };
     for (auto &item : vctrImmOps)
@@ -352,11 +360,43 @@ NNPUAssembler::NNPUAssembler()
 
     instrHandler.insert({"MReduceSumRow", &NNPUAssembler::assembleMatReduce});
 
-    static const std::unordered_set<string> vctrSclrOps
+    static const vector<string> vctrSclrOps
         { "VAddS", "VSubS", "VMulS", "VDivS", "VGTMS", "SSubV", "SDivV"};
     for (auto &item : vctrSclrOps)
     {
         instrHandler.insert({item, &NNPUAssembler::assembleVctrSclr});
+    }
+
+    static const vector<string> vctrUnaryOps
+        { "VExp", "VLog" };
+    for (auto &item : vctrUnaryOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleVctrUnary});
+    }
+
+    static const vector<string> vctrReduceOps
+        { "VReduceSum", "VReduceMax", "VReduceMin" };
+    for (auto &item : vctrReduceOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleVctrReduce});
+    }
+
+    instrHandler.insert({"MRowDot", &NNPUAssembler::assembleMatRowDot});
+
+    static const vector<string> matBinaryOps
+        {"MAddM", "MSubM", "MMulM"};
+    for (auto &item : matBinaryOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleMatBinary});
+    }
+
+    instrHandler.insert({"ScratchpadCopy", &NNPUAssembler::assembleCopy});
+
+    static const vector<string> matVctrOps
+        {"MAddV", "MSubV", "MMulV"};
+    for (auto &item : matVctrOps)
+    {
+        instrHandler.insert({item, &NNPUAssembler::assembleMatVctr});
     }
 }
 
@@ -446,8 +486,10 @@ void NNPUAssembler::Assemble(string asm_str)
 regNo_t NNPUAssembler::parseReg(const string &token)
 {
     CHECK_GT(token.length(), 2)
-        << ", a register token should be at least 2 characters";
-    CHECK_EQ(token[0], '$') << ", register token always starts with a '$'";
+        << ", a register token should be at least 2 characters"
+        << ", given token = " << token;
+    CHECK_EQ(token[0], '$') << ", register token always starts with a '$'"
+        << ", given token = " << token;
 
     if (isdigit(token[1]))
     {
@@ -858,6 +900,131 @@ void NNPUAssembler::assembleVctrSclr(const vector<string> &functs,
                     parseReg(tokens[3]) /*sclr in addr*/,
                     parseInt(functs[1]) /*size*/, it->second /*op*/,
                     ModeFromInt(parseInt(functs[2])) /*mode*/)
+    );
+}
+
+void NNPUAssembler::assembleVctrUnary(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 3) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 3) << ", ilegal syntax: " << instr;
+
+    static const std::unordered_map<string, VctrUnaryOp> Ops
+        { {"VExp", VctrUnaryOp::Exp}, {"VLog", VctrUnaryOp::Log} };
+    auto it = Ops.find(functs[0]);
+    CHECK(it != Ops.end()) << ", unhandled vector unary op: " << functs[0];
+
+    insns.emplace_back(
+        VctrUnaryInsn(it->second /*op*/, 
+                        parseReg(tokens[1]) /*out addr*/, parseReg(tokens[2]) /*in addr*/,
+                        parseInt(functs[1]) /*size*/,
+                        ModeFromInt(parseInt(functs[2])) /*mode*/)
+    );
+}
+
+void NNPUAssembler::assembleVctrReduce(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 3) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 3) << ", ilegal syntax: " << instr;
+
+    static const std::unordered_map<string, ReduceOp> Ops
+        { 
+            {"VReduceSum", ReduceOp::Sum}, {"VReduceMax", ReduceOp::Max}, 
+            {"VReduceMin", ReduceOp::Min}
+        };
+    auto it = Ops.find(functs[0]);
+    CHECK(it != Ops.end()) << ", unhandled vector reduce op: " << functs[0];
+
+    insns.emplace_back(
+        VctrReduceInsn(parseReg(tokens[1]) /*out addr*/, parseReg(tokens[2]) /*in addr*/,
+                        it->second, parseInt(functs[1]) /*size*/,
+                        ModeFromInt(parseInt(functs[2]))) /*mode*/
+    );
+}
+
+void NNPUAssembler::assembleMatRowDot(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 6) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 6) << ", ilegal syntax: " << instr;
+
+    insns.emplace_back(
+        MatRowDotInsn(parseReg(tokens[1]) /*out addr*/, 
+                        parseReg(tokens[2]) /*in1 addr*/, parseReg(tokens[3]),
+                        parseReg(tokens[4]) /*in2 addr*/, parseReg(tokens[5]),
+                        parseInt(functs[1]) /*nRow*/, parseInt(functs[2]) /*nCol*/,
+                        parseBool(functs[4]) /*toAcc*/, parseBool(functs[5]) /*doAcc*/,
+                        ModeFromInt(parseInt(functs[3])) /*mode*/)
+    );
+}
+
+void NNPUAssembler::assembleMatBinary(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 7) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 4) << ", ilegal syntax: " << instr;
+
+    static const std::unordered_map<string, MatBinaryOp> Ops
+        {
+            {"MAddM", MatBinaryOp::Add}, {"MSubM", MatBinaryOp::Sub},
+            {"MMulM", MatBinaryOp::Mul}
+        };
+    auto it = Ops.find(functs[0]);
+    CHECK(it != Ops.end()) << ", unhandled matrix binary op: " << functs[0];
+
+    insns.emplace_back(
+        MatBinaryInsn(parseReg(tokens[1]) /*out addr*/, parseReg(tokens[3]) /*in1 addr*/,
+                    parseReg(tokens[5]) /*in2 addr*/,
+                    parseReg(tokens[2]) /*out stride*/, parseReg(tokens[4]) /*in1 stride*/,
+                    parseReg(tokens[6]) /*in2 stride*/,
+                    it->second /*op*/,
+                    parseInt(functs[1]) /*nRow*/, parseInt(functs[2]) /*nCol*/,
+                    ModeFromInt(parseInt(functs[3])) /*mode*/)
+    );
+}
+
+void NNPUAssembler::assembleCopy(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 6) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 2) << ", ilegal syntax: " << instr;
+
+    insns.emplace_back(
+        BufferCopyInsn(parseReg(tokens[1]) /*dst addr*/, parseReg(tokens[2]) /*dst stride*/,
+                        parseReg(tokens[3]) /*src addr*/, parseReg(tokens[4]) /*src stride*/,
+                        parseReg(tokens[5]) /*nUnits*/,
+                        parseInt(functs[1]) /*per unit bytes*/)
+    );
+}
+
+void NNPUAssembler::assembleMatVctr(const vector<string> &functs, 
+                                 const vector<string> &tokens,
+                                 const string &instr)
+{
+    CHECK_EQ(tokens.size(), 6) << ", ilegal syntax: " << instr;
+    CHECK_EQ(functs.size(), 4) << ", ilegal syntax: " << instr;
+
+    static const std::unordered_map<string, MatVctrOp> Ops
+        {
+            {"MAddV", MatVctrOp::Add }, {"MSubV", MatVctrOp::Sub },
+            {"MMulV", MatVctrOp::Mul }
+        };
+    auto it = Ops.find(functs[0]);
+    CHECK(it != Ops.end()) << ", unhandled matrix-vector op: " << functs[0];
+
+    insns.emplace_back(
+        MatVctrInsn(parseReg(tokens[1]) /*mat-out addr*/, parseReg(tokens[2]) /*stride*/,
+                    parseReg(tokens[3]) /*mat-in addr*/, parseReg(tokens[4]) /*stride*/,
+                    parseReg(tokens[5]) /*vctr-in addr*/,
+                    it->second /*op*/,
+                    parseInt(functs[1]) /*nRow*/, parseInt(functs[2]) /*nCol*/,
+                    ModeFromInt(parseInt(functs[3])) /*mode*/)
     );
 }
 

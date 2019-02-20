@@ -6,7 +6,7 @@ import numpy as np
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
 
     out_channel = 32
     in_channel = 64
