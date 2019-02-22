@@ -164,7 +164,6 @@ def init_default_env():
 @tvm.register_func("tvm.intrin.rule.default.nnpu.coproc_sync")
 def coproc_sync(op):
     _ = op
-    return tvm.call_extern(
-        "int32", "NNPUSynchronize", 1<<31)
+    return tvm.const(0)
 
 Environment.current = init_default_env()

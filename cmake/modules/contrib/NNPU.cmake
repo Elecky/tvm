@@ -4,7 +4,8 @@ find_program(PYTHON NAMES python python3 python3.6)
 if(PYTHON)
     set(RUNTIME_SRC nnpu/src/)
     set(NNPU_RUNTIME_SRCS ${RUNTIME_SRC}/device_api.cpp ${RUNTIME_SRC}/runtime.cpp 
-                          ${RUNTIME_SRC}/sim_driver.cpp ${RUNTIME_SRC}/insn.cpp)
+                          ${RUNTIME_SRC}/sim_driver.cpp ${RUNTIME_SRC}/insn.cpp
+                          ${RUNTIME_SRC}/insn_ctors.cpp)
     set(SIM_SRC nnpu/NNPUSim/src/)
     set(NNPU_SIM_COMMON ${SIM_SRC}/common/bit_packer.cpp ${SIM_SRC}/common/bit_packer_factory.cpp
                         ${SIM_SRC}/common/bit_wrapper.cpp ${SIM_SRC}/common/wire.cpp
@@ -29,3 +30,6 @@ if(PYTHON)
 else()
   message(STATUS "Cannot found python in env, NNPU build is skipped..")
 endif()
+
+file(GLOB RUNTIME_NNPU_SRCS src/runtime/nnpu/*.cc)
+list(APPEND RUNTIME_SRCS ${RUNTIME_NNPU_SRCS})

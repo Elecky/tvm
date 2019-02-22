@@ -499,6 +499,14 @@ bool VerifyMemory(LoweredFunc func, int device_type);
 bool VerifyGPUCode(Stmt stmt,
                    Map<std::string, Expr> constraints);
 
+/*!
+ * \brief Split the function into a host function and NNPU device functions.
+ * \param func The function to be splitted.
+ *
+ * \return Array of functions, the first one is host function,
+ *     the others are NNPU device functions.
+ */
+Array<LoweredFunc> NNPUSplitHostDevice(LoweredFunc func);
 
 }  // namespace ir
 }  // namespace tvm

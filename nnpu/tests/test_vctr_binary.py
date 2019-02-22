@@ -49,9 +49,9 @@ def test():
 
 
     print(nnpu.lower(s, [a, b, c_host, mul_host, gtm_host], simple_mode=True))
-    exit()
+    # exit()
     func = nnpu.build(s, [a, b, c_host, mul_host, gtm_host], 'nnpu', 'llvm', name='nnpu_exp')
-
+    # exit()
 
     ctx = tvm.nd.TVMContext(13, 0)
 
@@ -66,7 +66,14 @@ def test():
     mul_nd = tvm.nd.array(np.zeros(shape).astype(mul_host.dtype), ctx)
     gtm_nd = tvm.nd.array(np.zeros(shape).astype(gtm_host.dtype), ctx)
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
+
     func(a_nd, b_nd, c_nd, mul_nd, gtm_nd)
+    # exit()
     print('a = ')
     print(a_np)
     print('b = ')

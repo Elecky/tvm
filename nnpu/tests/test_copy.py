@@ -6,7 +6,7 @@ import numpy as np
     
 with (ScheduleProcHelper()):
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
     a = tvm.placeholder((32, 32), dtype_w, 'a')
@@ -34,6 +34,12 @@ with (ScheduleProcHelper()):
 
     re_nd = tvm.nd.array(np.zeros((2, 2, 16, 16), dtype=tile_host.dtype), ctx)
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
+    
     func(a_nd, re_nd)
 
     #print(a_nd)
