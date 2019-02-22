@@ -6,7 +6,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
 
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     a = tvm.placeholder((16, ), dtype_n, 'a')
@@ -79,6 +79,12 @@ def test():
     div_nd = tvm.nd.array(np.zeros((16, )).astype(div_host.dtype), ctx)
     rdiv_nd = tvm.nd.array(np.zeros((16, )).astype(rdiv_host.dtype), ctx)
     gtm_nd = tvm.nd.array(np.zeros((16, )).astype(gtm_host.dtype), ctx)
+
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
 
     func(a_nd, b_nd, c_nd, sub_nd, mul_nd, rsub_nd, div_nd, rdiv_nd, gtm_nd)
     print('a = ')

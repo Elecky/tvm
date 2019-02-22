@@ -419,8 +419,19 @@ def _build_for_device(flist, target, target_host):
             func = ir_pass.ThreadSync(func, "warp")
             warp_size = target.thread_warp_size
             func = ir_pass.LowerThreadAllreduce(func, warp_size)
-            # TODO: implement our own spliter.
             fsplits = [s for s in ir_pass.SplitHostDevice(func)]
+            # split host device for nnpu backend.
+            if (target.target_name == 'nnpu'):
+                # print('trying to split')
+                fsplits = [s for s in ir_pass.NNPUSplitHostDevice(func)]
+                # print(len(fsplits))
+                # print('host func:')
+                # print(fsplits[0].body)
+                # for i, x in enumerate(fsplits[1:], 1):
+                #     print('device func {0}'.format(i))
+                #     print(x.args)
+                #     print(x.body)
+            
             fhost.append(fsplits[0])
             for x in fsplits[1:]:
                 fdevice.append(x)

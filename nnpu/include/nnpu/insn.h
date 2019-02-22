@@ -55,11 +55,9 @@ public:
     VctrUnaryInsn() = default;
 
     /* constructor */
-    VctrUnaryInsn(VctrUnaryOp _op, regNo_t _vctrOutAddrReg, regNo_t _vctrInAddrReg, 
-        uint32_t _size, ModeCode _mode) :
-        Op(_op), VctrOutAddrReg(_vctrOutAddrReg), VctrInAddrReg(_vctrInAddrReg), 
-        Size(_size), Mode(_mode)
-    {}
+    VctrUnaryInsn(VctrUnaryOp _op, regNo_t _vctrOutAddrReg, 
+                  regNo_t _vctrInAddrReg, 
+                  uint32_t _size, ModeCode _mode);
 
     /*!
     * \brief dump the string representation of this instruction into ostream
@@ -116,11 +114,9 @@ public:
     DMACopyInsn() = default;
 
     /* constructor */
-    DMACopyInsn(DMADIR _dir, regNo_t _hostPhyAddrReg, regNo_t _hostOffsetReg, 
-        regNo_t _dramAddrReg, regNo_t _sizeReg) :
-        Dir(_dir), HostPhyAddrReg(_hostPhyAddrReg), HostOffsetReg(_hostOffsetReg), 
-        DramAddrReg(_dramAddrReg), SizeReg(_sizeReg)
-    {}
+    DMACopyInsn(DMADIR _dir, regNo_t _hostPhyAddrReg, 
+                regNo_t _hostOffsetReg, 
+                regNo_t _dramAddrReg, regNo_t _sizeReg);
 
     /*!
     * \brief dump the string representation of this instruction into ostream
@@ -161,9 +157,8 @@ public:
     BufferLSInsn() = default;
 
     /* constructor */
-    BufferLSInsn(LSDIR _dir, regNo_t _dramAddrReg, regNo_t _bufAddrReg, regNo_t _sizeReg) :
-        Dir(_dir), DramAddrReg(_dramAddrReg), BufAddrReg(_bufAddrReg), SizeReg(_sizeReg)
-    {}
+    BufferLSInsn(LSDIR _dir, regNo_t _dramAddrReg, 
+                 regNo_t _bufAddrReg, regNo_t _sizeReg);
 
     /*!
     * \brief dump the string representation of this instruction into ostream
@@ -191,11 +186,7 @@ public:
 
     BufferCopyInsn(regNo_t _dstAddrReg, regNo_t _dstStrideReg, 
                    regNo_t _srcAddrReg, regNo_t _srcStrideReg,
-                   regNo_t _nUnitReg, uint32_t _unitBytes) :
-        DstAddrReg(_dstAddrReg), DstStrideReg(_dstStrideReg),
-        SrcAddrReg(_srcAddrReg), SrcStrideReg(_srcStrideReg),
-        NUnitReg(_nUnitReg), UnitBytes(_unitBytes)
-    {}
+                   regNo_t _nUnitReg, uint32_t _unitBytes);
 
     regNo_t DstAddrReg;
     regNo_t DstStrideReg;
@@ -229,11 +220,9 @@ struct MemsetInsn
 public:
     MemsetInsn() = default;
 
-    MemsetInsn(regNo_t _addrReg, regNo_t _nUnitReg, regNo_t _strideReg,
-               ModeCode _mode, double _imm) :
-        AddrReg(_addrReg), NUnitReg(_nUnitReg), StrideReg(_strideReg),
-        Mode(_mode), Imm(_imm)
-    {}
+    MemsetInsn(regNo_t _addrReg, regNo_t _nUnitReg, 
+               regNo_t _strideReg,
+               ModeCode _mode, double _imm);
 
     regNo_t AddrReg;
     regNo_t NUnitReg;
@@ -267,10 +256,7 @@ public:
 
     AccMemsetInsn(uint32_t _nRow, uint32_t _nCol, 
                   regNo_t _addrReg, regNo_t _rowStrideReg,
-                  ModeCode _mode, double _imm) :
-        AddrReg(_addrReg), RowStrideReg(_rowStrideReg),
-        NRow(_nRow), NCol(_nCol), Mode(_mode), Imm(_imm)
-    {}
+                  ModeCode _mode, double _imm);
 
     regNo_t AddrReg;
     regNo_t RowStrideReg;
@@ -307,8 +293,7 @@ public:
     /* default constructor */
     LiInsn() = default;
 
-    LiInsn(regNo_t _resReg, reg_t _imm) : ResReg(_resReg), Imm(_imm)
-    {}
+    LiInsn(regNo_t _resReg, reg_t _imm);
 
     /*!
     * \brief dump the string representation of this instruction into ostream
@@ -358,13 +343,7 @@ public:
              regNo_t _outAddrReg, regNo_t _outRowStrideReg,
              regNo_t _in1AddrReg, regNo_t _in1RowStrideReg,
              regNo_t _in2AddrReg, regNo_t _in2RowStrideReg, ModeCode _mode,
-             bool _toAccBuf, bool _doAcc)
-            : NRowOut(_nRowOut), Factor(_factor), NColOut(_nColOut),
-              OutAddrReg(_outAddrReg), OutRowStrideReg(_outRowStrideReg),
-              In1AddrReg(_in1AddrReg), In1RowStrideReg(_in1RowStrideReg),
-              In2AddrReg(_in2AddrReg), In2RowStrideReg(_in2RowStrideReg),
-              ToAccBuf(_toAccBuf), DoAcc(_doAcc), Mode(_mode)
-    {}
+             bool _toAccBuf, bool _doAcc);
 
     // the following 3 field is not Imm nor register operand, 
     // they are part of the instruction encoding, since only limited kinds of Gemm is supported,
@@ -412,11 +391,9 @@ struct VctrBinaryInsn
 public:
     VctrBinaryInsn() = default;
 
-    VctrBinaryInsn(VctrBinaryOp _op, regNo_t _outAddrReg, regNo_t _in1AddrReg, 
-        regNo_t _in2AddrReg, uint32_t _size, ModeCode _mode) :
-        Op(_op), OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
-        Size(_size), Mode(_mode)
-    {}
+    VctrBinaryInsn(VctrBinaryOp _op, regNo_t _outAddrReg, 
+                   regNo_t _in1AddrReg, regNo_t _in2AddrReg, 
+                   uint32_t _size, ModeCode _mode);
 
     VctrBinaryOp Op;
 
@@ -451,11 +428,9 @@ struct VctrImmInsn
 public:
     VctrImmInsn() = default;
 
-    VctrImmInsn(VctrImmOp _op, regNo_t _outAddrReg, regNo_t _inAddrReg, 
-        double _Imm, uint32_t _size, ModeCode _mode) :
-        Op(_op), OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Imm(_Imm),
-        Size(_size), Mode(_mode)
-    {}
+    VctrImmInsn(VctrImmOp _op, regNo_t _outAddrReg, 
+                regNo_t _inAddrReg, double _Imm, 
+                uint32_t _size, ModeCode _mode);
 
     VctrImmOp Op;
 
@@ -514,11 +489,9 @@ struct MatImmInsn
 public:
     MatImmInsn() = default;
 
-    MatImmInsn(MatImmOp _op, regNo_t _outAddrReg, regNo_t _inAddrReg, 
-        double _Imm,uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
-        Op(_op), OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Imm(_Imm),
-        nRow(_nRow), nCol(_nCol), Mode(_mode)
-    {}
+    MatImmInsn(MatImmOp _op, regNo_t _outAddrReg, 
+               regNo_t _inAddrReg, double _Imm,
+               uint32_t _nRow, uint32_t _nCol, ModeCode _mode);
 
     MatImmOp Op;
 
@@ -551,10 +524,7 @@ public:
     VctrDotProdInsn() = default;
 
     VctrDotProdInsn(regNo_t _outAddrReg, regNo_t _in1AddrReg, 
-        regNo_t _in2AddrReg, uint32_t _size, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
-        Size(_size), Mode(_mode)
-    {}
+                    regNo_t _in2AddrReg, uint32_t _size, ModeCode _mode);
 
     regNo_t OutAddrReg;
     regNo_t In1AddrReg;
@@ -588,9 +558,7 @@ public:
     VctrReduceInsn() = default;
 
     VctrReduceInsn(regNo_t _outAddrReg, regNo_t _inAddrReg, 
-                   ReduceOp _op, uint32_t _size, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Op(_op), Size(_size), Mode(_mode)
-    {}
+                   ReduceOp _op, uint32_t _size, ModeCode _mode);
 
     regNo_t OutAddrReg;
     regNo_t InAddrReg;
@@ -623,13 +591,11 @@ struct MatBinaryInsn
 public:
     MatBinaryInsn() = default;
 
-    MatBinaryInsn(regNo_t _outAddrReg, regNo_t _in1AddrReg, regNo_t _in2AddrReg,
-                  regNo_t _outRowStrideReg, regNo_t _in1RowStrideReg, regNo_t _in2RowStrideReg,
-                  MatBinaryOp _op, uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In2AddrReg(_in2AddrReg),
-        OutRowStrideReg(_outRowStrideReg), In1RowStrideReg(_in1RowStrideReg), 
-        In2RowStrideReg(_in2RowStrideReg), Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
-    {}
+    MatBinaryInsn(regNo_t _outAddrReg, regNo_t _in1AddrReg, 
+                  regNo_t _in2AddrReg, regNo_t _outRowStrideReg, 
+                  regNo_t _in1RowStrideReg, regNo_t _in2RowStrideReg,
+                  MatBinaryOp _op, uint32_t _nRow, 
+                  uint32_t _nCol, ModeCode _mode);
 
     regNo_t OutAddrReg;
     regNo_t In1AddrReg;
@@ -666,10 +632,7 @@ public:
 
     MatReduceRowInsn(regNo_t _outAddrReg, regNo_t _inAddrReg, regNo_t _inRowStrideReg,
                      ReduceOp _op, uint32_t _nRow, uint32_t _nCol, 
-                     bool _toAccBuf, bool _doAcc, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), InRowStrideReg(_inRowStrideReg),
-        Op(_op), NRow(_nRow), NCol(_nCol), ToAccBuf(_toAccBuf), DoAcc(_doAcc), Mode(_mode)
-    {}
+                     bool _toAccBuf, bool _doAcc, ModeCode _mode);
 
     regNo_t OutAddrReg;
     regNo_t InAddrReg;
@@ -703,10 +666,7 @@ public:
     MatReduceColInsn() = default;
 
     MatReduceColInsn(regNo_t _outAddrReg, regNo_t _inAddrReg, ReduceOp _op,
-        uint32_t _nRow, uint32_t _nCol, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), InAddrReg(_inAddrReg), Op(_op),
-        NRow(_nRow), NCol(_nCol), Mode(_mode)
-    {}
+        uint32_t _nRow, uint32_t _nCol, ModeCode _mode);
 
     regNo_t OutAddrReg;
     regNo_t InAddrReg;
@@ -741,12 +701,9 @@ public:
 
     MatVctrInsn(regNo_t _outAddrReg, regNo_t _outRowStrideReg, 
                 regNo_t _matAddrReg, regNo_t _matRowStrideReg,
-                regNo_t _vctrAddrReg, MatVctrOp _op, uint32_t _nRow, uint32_t _nCol, 
-                ModeCode _mode) :
-        OutAddrReg(_outAddrReg), OutRowStrideReg(_outRowStrideReg), 
-        MatAddrReg(_matAddrReg), MatRowStrideReg(_matRowStrideReg),
-        VctrAddrReg(_vctrAddrReg), Op(_op), NRow(_nRow), NCol(_nCol), Mode(_mode)
-    {}
+                regNo_t _vctrAddrReg, MatVctrOp _op, 
+                uint32_t _nRow, uint32_t _nCol, 
+                ModeCode _mode);
 
     regNo_t OutAddrReg;
     regNo_t OutRowStrideReg;
@@ -781,14 +738,11 @@ struct MatRowDotInsn
 public:
     MatRowDotInsn() = default;
 
-    MatRowDotInsn(regNo_t _outAddrReg, regNo_t _in1AddrReg, regNo_t _in1RowStrideReg,
+    MatRowDotInsn(regNo_t _outAddrReg, 
+                  regNo_t _in1AddrReg, regNo_t _in1RowStrideReg,
                   regNo_t _in2AddrReg, regNo_t _in2RowStrideReg,
                   uint32_t _nRow, uint32_t _nCol, 
-                  bool _toAccBuf, bool _doAcc, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), In1AddrReg(_in1AddrReg), In1RowStrideReg(_in1RowStrideReg),
-        In2AddrReg(_in2AddrReg), In2RowStrideReg(_in2RowStrideReg),
-        NRow(_nRow), NCol(_nCol), toAccBuf(_toAccBuf), doAcc(_doAcc), Mode(_mode)
-    {}
+                  bool _toAccBuf, bool _doAcc, ModeCode _mode);
 
     regNo_t OutAddrReg;
     regNo_t In1AddrReg;
@@ -825,11 +779,9 @@ struct VctrSclrInsn
 public:
     VctrSclrInsn() = default;
 
-    VctrSclrInsn(regNo_t _outAddrReg, regNo_t _vctrAddrReg, regNo_t _sclrAddrReg,
-                 uint32_t _size, VctrSclrOp _op, ModeCode _mode) :
-        OutAddrReg(_outAddrReg), VctrAddrReg(_vctrAddrReg), SclrAddrReg(_sclrAddrReg),
-        Op(_op), Size(_size), Mode(_mode)
-    {}
+    VctrSclrInsn(regNo_t _outAddrReg, 
+                 regNo_t _vctrAddrReg, regNo_t _sclrAddrReg,
+                 uint32_t _size, VctrSclrOp _op, ModeCode _mode);
 
     regNo_t OutAddrReg;
     regNo_t VctrAddrReg;
@@ -862,11 +814,7 @@ public:
 
     CopyAcc2BufInsn(regNo_t _dstAddrReg, regNo_t _dstStrideReg, 
                    regNo_t _srcAddrReg, regNo_t _srcStrideReg,
-                   regNo_t _nUnitReg, uint32_t _unitBytes) :
-        DstAddrReg(_dstAddrReg), DstStrideReg(_dstStrideReg),
-        SrcAddrReg(_srcAddrReg), SrcStrideReg(_srcStrideReg),
-        NUnitReg(_nUnitReg), UnitBytes(_unitBytes)
-    {}
+                   regNo_t _nUnitReg, uint32_t _unitBytes);
 
     regNo_t DstAddrReg;
     regNo_t DstStrideReg;
@@ -996,7 +944,7 @@ struct BNEZInsn
 };
 
 enum class ALUBinaryOp { Add, Sub, Mul, DivU, ModU, SLTU /*set less than unsigned*/, 
-                         SEQ, XOR, And, Or };
+                         SLT, SEQ, XOR, And, Or };
 const char* ToString(ALUBinaryOp op);
 
 struct ALUBinaryInsn
@@ -1030,7 +978,7 @@ struct ALUBinaryInsn
 };
 
 enum class ALURegImmOp { AddIU, ISubU /*Imm subtract Register*/, MulIU, DivIU, 
-                         ModIU, SLTIU, SEQI, XORI, AndI, OrI };
+                         ModIU, SLTIU, SLTI, SEQI, XORI, AndI, OrI, SHLI };
 const char * ToString(ALURegImmOp op);
 
 struct ALURegImmInsn
