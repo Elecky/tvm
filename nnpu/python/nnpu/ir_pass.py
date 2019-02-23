@@ -7,6 +7,7 @@ import tvm
 from helper import dtype_bytes as get_dtype_bytes
 from topi import util
 import utils
+from intrins import make_intrin_call
 
 tvm_zero = tvm.const(0, 'uint32')
 
@@ -17,6 +18,13 @@ def mark_coproc_scope(stmt):
     irb.emit(stmt)
     body = irb.get()
     return body
+
+def get_mode_code(dtype):
+    mode2code = {'n': 0, 'inc': 1, 'dec': 2, 'w': 3}
+    env = get_env
+    assert dtype in [env.cfg['dtype_n'], env.cfg['dtype_n']], 'invalid dtype'
+    mode = 'n' if dtype == env.cfg['dtype_n'] else 'w'
+    return mode2code[mode]
 
 def _fold(src_shape, src_strides, dst_shape, dst_strides, pad_before = None, pad_after = None):
     #if (pad_after or pad_before):
@@ -101,17 +109,104 @@ def _fold(src_shape, src_strides, dst_shape, dst_strides, pad_before = None, pad
 
     return s_shape, s_strides, d_shape, d_strides, p_before, p_after
 
+def _build_copy(dst, src,
+                src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                create_copy_ir, create_memset):
+    '''
+    create_copy_ir: a function that creates memory copy ir, has signature:
+        void(dst_offset /*offset of destination in bytes*/,
+             dst_stride /*stride of destination in bytes*/,
+             src_offset /*offset of source in bytes*/,
+             src_stride /*stride of source in bytes*/,
+             unit_bytes /*per unit size in bytes*/,
+             nUnit /*how many unit to copy*/)
+             
+    create_memset: a function that creates memset ir, has signature:
+        void(addr_offset /*address offset (in bytes) of destination that memset should begin at*/,
+             nUnit /*number of elements to set*/,
+             stride /*stride in bytes between elements*/)
+    '''
+    dtype_bytes = get_dtype_bytes(src.dtype)
+    ndim = len(src_shape)
+
+    def _build(src_base, dst_base, level):
+        '''
+            src_base: index of source (in element count)
+            dst_base: index of destination (in element count)
+            level: the recursive level, also indicates the axis.
+        '''
+        if (level == ndim - 1):
+            body = create_copy_ir(
+                        dst_base * dtype_bytes,
+                        dst_strides[-1] * dtype_bytes,
+                        src_base * dtype_bytes,
+                        src_strides[-1] * dtype_bytes,
+                        dtype_bytes, 
+                        dst_shape[-1])
+
+            body = tvm.make.Evaluate(body)
+            return body
+        else:
+            irb = tvm.ir_builder.create()
+
+            if (pad_before and util.equal_const_int(pad_before[level], 0)):
+                extend = dst_strides[-1]
+                # check whether axis 'level' is compact.
+                l = ndim - 1
+                while (l > level and dst_strides[l - 1] == dst_shape[l] * extend):
+                    l = l - 1
+                    extend = dst_strides[l]
+
+                if (l == level):
+                    body = create_memset(
+                                dst_base * dtype_bytes, 
+                                pad_before[level] * extend / dst_strides[-1], 
+                                dst_strides[-1] * dtype_bytes)
+                    irb.emit(body)
+                else:
+                    raise AssertionError('can\'t pad')
+                
+            # iterate from 0 to src_shape[level]
+            var = tvm.var('i{0}'.format(level))
+            body = _build(src_base + var * src_strides[level],
+                          dst_base + (var + (0 if pad_before is None else pad_before[level])) \
+                                     * dst_strides[level],
+                          level + 1)
+            loop = tvm.make.For(var, 0, src_shape[level], 0, 0, body)  # fortype = serial)
+            
+            irb.emit(loop)
+
+            if (pad_after and util.equal_const_int(pad_after[level], 0)):
+                extend = dst_strides[-1]
+                # check whether axis 'level' is compact.
+                l = ndim - 1
+                while (l > level and dst_strides[l - 1] == dst_shape[l] * extend):
+                    l = l - 1
+                    extend = dst_strides[l]
+
+                if (l == level):
+                    body = create_memset(
+                                (dst_base + (src_shape[level] + pad_before[level]) * extend)
+                                    * dtype_bytes, 
+                                pad_after[level] * extend / dst_strides[-1], 
+                                dst_strides[-1] * dtype_bytes)
+                    irb.emit(body)
+                else:
+                    raise AssertionError('can\'t pad')
+
+            return irb.get()
+    return _build(0, 0, 0)
+
 def inject_dma_intrin(stmt_in):
     env = get_env()
+
+    def _error(*args):
+        raise NotImplementedError('DMA copy dont support padding')
 
     def _inject_copy(src, dst, pad_before, pad_after, pad_value):
         #print('inject_copy called')
         if (pad_after or pad_before):
             raise NotImplementedError('padding is not supported right now')
-        
-        if ((pad_before and not util.equal_const_int(pad_before[-1], 0)) or 
-            (pad_after and not util.equal_const_int(pad_after[-1], 0))):
-            raise ValueError('can not pad last dimension')
 
         assert src.dtype == dst.dtype, 'dtype of copying source and destination does not match, \
             {0} vs {1}'.format(src.dtype, dst.dtype)
@@ -128,102 +223,39 @@ def inject_dma_intrin(stmt_in):
         if (src.scope == 'global' and dst.scope == env.dram_scope):
             src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
-            ndim = len(src_shape)
-            # create loop vars and index
-            loop_vars = []
-            src_index = None
-            dst_index = None
-            src_pad_offset = 0
-            for i in range(ndim - 1):
-                var = tvm.var('i{0}'.format(i))
-                #print(var)
-                loop_vars.append(var)
-                src_index = var * src_strides[i] if (src_index is None) else \
-                            src_index + var * src_strides[i]
-                #print(src_index)
-                dst_index = var * dst_strides[i] if (dst_index is None) else \
-                            dst_index + var * dst_strides[i]
-                # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
-                src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
-                                    if pad_before else \
-                                 src_pad_offset
-            # src_index and dst_index are index by element number
-            src_index = 0 if (src_index is None) else src_index
-            dst_index = 0 if (dst_index is None) else dst_index
 
-            src_index = src_index + src.elem_offset #if src.elem_offset.defined() else \
-                        #src_index
-            dst_index = dst_index # access_ptr includes elem_offset already
-            # NNPU_DMALoad(src_buf_addr, src_buf_offset, dst_phy_addr, dst_phy_offset, bytes)
-            body = tvm.call_llvm_intrin_with_side_effect(
-                            'void', "llvm.NNPU.DMALoad", tvm_zero,
-                            src.data, 
-                            util.simplify(src_index - src_pad_offset) * dtype_bytes,
-                            dst.access_ptr('w', 'int32') + dst_index * dtype_bytes,
-                            dst_shape[-1] * dtype_bytes)
-
-            # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
-            body = tvm.make.Evaluate(body)
-
-            for i in reversed(range(ndim - 1)):
-                # TODO: support padding here, maybe using a memset or something
-                body = tvm.make.For(
-                    loop_vars[i], 0 if (not pad_before) else pad_before[i], 
-                    src_shape[i], 0, 0, body)  # fortype = serial
-            
+            body = _build_copy(
+                        dst, src,
+                        src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                        # lambda to create DMALoad IR:
+                        lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                            tvm.call_llvm_intrin_with_side_effect(
+                                'void', "llvm.NNPU.DMALoad", tvm_zero,
+                                src.data, src_offset,
+                                dst.access_ptr('w', 'int32') + dst_offset,
+                                nUnit * dtype_bytes),
+                        _error
+                        )
             body = mark_coproc_scope(body)
             return body
-
         elif (src.scope == env.dram_scope and dst.scope == 'global'):
             assert not (pad_after or pad_before), \
                 'padding is not supported when copying to global'
             src_shape, src_strides, dst_shape, dst_strides, _, _ = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides)
-            ndim = len(src_shape)
-            # create loop vars and index
-            loop_vars = []
-            src_index = None
-            dst_index = None
-            src_pad_offset = 0
-            for i in range(ndim - 1):
-                var = tvm.var('i{0}'.format(i))
-                loop_vars.append(var)
-                src_index = var * src_strides[i] if (src_index is None) else \
-                            src_index + var * src_strides[i]
-                #print(src_index)
-                dst_index = var * dst_strides[i] if (dst_index is None) else \
-                            dst_index + var * dst_strides[i]
-                # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
-                src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
-                                    if pad_before else \
-                                 src_pad_offset
-
-            # src_index and dst_index are index by element number
-            src_index = 0 if (src_index is None) else src_index
-            dst_index = 0 if (dst_index is None) else dst_index
-
-            src_index = src_index # access_ptr includes elem_offset already
-            dst_index = dst_index + dst.elem_offset #if dst.elem_offset.defined() else \
-                        #dst_index
-            # NNPU_DMAStore(dst_phy_addr, dst_phy_offset, src_buf_addr, src_buf_offset, length)
-            body = tvm.call_llvm_intrin_with_side_effect(
-                        'void', "llvm.NNPU.DMAStore", tvm_zero,
-                        dst.data, 
-                        dst_index * dtype_bytes,
-                        src.access_ptr('r', 'int32') + 
-                            util.simplify(src_index - src_pad_offset) * dtype_bytes,
-                        dst_shape[-1] * dtype_bytes)
-
-            # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
-            body = tvm.make.Evaluate(body)
-
-            for i in reversed(range(ndim - 1)):
-                body = tvm.make.For(
-                    loop_vars[i], 0, 
-                    src_shape[i], 0, 0, body)  # fortype = serial
-
+            
+            body = _build_copy(
+                        dst, src,
+                        src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                        lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                            tvm.call_llvm_intrin_with_side_effect(
+                                'void', "llvm.NNPU.DMAStore", tvm_zero,
+                                dst.data, dst_offset,
+                                src.access_ptr('r', 'int32') + src_offset,
+                                nUnit * dtype_bytes),
+                        _error
+                        )
             body = mark_coproc_scope(body)
-
             return body
         else:
             raise ValueError('donnot support copy from {0} to {1}'.format(
@@ -232,18 +264,12 @@ def inject_dma_intrin(stmt_in):
         pass
 
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.dma_copy_pragma, _inject_copy)
-    #src_shape = [2, 2, 16]
-    #src_strides = [32, 16, 1]
-    #pad_before = [2, 0, 0]
-    #pad_after = [0, 0, 0]
-    #
-    #dst_shape = [4, 2, 16]
-    #dst_strides = [32, 16, 1]
-    #
-    #print (_fold(src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after))
 
 def inject_scratchpad_ls(stmt_in):
     env = get_env()
+
+    def _error(*args):
+        raise NotImplementedError('Scratchpad Load/Store dont support padding')
 
     def _inject_copy(src, dst, pad_before, pad_after, pad_value):
         if (pad_after or pad_before):
@@ -259,7 +285,6 @@ def inject_scratchpad_ls(stmt_in):
         dtype_bytes = get_dtype_bytes(src.dtype)
 
         ndim = len(src.shape)
-        
         assert util.equal_const_int(src.strides[ndim - 1], 1), \
             'stride of last dimension must be 1'
         assert util.equal_const_int(dst.strides[ndim - 1], 1), \
@@ -270,51 +295,19 @@ def inject_scratchpad_ls(stmt_in):
         if (src.scope == env.dram_scope and dst.scope in scopes):
             src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
-            ndim = len(src_shape)
-            # create loop vars and index
-            loop_vars = []
-            src_index = None
-            dst_index = None
-            src_pad_offset = 0
-            for i in range(ndim - 1):
-                var = tvm.var('i{0}'.format(i))
-                #print(var)
-                loop_vars.append(var)
-                src_index = var * src_strides[i] if (src_index is None) else \
-                            src_index + var * src_strides[i]
-                #print(src_index)
-                dst_index = var * dst_strides[i] if (dst_index is None) else \
-                            dst_index + var * dst_strides[i]
-                # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
-                src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
-                                    if pad_before else \
-                                 src_pad_offset
-                
-            # src_index and dst_index are index by element number
-            src_index = 0 if (src_index is None) else src_index
-            dst_index = 0 if (dst_index is None) else dst_index
-
-            src_index = src_index # access_ptr includes elem_offset already
-            dst_index = dst_index # access_ptr includes elem_offset already
-            # NNPU_ScratchpadLoad(dram_phy_addr, dram_phy_offset, dst_phy_addr, dst_phy_offset, length)
-            body = tvm.call_llvm_intrin_with_side_effect(
-                        'void', "llvm.NNPU.ScratchpadLoad", tvm_zero,
-                        src.access_ptr('r', 'int32') +
-                            util.simplify(src_index - src_pad_offset) * dtype_bytes,
-                        dst.access_ptr('w', 'int32') + dst_index * dtype_bytes,
-                        dst_shape[-1] * dtype_bytes)
-
-            # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
-            body = tvm.make.Evaluate(body)
-
-            for i in reversed(range(ndim - 1)):
-                # TODO: support padding here, maybe using a memset or something
-                body = tvm.make.For(
-                    loop_vars[i], 0 if (not pad_before) else pad_before[i], 
-                    src_shape[i], 0, 0, body)  # fortype = serial
-
-            body = mark_coproc_scope(body)
             
+            body = _build_copy(
+                        dst, src,
+                        src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                        lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                            tvm.call_llvm_intrin_with_side_effect(
+                                'void', "llvm.NNPU.ScratchpadLoad", tvm_zero,
+                                src.access_ptr('r', 'int32') + src_offset,
+                                dst.access_ptr('w', 'int32') + dst_offset,
+                                nUnit * dtype_bytes),
+                        _error
+                    )
+            body = mark_coproc_scope(body)
             return body
 
         elif (src.scope in scopes and dst.scope == env.dram_scope):
@@ -322,51 +315,18 @@ def inject_scratchpad_ls(stmt_in):
             #    'padding is not supported when copying to global'
             src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
-            ndim = len(src_shape)
-            # create loop vars and index
-            loop_vars = []
-            src_index = None
-            dst_index = None
-            src_pad_offset = 0
-            for i in range(ndim - 1):
-                var = tvm.var('i{0}'.format(i))
-                loop_vars.append(var)
-                src_index = var * src_strides[i] if (src_index is None) else \
-                            src_index + var * src_strides[i]
-                #print(src_index)
-                dst_index = var * dst_strides[i] if (dst_index is None) else \
-                            dst_index + var * dst_strides[i]
-                # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
-                src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
-                                    if pad_before else \
-                                 src_pad_offset
-            # src_index and dst_index are index by element number
-            src_index = 0 if (src_index is None) else src_index
-            dst_index = 0 if (dst_index is None) else dst_index
-
-            src_index = src_index # access_ptr includes elem_offset already
-            dst_index = dst_index # access_ptr includes elem_offset already
-            # NNPU_ScratchpadStore(dram_phy_addr, dram_phy_offset, src_phy_addr, src_phy_offset, length)
-            #print([util.get_const_int(st) for st in src.strides])
-            #print(src.data)
-            body = tvm.call_llvm_intrin_with_side_effect(
-                        'void', "llvm.NNPU.ScratchpadStore", tvm_zero,
-                        dst.access_ptr('w', 'int32') + dst_index * dtype_bytes,
-                        src.access_ptr('r', 'int32') + 
-                            util.simplify(src_index - src_pad_offset) * dtype_bytes,
-                        dst_shape[-1] * dtype_bytes)
-
-            # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
-            body = tvm.make.Evaluate(body)
-
-            for i in reversed(range(ndim - 1)):
-                # TODO: support padding here, maybe using a memset or something
-                body = tvm.make.For(
-                    loop_vars[i], 0 if (not pad_before) else pad_before[i], 
-                    src_shape[i], 0, 0, body)  # fortype = serial
-
+            body = _build_copy(
+                        dst, src,
+                        src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                        lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                            tvm.call_llvm_intrin_with_side_effect(
+                                'void', "llvm.NNPU.ScratchpadStore", tvm_zero,
+                                dst.access_ptr('w', 'int32') + dst_offset,
+                                src.access_ptr('r', 'int32') + src_offset,
+                                nUnit * dtype_bytes),
+                        _error
+                    )
             body = mark_coproc_scope(body)
-
             return body
         else:
             raise ValueError('donnot support copy from {0} to {1}'.format(
@@ -382,6 +342,9 @@ def inject_scratchpad_copy(stmt_in):
 
     def _inject_copy(src, dst, pad_before, pad_after, pad_value):
         #print('inject_scratchpad_copy called')
+        if (pad_value):
+            print('using zero padding now!!')
+            pad_value = tvm.const(0, 'float64')
 
         if ((pad_before and not util.equal_const_int(pad_before[-1], 0)) or 
             (pad_after and not util.equal_const_int(pad_after[-1], 0))):
@@ -399,47 +362,29 @@ def inject_scratchpad_copy(stmt_in):
         
         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
-        ndim = len(src_shape)
 
-        # create loop vars and index
-        loop_vars = []
-        acc_indexes = [0, ]
-        src_index = None
-        dst_index = None
-        src_pad_offset = 0
-        for i in range(ndim - 1):
-            var = tvm.var('i{0}'.format(i))
-            loop_vars.append(var)
-            src_index = var * src_strides[i] if (src_index is None) else \
-                        src_index + var * src_strides[i]
-            dst_index = var * dst_strides[i] if (dst_index is None) else \
-                        dst_index + var * dst_strides[i]
-            acc_indexes.append(dst_index)
-            # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
-            src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
-                                if pad_before else \
-                             src_pad_offset
-        # src_index and dst_index are index by element number
-        src_index = 0 if (src_index is None) else src_index
-        dst_index = 0 if (dst_index is None) else dst_index
+        body = _build_copy(
+                    dst, src,
+                    src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                    lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                        tvm.call_llvm_intrin_with_side_effect(
+                            'void', "llvm.NNPU.ScratchpadCopy", tvm_zero,
+                            dst.access_ptr('w', 'int32') + dst_offset, 
+                            dst_stride,
+                            src.access_ptr('r', 'int32') + src_offset, 
+                            src_stride,
+                            dtype_bytes, nUnit),
+                    lambda offset, nUnit, stride:
+                        tvm.call_llvm_intrin_with_side_effect(
+                            "void", 'llvm.NNPU.Memset', tvm_zero,
+                            dst.access_ptr('w', 'int32') + offset, 
+                            nUnit, 
+                            stride,
+                            pad_value, 
+                            get_mode_code(dst.dtype)
+                        )
+                    )
 
-        # use the last loop as inner body
-        body = tvm.call_llvm_intrin_with_side_effect(
-                    'void', "llvm.NNPU.ScratchpadCopy", tvm_zero,
-                    dst.access_ptr('w', 'int32') + dst_index * dtype_bytes,
-                    dst_strides[-1] * dtype_bytes,
-                    src.access_ptr('r', 'int32') +
-                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
-                    src_strides[-1] * dtype_bytes,
-                    dtype_bytes, 
-                    dst_shape[-1])
-        # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
-        body = tvm.make.Evaluate(body)
-
-        for i in reversed(range(ndim - 1)):
-            # TODO: add padding code, use memset or something.
-            body = tvm.make.For(loop_vars[i], 0 if (not pad_before) else pad_before[i], 
-                    src_shape[i], 0, 0, body)  # fortype = serial)
         body = mark_coproc_scope(body)
         return body
     
@@ -447,6 +392,9 @@ def inject_scratchpad_copy(stmt_in):
 
 def inject_accTobuffer(stmt_in):
     env = get_env()
+
+    def _error(*args):
+        raise NotImplementedError('AccToBuffer copy dont support padding yet.')
 
     def _inject_copy(src, dst, pad_before, pad_after, pad_value):
         #print('inject_scratchpad_copy called')
@@ -467,47 +415,20 @@ def inject_accTobuffer(stmt_in):
         
         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
-        ndim = len(src_shape)
-
-        # create loop vars and index
-        loop_vars = []
-        acc_indexes = [0, ]
-        src_index = None
-        dst_index = None
-        src_pad_offset = 0
-        for i in range(ndim - 1):
-            var = tvm.var('i{0}'.format(i))
-            loop_vars.append(var)
-            src_index = var * src_strides[i] if (src_index is None) else \
-                        src_index + var * src_strides[i]
-            dst_index = var * dst_strides[i] if (dst_index is None) else \
-                        dst_index + var * dst_strides[i]
-            acc_indexes.append(dst_index)
-            # inject_copy_intrin.cc modifies src_elem_offset by padding, so we modify it back
-            src_pad_offset = src_pad_offset + pad_before[i] * src_strides[i] \
-                                if pad_before else \
-                             src_pad_offset
-        # src_index and dst_index are index by element number
-        src_index = 0 if (src_index is None) else src_index
-        dst_index = 0 if (dst_index is None) else dst_index
-
-        # use the last loop as inner body
-        body = tvm.call_llvm_intrin_with_side_effect(
-                    'void', "llvm.NNPU.CopyAccToBuffer", tvm_zero,
-                    dst.access_ptr('w', 'int32') + dst_index * dtype_bytes,
-                    dst_strides[-1] * dtype_bytes,
-                    src.access_ptr('r', 'int32') +
-                        util.simplify(src_index - src_pad_offset) * dtype_bytes,
-                    src_strides[-1] * dtype_bytes,
-                    dtype_bytes, 
-                    dst_shape[-1])
-        # the tvm require a stmt rather than expr, so we create a Evaluate stmt which calls body
-        body = tvm.make.Evaluate(body)
-
-        for i in reversed(range(ndim - 1)):
-            # TODO: add padding code, use memset or something.
-            body = tvm.make.For(loop_vars[i], 0 if (not pad_before) else pad_before[i], 
-                    src_shape[i], 0, 0, body)  # fortype = serial)
+        body = _build_copy(
+                    dst, src,
+                    src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                    lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                        tvm.call_llvm_intrin_with_side_effect(
+                            'void', "llvm.NNPU.CopyAccToBuffer", tvm_zero,
+                            dst.access_ptr('w', 'int32') + dst_offset,
+                            dst_stride,
+                            src.access_ptr('r', 'int32') + src_offset,
+                            src_stride,
+                            dtype_bytes, 
+                            nUnit),
+                    _error
+                )
         body = mark_coproc_scope(body)
         return body
     

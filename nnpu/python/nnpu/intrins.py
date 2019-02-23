@@ -2,34 +2,31 @@ import struct
 import tvm
 from helper import dtype_bytes, convert_scope
 
+def make_intrin_call(dtype, name, *args, **kwargs):
+    """ Build a llvm.NNPU intrinsic function call who has side-effect.
+    Parameters
+    ----------
+    dtype : str
+        The data type of the result. can be void to indicate no return value.
+    name : str
+        The name of the llvm intrinsic function 'without' llvm.NNPU prefix.
+    
+    num_signature : int
+        I don't sure what this is, maybe used with overloaded llvm intrinsic
+            function matching.
+    args : list
+        Poistional arguments.
+    """
+    name = 'llvm.NNPU.' + name
+    if ('num_signature' in kwargs):
+        num_signature = kwargs['num_signature']
+    else:
+        num_signature = 0
+    return tvm.call_llvm_intrin_with_side_effect(
+                    dtype, name, tvm.const(num_signature, 'uint32'), *args
+                )
+
 class IntrinManager(object):
-
-    def make_intrin_call(self, dtype, name, *args, **kwargs):
-        """ Build a llvm.NNPU intrinsic function call who has side-effect.
-
-        Parameters
-        ----------
-        dtype : str
-            The data type of the result. can be void to indicate no return value.
-
-        name : str
-            The name of the llvm intrinsic function 'without' llvm.NNPU prefix.
-        
-        num_signature : int
-            I don't sure what this is, maybe used with overloaded llvm intrinsic
-                function matching.
-
-        args : list
-            Poistional arguments.
-        """
-        name = 'llvm.NNPU.' + name
-        if ('num_signature' in kwargs):
-            num_signature = kwargs['num_signature']
-        else:
-            num_signature = 0
-        return tvm.call_llvm_intrin_with_side_effect(
-                        dtype, name, tvm.const(num_signature, 'uint32'), *args
-                    )
 
     def __init__(self, env):
         self.intrin_ctors = {}
@@ -92,7 +89,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", intrin_func,
+                irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr("w", 'uint32'),
                             din.access_ptr("r", 'uint32'),
                             cfg['vector_unit']['size'],
@@ -171,7 +168,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", intrin_func,
+                irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr("w", 'uint32'),
                             din.access_ptr("r", 'uint32'),
                             tvm.const(imm_value, 'float64'),
@@ -292,7 +289,7 @@ class IntrinManager(object):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     ptr_type = 'rw' if doAcc else 'w'
-                    irb.emit(self.make_intrin_call("void", 'GEMM',
+                    irb.emit(make_intrin_call("void", 'GEMM',
                                 nRowOut, factor, nColOut,
                                 dout.access_ptr(ptr_type, 'uint32'),
                                 out_row_stride,
@@ -369,7 +366,7 @@ class IntrinManager(object):
                 dout = outs[0]
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", intrin_func,
+                irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din.access_ptr('r', 'uint32'),
                             tvm.const(imm_value, 'float64'), 
@@ -444,7 +441,7 @@ class IntrinManager(object):
                 dout = outs[0]
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", intrin_func,
+                irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr('w', 'int32'),
                             din1.access_ptr('r', 'int32'),
                             din2.access_ptr('r', 'int32'),
@@ -528,7 +525,7 @@ class IntrinManager(object):
                 def comp():
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                    irb.emit(self.make_intrin_call("void", intrin_func,
+                    irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din.access_ptr('r', 'uint32'),
                             dout.access_ptr('r', 'uint32'),
@@ -589,7 +586,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", 'VDotV',
+                irb.emit(make_intrin_call("void", 'VDotV',
                             dout.access_ptr('w', 'uint32'),
                             din1.access_ptr('r', 'uint32'),
                             din2.access_ptr('r', 'uint32'),
@@ -659,7 +656,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", intrin_func,
+                irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din1.access_ptr('r', 'uint32'),
                             shape[0],
@@ -797,7 +794,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", intrin_func,
+                irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr('w', 'uint32'), 
                             dout.strides[0] * dtype_bytes(dtype_out),
                             din1.access_ptr('r', 'uint32'), 
@@ -871,7 +868,7 @@ class IntrinManager(object):
                 def comp():
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                    irb.emit(self.make_intrin_call("void", intrin_func,
+                    irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr('rw', 'uint32'),
                             din.access_ptr('r', 'uint32'),
                             dout.access_ptr('rw', 'uint32'),
@@ -942,7 +939,7 @@ class IntrinManager(object):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     ptr_mode = 'rw' if doAcc else 'w'
-                    irb.emit(self.make_intrin_call("void", intrin_func,
+                    irb.emit(make_intrin_call("void", intrin_func,
                                 dout.access_ptr(ptr_mode, 'uint32'),
                                 din1.access_ptr('r', 'uint32'), 
                                 din1.strides[0] * dtype_bytes(dtype_in),
@@ -1021,7 +1018,7 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", intrin_func,
+                irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             dout.strides[0] * dtype_bytes(dtype_out),
                             din1.access_ptr('r', 'uint32'),
@@ -1092,7 +1089,7 @@ class IntrinManager(object):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     ptr_mode = 'rw' if doAcc else 'w'
-                    irb.emit(self.make_intrin_call("void", 'MRowDot',
+                    irb.emit(make_intrin_call("void", 'MRowDot',
                                 dout.access_ptr(ptr_mode, 'uint32'),
                                 din1.access_ptr('r', 'uint32'),
                                 din1.strides[0] * dtype_bytes(dtype_in),
@@ -1186,7 +1183,7 @@ class IntrinManager(object):
                 dout = outs[0]
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
-                irb.emit(self.make_intrin_call("void", intrin_func,
+                irb.emit(make_intrin_call("void", intrin_func,
                             dout.access_ptr('w', 'uint32'),
                             din1.access_ptr('r', 'uint32'),
                             din2.access_ptr('r', 'uint32'),
@@ -1254,7 +1251,7 @@ class IntrinManager(object):
             val = tvm.const(val, 'float64')
         irb = tvm.ir_builder.create()
         irb.scope_attr(self.env.nnpu_axis, "coproc_scope", 0)
-        irb.emit(self.make_intrin_call("void", 'Memset',
+        irb.emit(make_intrin_call("void", 'Memset',
                                 addr, nUnit, stride,
                                 val, self.get_mode_code(mode)
                     ))
@@ -1265,7 +1262,7 @@ class IntrinManager(object):
             val = tvm.const(val, 'float64')
         irb = tvm.ir_builder.create()
         irb.scope_attr(self.env.nnpu_axis, "coproc_scope", 0)
-        irb.emit(self.make_intrin_call("void", 'AccMemset',
+        irb.emit(make_intrin_call("void", 'AccMemset',
                 addr,
                 rowStride,
                 nRow, nCol,
