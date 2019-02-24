@@ -114,19 +114,17 @@ def _build_copy(dst, src,
                 create_copy_ir, create_memset):
     '''
     create_copy_ir: a function that creates memory copy ir, has signature:
-        void(dst_offset /*offset of destination in bytes*/,
-             dst_stride /*stride of destination in bytes*/,
-             src_offset /*offset of source in bytes*/,
-             src_stride /*stride of source in bytes*/,
-             unit_bytes /*per unit size in bytes*/,
-             nUnit /*how many unit to copy*/)
+        void(dst_idx /*index of destination*/,
+             dst_stride /*stride of destination*/,
+             src_idx /*offset of source*/,
+             src_stride /*stride of source*/,
+             nUnit /*how many elements to copy*/)
              
     create_memset: a function that creates memset ir, has signature:
-        void(addr_offset /*address offset (in bytes) of destination that memset should begin at*/,
+        void(index /*index of destination that memset should begin at*/,
              nUnit /*number of elements to set*/,
-             stride /*stride in bytes between elements*/)
+             stride /*stride between two consecutive elements*/)
     '''
-    dtype_bytes = get_dtype_bytes(src.dtype)
     ndim = len(src_shape)
 
     def _build(src_base, dst_base, level):
@@ -137,11 +135,10 @@ def _build_copy(dst, src,
         '''
         if (level == ndim - 1):
             body = create_copy_ir(
-                        dst_base * dtype_bytes,
-                        dst_strides[-1] * dtype_bytes,
-                        src_base * dtype_bytes,
-                        src_strides[-1] * dtype_bytes,
-                        dtype_bytes, 
+                        dst_base,
+                        dst_strides[-1],
+                        src_base,
+                        src_strides[-1],
                         dst_shape[-1])
 
             body = tvm.make.Evaluate(body)
@@ -159,9 +156,9 @@ def _build_copy(dst, src,
 
                 if (l == level):
                     body = create_memset(
-                                dst_base * dtype_bytes, 
+                                dst_base, 
                                 pad_before[level] * extend / dst_strides[-1], 
-                                dst_strides[-1] * dtype_bytes)
+                                dst_strides[-1])
                     irb.emit(body)
                 else:
                     raise AssertionError('can\'t pad')
@@ -186,10 +183,9 @@ def _build_copy(dst, src,
 
                 if (l == level):
                     body = create_memset(
-                                (dst_base + (src_shape[level] + pad_before[level]) * extend)
-                                    * dtype_bytes, 
+                                dst_base + (src_shape[level] + pad_before[level]) * extend, 
                                 pad_after[level] * extend / dst_strides[-1], 
-                                dst_strides[-1] * dtype_bytes)
+                                dst_strides[-1])
                     irb.emit(body)
                 else:
                     raise AssertionError('can\'t pad')
@@ -228,11 +224,11 @@ def inject_dma_intrin(stmt_in):
                         dst, src,
                         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
                         # lambda to create DMALoad IR:
-                        lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                        lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMALoad", tvm_zero,
-                                src.data, src_offset,
-                                dst.access_ptr('w', 'int32') + dst_offset,
+                                src.data, src_idx * dtype_bytes,
+                                dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                         )
@@ -247,11 +243,11 @@ def inject_dma_intrin(stmt_in):
             body = _build_copy(
                         dst, src,
                         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
-                        lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                        lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMAStore", tvm_zero,
-                                dst.data, dst_offset,
-                                src.access_ptr('r', 'int32') + src_offset,
+                                dst.data, dst_idx * dtype_bytes,
+                                src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                         )
@@ -299,11 +295,12 @@ def inject_scratchpad_ls(stmt_in):
             body = _build_copy(
                         dst, src,
                         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
-                        lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                        lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
+                        # TODO: here should assert that both src_stride & dst_stride equals 1!
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.ScratchpadLoad", tvm_zero,
-                                src.access_ptr('r', 'int32') + src_offset,
-                                dst.access_ptr('w', 'int32') + dst_offset,
+                                src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
+                                dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                     )
@@ -318,11 +315,11 @@ def inject_scratchpad_ls(stmt_in):
             body = _build_copy(
                         dst, src,
                         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
-                        lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                        lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.ScratchpadStore", tvm_zero,
-                                dst.access_ptr('w', 'int32') + dst_offset,
-                                src.access_ptr('r', 'int32') + src_offset,
+                                dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
+                                src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                     )
@@ -366,20 +363,20 @@ def inject_scratchpad_copy(stmt_in):
         body = _build_copy(
                     dst, src,
                     src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
-                    lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                    lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                         tvm.call_llvm_intrin_with_side_effect(
                             'void', "llvm.NNPU.ScratchpadCopy", tvm_zero,
-                            dst.access_ptr('w', 'int32') + dst_offset, 
-                            dst_stride,
-                            src.access_ptr('r', 'int32') + src_offset, 
-                            src_stride,
+                            dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes, 
+                            dst_stride * dtype_bytes,
+                            src.access_ptr('r', 'int32') + src_idx * dtype_bytes, 
+                            src_stride * dtype_bytes,
                             dtype_bytes, nUnit),
-                    lambda offset, nUnit, stride:
+                    lambda index, nUnit, stride:
                         tvm.call_llvm_intrin_with_side_effect(
                             "void", 'llvm.NNPU.Memset', tvm_zero,
-                            dst.access_ptr('w', 'int32') + offset, 
+                            dst.access_ptr('w', 'int32') + index * dtype_bytes, 
                             nUnit, 
-                            stride,
+                            stride * dtype_bytes,
                             pad_value, 
                             get_mode_code(dst.dtype)
                         )
@@ -418,13 +415,13 @@ def inject_accTobuffer(stmt_in):
         body = _build_copy(
                     dst, src,
                     src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
-                    lambda dst_offset, dst_stride, src_offset, src_stride, dtype_bytes, nUnit:
+                    lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                         tvm.call_llvm_intrin_with_side_effect(
                             'void', "llvm.NNPU.CopyAccToBuffer", tvm_zero,
-                            dst.access_ptr('w', 'int32') + dst_offset,
-                            dst_stride,
-                            src.access_ptr('r', 'int32') + src_offset,
-                            src_stride,
+                            dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
+                            dst_stride * dtype_bytes,
+                            src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
+                            src_stride * dtype_bytes,
                             dtype_bytes, 
                             nUnit),
                     _error
