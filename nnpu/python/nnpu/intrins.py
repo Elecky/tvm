@@ -315,7 +315,7 @@ class IntrinManager(object):
         self.intrin_ctors['GEMM'] = gemm
 
         def mat_imm(intrin_op, shape, imm_value, scope_in = 'uni',
-                 scope_out = 'uni', mode='inc'):
+                 scope_out = 'uni', mode='inc',reduce=False):
             env = self.env
             cfg = self.env.cfg
             
