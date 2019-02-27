@@ -67,8 +67,9 @@ public:
     /*!
     * \brief run instructions on the simultor, pure virtual method.
     * \param insns: instructions to run.
+    * \param pc: program counter where execution starts.
     */
-    virtual void Run(const std::vector<NNPUInsn> &insns) = 0;
+    virtual void Run(const std::vector<NNPUInsn> &insns, std::size_t pc = 0) = 0;
 
     virtual ~Simulator() {}
 

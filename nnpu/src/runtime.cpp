@@ -188,6 +188,17 @@ public:
         return insns;
     }
 
+    enum class Segment { text, data, bss };  // the enum which indicates segment.
+
+    /*!
+     * \brief to find the address associated with one label.
+     * \param label: the label to find.
+     * \param segment: in which segment to find.
+     * \param res: return value.
+     * \return does label exists?
+     */
+    bool GetLabelAddr(const string &label, Segment segment, std::size_t &res);
+
 private:
     vector<NNPUInsn> insns;
 
@@ -204,8 +215,6 @@ private:
         bool IsRelative;  // relative or absolute relocate?
         uint32_t Base;  // base address if relative relocate required.
     };
-
-    enum class Segment { text, data, bss };  // the enum which indicates segment.
 
     // relocation records.
     vector<RelocRecord> relocRecords;
@@ -498,16 +507,8 @@ void NNPUAssembler::Assemble(string asm_str)
         *(ptr) = rr.IsRelative ? it->second - rr.Base : it->second;
     }
 
-    // std::cout << " assembled insn: ";
-    // InsnDumper dumper;
-    // for (auto &insn : insns)
-    // {
-    //     insn.Call(dumper, std::cout);
-    //     std::cout << std::endl;
-    // }
-
-    labelAddr.clear();
-    relocRecords.clear();
+    // labelAddr.clear();
+    // relocRecords.clear();
 }
 
 regNo_t NNPUAssembler::parseReg(const string &token)
@@ -582,8 +583,30 @@ bool NNPUAssembler::parseMemOperand(const string &token,
         }
     }
     else
+    {
         offset = 0;
         return false;
+    }
+}
+
+bool NNPUAssembler::GetLabelAddr(const string &label, Segment segment, std::size_t &res)
+{
+    CHECK(segment == Segment::text) << ", only text segment is supported now";
+    auto it = labelAddr.find(label);
+    if (it != labelAddr.end())
+    {
+        res = it->second;
+        return true;
+    }
+    else
+    {
+        std::cout << "labels are: \n";
+        for (auto &item : labelAddr)
+        {
+            std::cout << item.first << std::endl;
+        }
+        return false;
+    }
 }
 
 void NNPUAssembler::assembleLoad(const vector<string> &functs, 
@@ -1179,8 +1202,13 @@ extern "C" void NNPU_AssembleAndRun(
             os << '\n';
         }
     }
+    std::size_t pc;
+    CHECK(assembler.GetLabelAddr(func_name, 
+                                nnpu::NNPUAssembler::Segment::text,
+                                pc))
+        << ", entry point not found for function " << func_name;
 
-    sim->Run(insns);
+    sim->Run(insns, pc);
 }
 
 static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =

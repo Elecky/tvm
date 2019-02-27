@@ -491,6 +491,8 @@ def _lift_coproc_scope_attr(op):
             first = _make_coproc_scope_attr(value, first)
             body = tvm.make.Block(first, op.rest.rest)
             return body
+        else:
+            pass
     elif (isinstance(op, tvm.stmt.ProducerConsumer)):
         if (_is_coproc_scope_attr(op.body)):
             value = op.body.value
