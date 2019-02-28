@@ -31,7 +31,7 @@ def test():
     mul_host, mul_dram = nnpu.utils.CopyBufToH(mul_buf, 'mul', sph)
 
     gtm_buf = tvm.compute(shape, 
-                lambda i: tvm.select(a_buf[i] > b_buf[i], a_buf[i], b_buf[i]), 'gtm_buf')
+                lambda i: tvm.max(a_buf[i], b_buf[i]), 'gtm_buf')
     sph.MarkScope(gtm_buf)
     gtm_host, gtm_dram = nnpu.utils.CopyBufToH(gtm_buf, 'gtm', sph)
 

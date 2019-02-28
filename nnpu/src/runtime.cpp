@@ -786,6 +786,7 @@ void NNPUAssembler::assembleRet(const vector<string> &functs,
                                  const string &instr)
 {
     insns.emplace_back(StallInsn());
+    insns.emplace_back(JumpInsn(0));
 }
 
 void NNPUAssembler::assembleMemset(const vector<string> &functs, 

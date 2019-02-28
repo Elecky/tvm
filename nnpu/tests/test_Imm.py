@@ -28,7 +28,7 @@ def test():
     sph.MarkScope(div_buf)
     div_host, div_dram = nnpu.utils.CopyBufToH(div_buf, 'rdiv', sph)
 
-    gtm_buf = tvm.compute((16, ), lambda i: tvm.select(a_buf[i] > Imm, a_buf[i], Imm), 'gtm_buf')
+    gtm_buf = tvm.compute((16, ), lambda i: tvm.max(a_buf[i], Imm), 'gtm_buf')
     sph.MarkScope(gtm_buf)
     gtm_host, gtm_dram = nnpu.utils.CopyBufToH(gtm_buf, 'gtm', sph)
 
@@ -94,5 +94,7 @@ def test():
     print('{0} - a = '.format(Imm.value))
     print(rsub_nd.asnumpy())
     np.testing.assert_allclose(rsub_nd.asnumpy(), Imm.value-a_np)
+    print('test passed')
+
 if __name__ == '__main__':
     test()

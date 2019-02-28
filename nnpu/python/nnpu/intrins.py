@@ -150,7 +150,7 @@ class IntrinManager(object):
                 expr = expr_template(op_in, imm, lambda x, y: x / y)
                 intrin_func = 'VDivI'
             elif (intrin_op == 'VGTMI'):
-                expr = expr_template(op_in, imm, lambda x, y: tvm.select(x > y, x, y))
+                expr = expr_template(op_in, imm, lambda x, y: tvm.max(x, y))
                 intrin_func = 'VGTMI'
             elif (intrin_op == 'ISubV'):
                 expr = expr_template(op_in,imm, lambda x, y: y - x)
@@ -426,7 +426,7 @@ class IntrinManager(object):
                 intrin_func = 'VDivV'
             elif (intrin_op == 'VGTMV'):
                 expr = expr_template(in1, in2, 
-                                    lambda x, y: tvm.select(x > y, x, y))
+                                    lambda x, y: tvm.max(x, y))
                 intrin_func = 'VGTMV'
             else:
                 raise ValueError('unhandled intrin_op in vctr_binary')
@@ -1158,7 +1158,7 @@ class IntrinManager(object):
                 intrin_func = 'VDivS'
             elif (intrin_op == 'VGTMS'):
                 expr = expr_template(in1, in2, 
-                                    lambda x, y: tvm.select(x > y, x, y))
+                                    lambda x, y: tvm.max(x, y))
                 intrin_func = 'VGTMS'
             elif (intrin_op == 'SSubV'):
                 expr = expr_template(in1, in2, lambda x, y: y - x)
