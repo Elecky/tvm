@@ -171,9 +171,9 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
   dest_ll.SetUnbuffered();
   module->print(dest_ll, nullptr);
   std::string ll(data_ll.begin(), data_ll.end());
-  // print ll
-  std::cout << "The generate LLVM IR is:\n";
-  std::cout << ll;
+  // // print ll
+  // std::cout << "The generate LLVM IR is:\n";
+  // std::cout << ll;
 
   // emit asm
   llvm::legacy::PassManager pass;

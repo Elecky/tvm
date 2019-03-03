@@ -52,7 +52,7 @@ namespace nnpu
 
 enum class DevType
 {
-    S0, S1
+    S0, S1, SC
 };
 
 /*
