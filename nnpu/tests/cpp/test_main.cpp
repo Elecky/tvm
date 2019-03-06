@@ -1,23 +1,46 @@
 #include <memory>
 #include <iostream>
-#include <nnpusim/insn_mem.h>
-#include <nnpusim/insn_decoder.h>
-#include <nnpusim/controller.h>
-#include <nnpusim/reg_file_module.h>
-#include <nnpusim/alu.h>
-#include <nnpusim/branch_unit.h>
-#include <nnpusim/load_store_unit.h>
-#include <nnpusim/sclr_buffer.h>
-#include <nnpusim/memory_queue.h>
-#include <nnpusim/data_read_unit.h>
-#include <nnpusim/vctr_calc_unit.h>
-#include <nnpusim/data_write_unit.h>
+#include <nnpusim/insn_wrapper.h>
+#include <nnpusim/sc_sim/ifetch.h>
+#include <nnpusim/sc_sim/idecode.h>
+#include <nnpusim/sc_sim/issue_queue.h>
 #include <vector>
-#include <nnpusim/DMA_copy_buffer_LS_unit.h>
-#include <nnpusim/buffer_copy_set_unit.h>
+#include <yaml-cpp/yaml.h>
 
 using namespace nnpu;
+using namespace nnpu::sc_sim;
 using namespace std;
+
+std::vector<NNPUInsn> init_simple_insn()
+{
+    vector<NNPUInsn> insns;
+    using Imm = nnpu::ALURegImmInsn;
+    using Bin = nnpu::ALUBinaryInsn;
+    using Store = nnpu::SclrStoreInsn;
+    using Load = nnpu::SclrLoadInsn;
+
+    auto AddIU = [](regNo_t Rd, regNo_t Rs, reg_t imm) -> nnpu::ALURegImmInsn
+        { return nnpu::ALURegImmInsn(Rd, Rs, imm, ALURegImmOp::AddIU); };
+
+    insns.emplace_back(AddIU(2, 0, 1));
+    insns.emplace_back(AddIU(3, 2, 2));
+    insns.emplace_back(AddIU(4, 3, 3));
+    insns.emplace_back(AddIU(5, 4, 4));
+    insns.emplace_back(AddIU(5, 4, 5));
+    insns.emplace_back(AddIU(5, 4, 6));
+    insns.emplace_back(nnpu::JumpInsn(-6));
+
+    cout << "Instructions: \n";
+    InsnDumper dumper;
+    for (auto &item : insns)
+    {
+        item.Call(dumper, cout);
+        cout << endl;
+    }
+    cout << endl;
+
+    return insns;
+}
 
 std::vector<NNPUInsn> init_insn()
 {
@@ -210,134 +233,94 @@ std::vector<NNPUInsn> vctr_test_insns()
     return insns;
 }
 
-WireData<bool> branchOut(int *i, int on)
+class Monitor : public sc_module
 {
-    if (*i == on)
+public:
+    sc_in<bool> clk;
+    sc_vector<sc_in<InsnWrapper>> insns;
+
+    SC_HAS_PROCESS(Monitor);
+    Monitor(sc_module_name name, std::size_t _depth) : 
+        sc_module(name),
+        insns("monitor_input_instructions"),
+        depth(_depth)
     {
-        return WireData<bool>(true, true);
-    }
-    else
-    {
-        return WireData<bool>(false);
-    }
-}
+        insns.init(depth);
 
-int main(int argc, char *(argv[]))
-{
-    WireManager wm;
-    vector<shared_ptr<SimModule>> modules;
-    YAML::Node cfg = YAML::LoadFile("/home/jian/repositories/tvm/nnpu/nnpu_config.yaml");
-    std::shared_ptr<InsnMemModule> IF(new InsnMemModule(wm, cfg));
-    modules.push_back(IF);
-    //cout << IF.get() << endl;
-    IF->SetInsns(vctr_test_insns());
-    IF->BindWires(wm);
-
-    std::shared_ptr<InsnDecoder> ID(new InsnDecoder(wm, cfg));
-    modules.push_back(ID);
-    ID->BindWires(wm);
-
-    //std::shared_ptr<RegFileMod> regs(new RegFileMod(wm, cfg));
-    //modules.push_back(std::static_pointer_cast<SimModule>(regs));
-
-    std::shared_ptr<Ctrl> ctrl(new Ctrl(wm, cfg));
-    modules.push_back(ctrl);
-    ctrl->BindWires(wm);
-
-    std::shared_ptr<ALU> alu(new ALU(wm, cfg));
-    modules.push_back(alu);
-    alu->BindWires(wm);
-
-    std::shared_ptr<BranchUnit> branchUnit(new BranchUnit(wm, cfg));
-    modules.push_back(branchUnit);
-    branchUnit->BindWires(wm);
-
-    std::shared_ptr<LoadStoreUnit> LSU(new LoadStoreUnit(wm, cfg));
-    LSU->BindWires(wm);
-    modules.push_back(LSU);
-
-    std::shared_ptr<SclrBuffer> sclrBuffer(new SclrBuffer(wm, cfg));
-    sclrBuffer->BindWires(wm);
-    modules.push_back(sclrBuffer);
-
-    std::shared_ptr<RAM> buffer(new RAM(1 << 20));
-
-    std::shared_ptr<MemoryQueue> MQ(new MemoryQueue(wm, cfg));
-    MQ->BindWires(wm);
-    modules.push_back(MQ);
-
-    std::shared_ptr<ScratchpadHolder> holder(new ScratchpadHolder(cfg, buffer));
-
-    std::shared_ptr<DataReadUnit> VRU(new DataReadUnit(wm, cfg, holder, 
-                                        "vctr_calc_unit_busy", 
-                                        "vctr_read_unit"));
-    VRU->BindWires(wm);
-    modules.push_back(VRU);
-
-    std::shared_ptr<VctrCalcUnit> VCU(new VctrCalcUnit(wm, cfg));
-    VCU->BindWires(wm);
-    modules.push_back(VCU);
-
-    std::shared_ptr<DataWriteUnit> VWU(new DataWriteUnit(wm, cfg, holder, 
-                                        "vctr_write_unit", 
-                                        "vctr_calc_unit_insn_out", 
-                                        "vctr_calc_unit_data_out"));
-    VWU->BindWires(wm);
-    modules.push_back(VWU);
-
-    std::shared_ptr<RAM> dram(new RAM(1 << 25));
-    dram->Memset(1, 0, 8);
-    dram->Memset(2, 8, 8);
-    dram->Memset(3, 16, 8);
-    //dram->Memset(4, 24, 8);
-    dram->Memset(21, 32, 4);
-    dram->Memset(7, 36, 4);
-
-    std::shared_ptr<DMACopyBufferLSUnit> dmaUnit(new DMACopyBufferLSUnit(wm, cfg, holder, dram));
-    dmaUnit->BindWires(wm);
-    modules.push_back(dmaUnit);
-    
-    std::shared_ptr<BufferCopySetUnit> bcsu(new BufferCopySetUnit(wm, cfg, holder));
-    bcsu->BindWires(wm);
-    modules.push_back(bcsu);
-
-    int i;
-    //wm.Get<bool>("branch_out")->SubscribeWriter(std::bind(branchOut, &i, 12));
-    cout << "\n\n";
-    for (i = 0; i < 200; ++i)
-    {
-        //cout << "end of cycle :" << i << endl;
-        for (auto m : modules)
-        {
-            m->Move();
-        }
-
-        cout << "start of cycle :" << i + 1 << endl;
-
-        for (auto m : modules)
-        {
-            m->Update();
-        }
-        /*
-        for (auto m : modules)
-        {
-            m->Dump(DumpLevel::Brief, cout);
-            //cout << endl;
-        }*/
+        SC_METHOD(Proc);
+        sensitive << clk.pos();
     }
 
-    
-    std::unique_ptr<Byte[]> arr(new Byte[8]);
-    for (size_t j = 0; j != 4; ++j)
+    void Proc()
     {
-        dram->CopyTo(arr.get(), 8 * j, 8);
-
-        for (size_t i = 0; i != 8; ++i)
+        std::cout << "Monitor @" << sc_time_stamp() << ":\n";
+        static InsnDumper dumper;
+        for (std::size_t idx = 0; idx < depth; ++idx)
         {
-            cout << static_cast<int>(arr[i]) << ' ';
+            insns.at(idx).read().Insn().Call(dumper, cout);
+            cout << endl;
         }
         cout << endl;
     }
+
+private:
+    std::size_t depth;
+};
+
+extern "C" int sc_main( int argc, char* argv[] );
+
+int sc_main(int argc, char* argv[])
+{
+    YAML::Node cfg = YAML::LoadFile("/home/jian/repositories/tvm/nnpu/nnpu_config.yaml");
+
+    const std::size_t issueDepth {cfg["issue_queue"]["issue_depth"].as<size_t>()};
+    
+    ifetch IF("IF", cfg);
+
+    idecode ID("ID", cfg);
+
+    sc_clock clk("clock", 5, SC_NS);
+    IF.clk(clk);
+    ID.clk(clk);
+
+    sc_signal<bool> jump_valid("jump_valid");
+    IF.jump_valid(jump_valid);
+    ID.jump_valid(jump_valid);
+
+    sc_signal<reg_t> jump_address("jump_address");
+    IF.jump_address(jump_address);
+    ID.jump_address(jump_address);
+
+    sc_signal<bool> branch_valid("branch_valid");
+    IF.branch_valid(branch_valid);
+    ID.branch_valid(branch_valid);
+
+    sc_signal<reg_t> branch_address("branch_address");
+    IF.branch_address(branch_address);
+
+    sc_signal<bool> stall("stall");
+    stall.write(false);
+    IF.stall_fetch(stall);
+    ID.stall_decode(stall);
+
+    sc_vector<sc_signal<InsnWrapper>> IF_ID("IF->ID", issueDepth);
+    IF.instructions.bind(IF_ID);
+    ID.in_instructions.bind(IF_ID);
+
+    sc_vector<sc_signal<InsnWrapper>> ID_IQ("ID->IQ", issueDepth);
+    ID.out_instructions.bind(ID_IQ);
+
+    IF.set_insn(init_simple_insn());
+
+    // Monitor monitor("Monitor", issueDepth);
+    // monitor.clk(clk);
+    // monitor.insns.bind(ID_IQ);
+    issue_queue IQueue("Issue-Queue", cfg);
+    IQueue.clk(clk);
+    IQueue.stall(stall);
+    IQueue.instructions(ID_IQ);
+
+    sc_start(500, SC_NS);
 
     return 0;
 }

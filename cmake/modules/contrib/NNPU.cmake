@@ -31,7 +31,8 @@ if(PYTHON)
   
   set(NNPU_SCSIM_DIR ${SIM_SRC}/sc_sim)
   set(NNPU_SCSIM_SRCS ${NNPU_SCSIM_DIR}/sc_simulator.cpp ${NNPU_SCSIM_DIR}/ifetch.cpp
-                      ${NNPU_SCSIM_DIR}/idecode.cpp)
+                      ${NNPU_SCSIM_DIR}/idecode.cpp ${NNPU_SCSIM_DIR}/issue_queue.cpp
+                      ${NNPU_SCSIM_DIR}/future_file.cpp ${NNPU_SCSIM_DIR}/reserve_station.cpp)
 
   add_library(nnpu-dummy SHARED ${NNPU_SCSIM_DIR}/dummy.cpp)
 
