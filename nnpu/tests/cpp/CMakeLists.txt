@@ -8,7 +8,9 @@ set(NNPU_S1SIM_SRC test_main.cpp ${SIM_SRC}/common/bit_packer.cpp
                    ${SIM_SRC}/common/data_types.cpp ${SIM_SRC}/insn_wrapper.cpp
                    ${SIM_SRC}/sc_sim/idecode.cpp ${SIM_SRC}/sc_sim/ifetch.cpp
                    ${SIM_SRC}/sc_sim/issue_queue.cpp ${SIM_SRC}/sc_sim/future_file.cpp
-                   ${SIM_SRC}/sc_sim/reserve_station.cpp
+                   ${SIM_SRC}/sc_sim/reserve_station.cpp ${SIM_SRC}/sc_sim/alu.cpp
+                   ${SIM_SRC}/sc_sim/common_data_bus.cpp ${SIM_SRC}/sc_sim/branch_unit.cpp
+                   ${SIM_SRC}/sc_sim/load_store_unit.cpp ${SIM_SRC}/sc_sim/scalar_memory.cpp
                    )
 # include directories
 include_directories("../../../include")

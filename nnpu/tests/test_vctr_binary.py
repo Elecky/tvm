@@ -6,7 +6,8 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type="S1")
+    nnpu.set_device(env, type="SC")
+    # exit(0)
 
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     shape = (48, )
@@ -73,7 +74,7 @@ def test():
     print(func.imported_modules[0].get_source('asm'))
 
     func(a_nd, b_nd, c_nd, mul_nd, gtm_nd)
-    # exit()
+    exit()
     print('a = ')
     print(a_np)
     print('b = ')

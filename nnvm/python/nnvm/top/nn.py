@@ -61,6 +61,7 @@ reg.register_pattern("log_softmax", OpPattern.OPAQUE)
 @reg.register_compute("dense")
 def compute_dense(attrs, inputs, _):
     """Compute definition of dense"""
+    print("Compute definition of dense")
     if attrs.get_bool("use_bias"):
         return topi.nn.dense(inputs[0], inputs[1], bias=inputs[2])
     return topi.nn.dense(inputs[0], inputs[1])
@@ -68,6 +69,7 @@ def compute_dense(attrs, inputs, _):
 @reg.register_schedule("dense")
 def schedule_dense(_, outs, target):
     """Schedule definition of dense"""
+    print("Schedule definition of dense")
     with tvm.target.create(target):
         return topi.generic.schedule_dense(outs)
 
