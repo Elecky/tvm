@@ -20,6 +20,13 @@ using KVList_t = std::unordered_map<regNo_t, reg_t>;
 using dst_pair_t = std::pair<bool, regNo_t>;
 using branch_off_t = std::pair<bool, reg_t>;
 
+inline reg_t take(const KVList_t &list, regNo_t regNo)
+{
+    auto it = list.find(regNo);
+    assert(it != list.end());
+    return it->second;
+}
+
 /*
 * instruction type, similar to opcode in MIPS instruction
 */

@@ -13,6 +13,7 @@
 #include <nnpusim/sc_sim/branch_unit.h>
 #include <nnpusim/sc_sim/load_store_unit.h>
 #include <nnpusim/sc_sim/scalar_memory.h>
+#include <nnpusim/sc_sim/memory_queue.h>
 
 using namespace nnpu;
 using namespace nnpu::sc_sim;
@@ -280,6 +281,82 @@ public:
 private:
     std::size_t depth;
 };
+
+/*
+void test_memory_queue()
+{
+    using Unary = nnpu::ALURegImmInsn;
+
+    auto Li = [](regNo_t rd, reg_t imm) 
+        { return Unary(rd, 0, imm, ALURegImmOp::AddIU); };
+    
+    memory_queue mq("memory-queue", 8);
+
+    std::vector<NNPUInsn> insns { Li(1, 1), Li(2, 2), Li(3, 3), Li(4, 4) };
+    InsnDumper dumper;
+
+    InsnWrapper insn;
+    std::unordered_set<issue_id_t> empty;
+    std::vector<AddressRange> noRange;
+
+    insn = InsnWrapper(&insns[0], 0);
+    insn.SetIssueId(0);
+    assert(mq.nb_push(insn, noRange, noRange, empty));
+    sc_start(5, SC_NS);
+
+    insn = InsnWrapper(&insns[1], 1);
+    insn.SetIssueId(1);
+    assert(mq.nb_push(insn, noRange, noRange, {0}));
+    sc_start(5, SC_NS);
+
+    assert(mq.nb_read(insn, UnitType::Matrix));
+    sc_start(5, SC_NS);
+    insn.Insn().Call(dumper, std::cout);
+    std::cout << "\n";
+
+    assert(!mq.nb_read(insn, UnitType::Matrix));
+    sc_start(5, SC_NS);
+
+    insn = InsnWrapper(&insns[2], 2);
+    insn.SetIssueId(2);
+    assert(mq.nb_push(insn, noRange, noRange, {0}));
+    mq.commit(0);
+    mq.retire(0);
+    assert(!mq.nb_read(insn, UnitType::Matrix));
+    sc_start(5, SC_NS);
+
+    assert(mq.nb_read(insn, UnitType::Matrix));
+    sc_start(5, SC_NS);
+    insn.Insn().Call(dumper, std::cout);
+    std::cout << "\n";
+
+    mq.commit(1);
+    mq.retire(1);
+    insn = InsnWrapper(&insns[3], 3);
+    insn.SetIssueId(3);
+    assert(mq.nb_push(insn, noRange, noRange, {1}));
+    assert(mq.nb_read(insn, UnitType::Matrix));
+    sc_start(5, SC_NS);
+    insn.Insn().Call(dumper, std::cout);
+    std::cout << "\n";
+
+    mq.commit(2);
+    mq.retire(2);
+    assert(mq.nb_read(insn, UnitType::Matrix));
+    sc_start(5, SC_NS);
+    insn.Insn().Call(dumper, std::cout);
+    std::cout << "\n";
+
+    mq.print();
+    mq.commit(3);
+    mq.retire(3);
+    std::cout << std::endl;
+    mq.print();
+    sc_start(5, SC_NS);
+
+    std::cout << std::endl;
+    mq.print();
+}*/
 
 extern "C" int sc_main( int argc, char* argv[] );
 
