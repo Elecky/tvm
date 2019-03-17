@@ -36,7 +36,9 @@ if(PYTHON)
                       ${NNPU_SCSIM_DIR}/alu.cpp ${NNPU_SCSIM_DIR}/common_data_bus.cpp
                       ${NNPU_SCSIM_DIR}/branch_unit.cpp ${NNPU_SCSIM_DIR}/load_store_unit.cpp
                       ${NNPU_SCSIM_DIR}/scalar_memory.cpp ${NNPU_SCSIM_DIR}/address_generate_unit.cpp
-                      ${NNPU_SCSIM_DIR}/memory_queue.cpp)
+                      ${NNPU_SCSIM_DIR}/memory_queue.cpp ${NNPU_SCSIM_DIR}/data_read_unit.cpp
+                      ${NNPU_SCSIM_DIR}/data_write_unit.cpp ${NNPU_SCSIM_DIR}/vctr_calc_unit.cpp
+                      ${NNPU_SCSIM_DIR}/vector_unit.cpp ${NNPU_SCSIM_DIR}/retire_bus.cpp)
 
   add_library(nnpu-dummy SHARED ${NNPU_SCSIM_DIR}/dummy.cpp)
 
