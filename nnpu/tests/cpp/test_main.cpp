@@ -14,6 +14,8 @@
 #include <nnpusim/sc_sim/load_store_unit.h>
 #include <nnpusim/sc_sim/scalar_memory.h>
 #include <nnpusim/sc_sim/memory_queue.h>
+#include <nnpusim/sc_sim/address_generate_unit.h>
+#include <nnpusim/sc_sim/vector_unit.h>
 
 using namespace nnpu;
 using namespace nnpu::sc_sim;
@@ -198,26 +200,40 @@ std::vector<NNPUInsn> insert_sort_insns()
 std::vector<NNPUInsn> vctr_test_insns()
 {
     vector<NNPUInsn> insns;
-    using Li = nnpu::LiInsn;
     using Binary = nnpu::ALUBinaryInsn;
     using Store = nnpu::SclrStoreInsn;
     using Load = nnpu::SclrLoadInsn;
     using Unary = nnpu::ALURegImmInsn;
 
-    /*
+    auto Li = [](regNo_t rd, reg_t imm) 
+        { return Unary(rd, 0, imm, ALURegImmOp::AddIU); };
+    
+    /* loop and add:
     insns.push_back(Li(1, 0));
     insns.push_back(Li(3, 32));
     insns.push_back(Unary(2, 1, 4, ALURegImmOp::SLTIU));
     insns.push_back(BEZInsn(5, 2));
 
+    insns.push_back(Unary(4, 1, 3, ALURegImmOp::SHLI));
     insns.push_back(Unary(1, 1, 1, ALURegImmOp::AddIU));
-    insns.push_back(Unary(4, 1, 8, ALURegImmOp::MulIU));
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
 
     insns.push_back(JumpInsn(-5));
     
     insns.push_back(JumpInsn(0));*/
 
+    insns.push_back(Li(3, 32));
+    insns.push_back(Li(4, 0));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+    insns.push_back(Li(4, 8));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+    insns.push_back(Li(4, 16));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+    insns.push_back(Li(4, 24));
+    insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+    insns.push_back(JumpInsn(0));
+
+    /*
     insns.push_back(Li(0, 0));
     insns.push_back(Li(1, 40));
     insns.push_back(BufferLSInsn(LSDIR::Load, 0, 0, 1));
@@ -236,7 +252,7 @@ std::vector<NNPUInsn> vctr_test_insns()
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
 
     insns.push_back(Li(1, 32));
-    insns.push_back(BufferLSInsn(LSDIR::Store, 0, 0, 1));
+    insns.push_back(BufferLSInsn(LSDIR::Store, 0, 0, 1));*/
 
     InsnDumper dumper;
     for (auto &item : insns)
@@ -382,11 +398,21 @@ int sc_main(int argc, char* argv[])
     random_reserve_station alu_RS("alu_reserve_station", 8);
     random_reserve_station bu_RS("branch_reserve_staion", 1);
     sequential_reserve_station ls_RS("load/store_reserve_station", 4);
+    sequential_reserve_station tensor_RS("tensor_reserve_station", 4);
+
+    // memory queues
+    memory_queue vector_mq("vector-memory-queue", 4);
+    memory_queue matrix_mq("matrix-memory-queue", 4);
+
+    retire_bus r_bus("retire-bus");
+    r_bus.memory_queues.bind(vector_mq);
+    r_bus.memory_queues.bind(matrix_mq);
 
     cdb.future_file_port(reg_file);
     cdb.reserve_stations.bind(alu_RS);
     cdb.reserve_stations.bind(bu_RS);
     cdb.reserve_stations.bind(ls_RS);
+    cdb.reserve_stations.bind(tensor_RS);
 
     ifetch IF("IF", cfg);
     idecode ID("ID", cfg);
@@ -414,7 +440,7 @@ int sc_main(int argc, char* argv[])
 
     ID.out_instructions.bind(ID_IQ);
 
-    IF.set_insn(insert_sort_insns());
+    IF.set_insn(vctr_test_insns());
 
     // Monitor monitor("Monitor", issueDepth);
     // monitor.clk(clk);
@@ -429,6 +455,7 @@ int sc_main(int argc, char* argv[])
     iQueue.branch_valid(branch_valid);
     iQueue.branch_rs(bu_RS);
     iQueue.lsu_rs(ls_RS);
+    iQueue.tensor_rs(tensor_RS);
 
     alu _alu("ALU", cfg);
     _alu.clk(clk);
@@ -450,7 +477,44 @@ int sc_main(int argc, char* argv[])
     lsu.memory(sclr_mem);
     lsu.data_bus(cdb);
 
-    sc_start(1000, SC_NS);
+    address_generate_unit agu("address-generate-unit", cfg);
+    agu.clk(clk);
+    agu.reserve_station(tensor_RS);
+    agu.matrix_mq(matrix_mq);
+    agu.vector_mq(vector_mq);
+
+    assert(cfg["scratchpad_design"].as<string>() == "unified" && ", only unified scrachpad is supported now");
+    shared_ptr<RAM> buffer;
+    {
+        std::size_t size = 1 << cfg["scratchpad"]["log_size_per_channel"].as<std::size_t>();
+        size *= cfg["scratchpad"]["nchannel"].as<std::size_t>();
+        buffer.reset(new RAM(size));
+    }
+    ScratchpadHolder holder(cfg, buffer);
+
+    vector_unit vctr_unit("vector-unit", cfg, holder);
+    vctr_unit.clk(clk);
+    vctr_unit.mem_queue_read(vector_mq);
+    vctr_unit.mem_queue_commit(vector_mq);
+    vctr_unit.retire_bus_port(r_bus);
+
+    /* prepare data here */
+    for (unsigned i = 0; i <= 4; ++i)
+    {
+        buffer->Memset(i + 1, i * 8, 8);
+    }
+
+    sc_start(300, SC_NS);
+
+    /* check result here */
+    for (unsigned i = 0; i <= 4; ++i)
+    {
+        Byte arr[8];
+        buffer->CopyTo(arr, i * 8, 8);
+        for (unsigned j = 0; j < 8; ++j)
+            std::cout << static_cast<int>(arr[j]) << ' ';
+        cout << endl;
+    }
 
     // std::cout << "issued " << iQueue.GetIssueCount() << " instructions" << std::endl;
 
