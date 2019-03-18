@@ -74,7 +74,7 @@ def test():
     print(func.imported_modules[0].get_source('asm'))
 
     func(a_nd, b_nd, c_nd, mul_nd, gtm_nd)
-    exit()
+    # exit()
     print('a = ')
     print(a_np)
     print('b = ')

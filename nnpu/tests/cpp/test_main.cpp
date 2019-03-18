@@ -16,6 +16,7 @@
 #include <nnpusim/sc_sim/memory_queue.h>
 #include <nnpusim/sc_sim/address_generate_unit.h>
 #include <nnpusim/sc_sim/vector_unit.h>
+#include <nnpusim/sc_sim/dram_access_unit.h>
 
 using namespace nnpu;
 using namespace nnpu::sc_sim;
@@ -222,6 +223,9 @@ std::vector<NNPUInsn> vctr_test_insns()
     
     insns.push_back(JumpInsn(0));*/
 
+    insns.push_back(Li(1, 40));
+    insns.push_back(BufferLSInsn(LSDIR::Load, 0, 0, 1));
+
     insns.push_back(Li(3, 32));
     insns.push_back(Li(4, 0));
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
@@ -231,6 +235,10 @@ std::vector<NNPUInsn> vctr_test_insns()
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
     insns.push_back(Li(4, 24));
     insns.push_back(VctrBinaryInsn(VctrBinaryOp::Add, 4, 3, 4, 8, ModeCode::N));
+
+    insns.push_back(Li(1, 32));
+    insns.push_back(BufferLSInsn(LSDIR::Store, 0, 0, 1));
+
     insns.push_back(JumpInsn(0));
 
     /*
@@ -403,10 +411,12 @@ int sc_main(int argc, char* argv[])
     // memory queues
     memory_queue vector_mq("vector-memory-queue", 4);
     memory_queue matrix_mq("matrix-memory-queue", 4);
+    memory_queue dram_mq("dram-access-memory-queue", 2);
 
     retire_bus r_bus("retire-bus");
     r_bus.memory_queues.bind(vector_mq);
     r_bus.memory_queues.bind(matrix_mq);
+    r_bus.memory_queues.bind(dram_mq);
 
     cdb.future_file_port(reg_file);
     cdb.reserve_stations.bind(alu_RS);
@@ -482,6 +492,7 @@ int sc_main(int argc, char* argv[])
     agu.reserve_station(tensor_RS);
     agu.matrix_mq(matrix_mq);
     agu.vector_mq(vector_mq);
+    agu.dram_unit_mq(dram_mq);
 
     assert(cfg["scratchpad_design"].as<string>() == "unified" && ", only unified scrachpad is supported now");
     shared_ptr<RAM> buffer;
@@ -498,10 +509,24 @@ int sc_main(int argc, char* argv[])
     vctr_unit.mem_queue_commit(vector_mq);
     vctr_unit.retire_bus_port(r_bus);
 
+
+    shared_ptr<RAM> dram;
+    {
+        std::size_t size = 1 << cfg["dram"]["log_size_per_channel"].as<std::size_t>();
+        size *= cfg["dram"]["nchannel"].as<std::size_t>();
+        dram.reset(new RAM(size));
+    }
+    
+    dram_access_unit dram_unit("dram-access-unit", cfg, holder, dram);
+    dram_unit.clk(clk);
+    dram_unit.mem_queue_read(dram_mq);
+    dram_unit.mem_queue_commit(dram_mq);
+    dram_unit.retire_bus_port(r_bus);
+
     /* prepare data here */
     for (unsigned i = 0; i <= 4; ++i)
     {
-        buffer->Memset(i + 1, i * 8, 8);
+        dram->Memset(i + 1, i * 8, 8);
     }
 
     sc_start(300, SC_NS);
@@ -510,7 +535,7 @@ int sc_main(int argc, char* argv[])
     for (unsigned i = 0; i <= 4; ++i)
     {
         Byte arr[8];
-        buffer->CopyTo(arr, i * 8, 8);
+        dram->CopyTo(arr, i * 8, 8);
         for (unsigned j = 0; j < 8; ++j)
             std::cout << static_cast<int>(arr[j]) << ' ';
         cout << endl;

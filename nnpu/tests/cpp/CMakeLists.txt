@@ -17,6 +17,7 @@ set(NNPU_S1SIM_SRC test_main.cpp ${SIM_SRC}/common/bit_packer.cpp
                    ${SIM_SRC}/sc_sim/data_write_unit.cpp ${SIM_SRC}/sc_sim/vctr_calc_unit.cpp
                    ${SIM_SRC}/sc_sim/vector_unit.cpp ${SIM_SRC}/sc_sim/retire_bus.cpp
                    ${SIM_SRC}/address_range.cpp ${SIM_SRC}/ram.cpp
+                   ${SIM_SRC}/sc_sim/dram_access_unit.cpp
                    )
 # include directories
 include_directories("../../../include")
