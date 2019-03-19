@@ -33,7 +33,7 @@ public:
   llvm::Value *VisitExpr_(const Call *op) final;
 
   // used for debugging, disable optimize
-  std::unique_ptr<llvm::Module> Finish() final;
+  void Optimize() override;
 
   // WARNING: CodeGenLLVM has no virtual destructor, so we shouldn't add any field member!!
   //          since it's common to save a pointer to CodeGenLLVM derivate in unique_ptr.
@@ -133,16 +133,54 @@ llvm::Value *CodeGenNNPU::VisitExpr_(const Call *op)
   }
 }
 
-std::unique_ptr<llvm::Module> CodeGenNNPU::Finish() {
-  this->AddStartupFunction();
-  // link modules
-  for (size_t i = 0; i < link_modules_.size(); ++i) {
-    CHECK(!llvm::Linker::linkModules(*module_, std::move(link_modules_[i])))
-        << "Failed to link modules";
+class FPassManager : public llvm::legacy::FunctionPassManager {
+ public:
+  explicit FPassManager(llvm::Module* m)
+      : llvm::legacy::FunctionPassManager(m) {}
+  // override add to allow messaging
+  void add(llvm::Pass* p) final {
+    llvm::legacy::FunctionPassManager::add(p);
   }
-  link_modules_.clear();
-  // disable optimize
-  return std::move(module_);
+};
+
+class MPassManager : public llvm::legacy::PassManager {
+ public:
+  // override add to allow messaging
+  void add(llvm::Pass* p) final {
+    llvm::legacy::PassManager::add(p);
+  }
+};
+
+void CodeGenNNPU::Optimize() {
+  // place optimization pass
+  llvm::PassManagerBuilder builder;
+  builder.OptLevel = 1;
+
+#if TVM_LLVM_VERSION >= 50
+  builder.Inliner = llvm::createFunctionInliningPass(builder.OptLevel, 0, false);
+#else
+  builder.Inliner = llvm::createFunctionInliningPass(builder.OptLevel, 0);
+#endif
+  builder.LoopVectorize = true;
+  builder.SLPVectorize = true;
+  this->InitPassManagerBuilder(&builder);
+
+#if TVM_LLVM_VERSION >= 50
+  target_machine_->adjustPassManager(builder);
+#endif
+
+  // pass manager
+  FPassManager fpass(module_.get());
+  MPassManager mpass;
+  builder.populateFunctionPassManager(fpass);
+  builder.populateModulePassManager(mpass);
+
+  fpass.doInitialization();
+  for (auto it = module_->begin(); it != module_->end(); ++it) {
+    fpass.run(*it);
+  }
+  fpass.doFinalization();
+  mpass.run(*module_);
 }
 
 runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)

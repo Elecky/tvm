@@ -6,7 +6,7 @@ import numpy as np
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='SC')
     shape = (48, 64)  # (32, 32) reshaped to (32, 2, 16)
     gemm_shape = (16, 16, 1)
     factor = gemm_shape[1]

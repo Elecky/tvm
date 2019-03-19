@@ -569,14 +569,14 @@ bool NNPUAssembler::parseMemOperand(const string &token,
     {
         string offStr(token.substr(0, lp));
         std::stringstream ss(offStr);
-        if (isdigit(token[0]))  // if offset is immediate value.
+        if (isdigit(token[0]) || token[0] == '-')  // if offset is immediate value.
         {
             ss >> offset;
             return false;
         }
         else  // this is a label
         {
-            CHECK(rr != nullptr) << ", relocation needed but rr is nullptr";
+            CHECK(rr != nullptr) << ", relocation needed but rr is nullptr, label is " << token[0] << '\n';
             rr->IsRelative = false;  // absolute relocate.
             rr->label = offStr;
             return true;

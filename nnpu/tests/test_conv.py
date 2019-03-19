@@ -6,7 +6,7 @@ import numpy as np
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
 
     shape = (9, 9, 32)  # (h, w, c)
     kshape = (3, 3, 48, 32)  # (kh, kw, oc, c)
@@ -83,6 +83,8 @@ with ScheduleProcHelper():
     print(nnpu.lower(s, [feature, kernel, res_host], simple_mode=True))
 
     func = nnpu.build(s, [feature, kernel, res_host], 'nnpu', 'llvm', 'nnpu_conv')
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
 
     ctx = tvm.nd.TVMContext(13, 0)
     fm_np = np.random.randint(size=shape, dtype=feature.dtype, low = -16, high = 16)
