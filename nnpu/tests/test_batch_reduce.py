@@ -6,7 +6,7 @@ import numpy as np
 #add new func
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='SC')
     shape = (4, 16)
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     a = tvm.placeholder(shape, dtype_w, 'a')
@@ -60,6 +60,8 @@ def test():
     gtm_nd = tvm.nd.array(np.zeros((16,)).astype(gtm_host.dtype), ctx)
     
     func(a_nd, add_nd,mul_nd,gtm_nd)
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
 
     print('a = ')
     print(a_np)
