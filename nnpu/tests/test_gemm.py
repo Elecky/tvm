@@ -4,7 +4,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='SC')
+    nnpu.set_device(env, type='S0')
 
     shape = (16, 16)
     a_host = tvm.placeholder(shape, env.cfg['dtype_n'], 'a_host')
