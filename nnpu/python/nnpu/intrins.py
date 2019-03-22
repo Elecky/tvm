@@ -860,16 +860,16 @@ class IntrinManager(object):
                 din = ins[0]
                 dout = outs[0]
 
-                init = self.emit_memset(dout.access_ptr('w', 'uint32'), shape_out[0]*shape_out[1], 
+                init = self.emit_memset(dout.access_ptr('w'), shape_out[0]*shape_out[1], 
                             dtype_bytes(dtype_out), num, mode)
 
                 def comp():
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('rw', 'uint32'),
-                            din.access_ptr('r', 'uint32'),
-                            dout.access_ptr('rw', 'uint32'),
+                            dout.access_ptr('rw'),
+                            din.access_ptr('r'),
+                            dout.access_ptr('rw'),
                             shape_out[0]*shape_out[1],
                             self.get_mode_code(mode)
                             ))
@@ -930,7 +930,7 @@ class IntrinManager(object):
                 din1 = ins[0]
                 dout = outs[0]
 
-                init = self.emit_acc_init(dout.access_ptr('w', 'uint32'), 1, nRow, 0, 
+                init = self.emit_acc_init(dout.access_ptr('w'), 1, nRow, 0, 
                                 mode, 0.0)
 
                 def calc(toAccBuf, doAcc):
@@ -938,8 +938,8 @@ class IntrinManager(object):
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     ptr_mode = 'rw' if doAcc else 'w'
                     irb.emit(make_intrin_call("void", intrin_func,
-                                dout.access_ptr(ptr_mode, 'uint32'),
-                                din1.access_ptr('r', 'uint32'), 
+                                dout.access_ptr(ptr_mode),
+                                din1.access_ptr('r'), 
                                 din1.strides[0] * dtype_bytes(dtype_in),
                                 shape[0], shape[1],
                                 self.get_mode_code(mode),

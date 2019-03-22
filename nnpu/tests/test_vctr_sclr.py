@@ -65,7 +65,7 @@ def test():
 
     ctx = tvm.nd.TVMContext(13, 0)
 
-    a_np = np.random.randint(size=(16, ), dtype=a.dtype, low = -64, high = 63)
+    a_np = np.random.randint(size=(16, ), dtype=a.dtype, low = 1, high = 63)
     #a_np = np.random.random(size=shape).astype(a_host.dtype)
     a_nd = tvm.nd.array(a_np, ctx)
 
