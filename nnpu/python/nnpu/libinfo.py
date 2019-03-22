@@ -49,14 +49,13 @@ modify the path here!')
         dummy_path = find_libnnpu(False, True)
         _ = ctypes.CDLL(dummy_path[0], ctypes.RTLD_GLOBAL)
         _ = ctypes.CDLL('/opt/systemc/lib/libsystemc.so', ctypes.RTLD_GLOBAL)
-        print('loaded systemc library')
+        # print('loaded systemc library')
     except OSError as e:
         print(e)
         raise RuntimeError('cannot load systemc, please install systemc or \
 modify the path here!')
 
     try:
-        print(lib_path)
         return [ctypes.CDLL(lib_path[0],ctypes.RTLD_GLOBAL)]
     except OSError as err:
         print(err)

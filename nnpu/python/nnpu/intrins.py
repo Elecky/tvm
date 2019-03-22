@@ -262,8 +262,6 @@ class IntrinManager(object):
             in1_buf = self.decl_buffer(in1, scope_in1, 'in1', strides=in1_strides)
             in2_buf = self.decl_buffer(in2, scope_in2, 'in2', strides=in2_strides)
             out_buf = self.decl_buffer(out, scope_out, 'out', strides=out_strides)
-            print('scope_out=')
-            print(scope_out)
 
             def lower_func(ins, outs):
                 ins = self.get_ins(ins, 'in1', 'in2')
