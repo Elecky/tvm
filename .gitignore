@@ -210,3 +210,6 @@ nnpu/nnpu_config.yaml
 *.cer
 *.crt
 *.der
+
+# vscode configs
+.vscode/*
