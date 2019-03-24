@@ -6,7 +6,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     shape = (8, 16)
     a = tvm.placeholder(shape, env.cfg['dtype_n'], 'a')
     b = tvm.placeholder(shape, env.cfg['dtype_n'], 'b')

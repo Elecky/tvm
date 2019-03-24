@@ -6,7 +6,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     a = tvm.placeholder((16,16), env.cfg['dtype_n'], 'a')
     sph = ScheduleProcHelper()
     Imm = tvm.const(7, env.cfg['dtype_n'])
@@ -36,7 +36,7 @@ def test():
     print(nnpu.lower(s, [a,add_host,mul_host,rsub_host], simple_mode=True))
     func = nnpu.build(s, [a,add_host,mul_host,rsub_host], 'nnpu', 'llvm', name='nnpu_vmuli')
     ctx = tvm.nd.TVMContext(13, 0)
-    a_np = np.random.randint(size=(16,16), dtype=a.dtype, low = 3, high = 23)
+    a_np = np.random.randint(size=(16,16), dtype=a.dtype, low = 3, high = 100)
     a_nd = tvm.nd.array(a_np, ctx)
 
     add_nd = tvm.nd.array(np.zeros((16,16)).astype(add_host.dtype), ctx)

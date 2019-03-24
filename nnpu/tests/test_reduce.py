@@ -6,7 +6,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env)
+    nnpu.set_device(env, type='S0')
 
     a = tvm.placeholder((4, 16), env.cfg['dtype_w'], 'a')
     

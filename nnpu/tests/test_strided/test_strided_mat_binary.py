@@ -6,7 +6,7 @@ import numpy as np
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    nnpu.set_device(env)
+    nnpu.set_device(env, type='S0')
     shape = (32, 48)  # (32, 32) tiled to (2, 16, 2, 16)
     insn_shape = (16, 16)
     assert shape[0] % insn_shape[0] == 0, 'error'

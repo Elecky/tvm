@@ -6,7 +6,7 @@ import numpy as np
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     shape = (32, 64)  # (32, 64) -> (32, )
     rshape = (16, 16)  # the shape that MReduceSum insn accepts
     assert shape[0] % rshape[0] == 0, 'height must be divisible to {0}'.format(rshape[0])
