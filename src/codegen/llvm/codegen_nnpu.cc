@@ -190,13 +190,13 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
   InitializeLLVM();  // initialize LLVM, forgetting to do this, llvm even can't find target.
   std::ostringstream config;
   config << "-mtriple=NNPU";
-  llvm::TargetMachine *tm = GetLLVMTargetMachine(
+  std::unique_ptr<llvm::TargetMachine> tm = GetLLVMTargetMachine(
                               config.str(),
                               false,
                               llvm::Reloc::Static);
   std::unique_ptr<CodeGenNNPU> cg(new CodeGenNNPU());
   std::unique_ptr<llvm::LLVMContext> ctx(new llvm::LLVMContext());
-  cg->Init(funcs[0]->name, tm, ctx.get(), false, false);
+  cg->Init(funcs[0]->name, tm.get(), ctx.get(), false, false);
   for (LoweredFunc f : funcs)
   {
     cg->AddFunction(f);

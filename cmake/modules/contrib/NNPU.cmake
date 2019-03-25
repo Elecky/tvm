@@ -45,6 +45,7 @@ if(PYTHON)
                       ${NNPU_SCSIM_DIR}/mem_copy_set_unit.cpp)
 
   add_library(nnpu-dummy SHARED ${NNPU_SCSIM_DIR}/dummy.cpp)
+  set_target_properties(nnpu-dummy PROPERTIES CXX_VISIBILITY_PRESET default)
 
   add_library(nnpu SHARED ${NNPU_RUNTIME_SRCS} ${NNPU_SIM_COMMON} ${NNPU_S0SIM_SRC}
                           ${NNPU_S1SIM_SRC} ${NNPU_SCSIM_SRCS})

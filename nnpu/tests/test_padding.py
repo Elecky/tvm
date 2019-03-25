@@ -13,7 +13,7 @@ with (ScheduleProcHelper()):
     a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a')
     
     pad_buf = tvm.compute((2, 6, 16), 
-                        lambda i, j, k: tvm.select(j >= 2, a_buf[i, j - 2, k], tvm.const(0, dtype_n)),
+                        lambda i, j, k: tvm.expr.Select(j >= 2, a_buf[i, j - 2, k], tvm.const(0, dtype_n)),
                         'pad')
     nnpu.utils.MarkScope(pad_buf)
     nnpu.utils.PragmaCopy(pad_buf)

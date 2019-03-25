@@ -116,7 +116,8 @@ class IntrinManager(object):
             scope_out = self.get_scope(scope_out)
             dtype_in, dtype_out = self.mode2dtype(mode)
             
-            if (isinstance(imm_value, type(tvm.const(0)))):
+            if (isinstance(imm_value, type(tvm.const(0, 'int'))) 
+                or isinstance(imm_value, type(tvm.const(0, 'float32')))):
                 imm = imm_value.astype(dtype_in)
             else:
                 imm = tvm.const(imm_value, dtype_in)
@@ -693,8 +694,8 @@ class IntrinManager(object):
             k = tvm.reduce_axis((0, shape[1]), 'k')
             extern_func = 'NNPU_VReduceKey'
             def fcombine(x, y):
-                lhs = tvm.select((x[1] >= y[1]), x[0], y[0])
-                rhs = tvm.select((x[1] >= y[1]), x[0], y[0])
+                lhs = tvm.expr.Select((x[1] >= y[1]), x[0], y[0])
+                rhs = tvm.expr.Select((x[1] >= y[1]), x[0], y[0])
                 return lhs,rhs
 
             def fidentity(t0, t1):

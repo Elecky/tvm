@@ -19,7 +19,7 @@ with (ScheduleProcHelper()):
     exp = tvm.compute(shape, lambda i: tvm.exp(a_buf[i]), 'exp')
     nnpu.utils.MarkScope(exp)
 
-    one = tvm.const(1).astype(dtype_w)
+    one = tvm.const(1, dtype_w)
     exp_p1 = tvm.compute(shape, lambda i: exp[i] + one, 'exp_p1')
     nnpu.utils.MarkScope(exp_p1)
 
