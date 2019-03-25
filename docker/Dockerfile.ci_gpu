@@ -1,5 +1,6 @@
 # CI docker GPU env
-FROM nvidia/cuda:9.0-cudnn7-devel
+# tag: v0.41
+FROM nvidia/cuda:8.0-cudnn7-devel
 
 # Base scripts
 RUN apt-get update --fix-missing
@@ -45,8 +46,14 @@ RUN bash /install/ubuntu_install_opengl.sh
 COPY install/ubuntu_install_mxnet.sh /install/ubuntu_install_mxnet.sh
 RUN bash /install/ubuntu_install_mxnet.sh
 
+COPY install/ubuntu_install_gluoncv.sh /install/ubuntu_install_gluoncv.sh
+RUN bash /install/ubuntu_install_gluoncv.sh
+
 COPY install/ubuntu_install_coreml.sh /install/ubuntu_install_coreml.sh
 RUN bash /install/ubuntu_install_coreml.sh
+
+COPY install/ubuntu_install_tensorflow.sh /install/ubuntu_install_tensorflow.sh
+RUN bash /install/ubuntu_install_tensorflow.sh
 
 COPY install/ubuntu_install_keras.sh /install/ubuntu_install_keras.sh
 RUN bash /install/ubuntu_install_keras.sh
@@ -57,17 +64,23 @@ RUN bash /install/ubuntu_install_darknet.sh
 COPY install/ubuntu_install_onnx.sh /install/ubuntu_install_onnx.sh
 RUN bash /install/ubuntu_install_onnx.sh
 
+COPY install/ubuntu_install_tflite.sh /install/ubuntu_install_tflite.sh
+RUN bash /install/ubuntu_install_tflite.sh
+
+COPY install/ubuntu_install_caffe2.sh /install/ubuntu_install_caffe2.sh
+RUN bash /install/ubuntu_install_caffe2.sh
+
 RUN pip3 install Pillow
 
 COPY install/ubuntu_install_vulkan.sh /install/ubuntu_install_vulkan.sh
 RUN bash /install/ubuntu_install_vulkan.sh
 
-COPY install/ubuntu_install_tensorflow.sh /install/ubuntu_install_tensorflow.sh
-RUN bash /install/ubuntu_install_tensorflow.sh
-
 # AutoTVM deps
 COPY install/ubuntu_install_redis.sh /install/ubuntu_install_redis.sh
 RUN bash /install/ubuntu_install_redis.sh
+
+COPY install/ubuntu_install_antlr.sh /install/ubuntu_install_antlr.sh
+RUN bash /install/ubuntu_install_antlr.sh
 
 # Environment variables
 ENV PATH=/usr/local/nvidia/bin:${PATH}

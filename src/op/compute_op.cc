@@ -212,6 +212,7 @@ void ComputeOpNode::GatherBound(
     const Operation& self,
     const std::unordered_map<Tensor, TensorDom>& tensor_dom,
     std::unordered_map<IterVar, Range>* out_dom_map) const {
+  CHECK_EQ(self.operator->(), this);
   const TensorDom& tdom = tensor_dom.at(self.output(0));
   for (size_t i = 0; i < this->axis.size(); ++i) {
     Range r = arith::Union(tdom.data.at(i)).cover_range(this->axis[i]->dom);
@@ -321,27 +322,32 @@ Stmt MakeComputeStmt(const ComputeOpNode* self,
       source.push_back(stage->op.output(i));
     }
     MakeReduction(self, source, &init, &provide);
-    init = op::Substitute(init, n.init_vmap);
     init = MergeNest(n.init_nest, init);
+    init = op::Substitute(init, n.init_vmap);
     // common nest
     std::vector<std::vector<Stmt> > common(
         n.main_nest.begin(), n.main_nest.begin() + n.num_common_loop + 1);
     std::vector<std::vector<Stmt> > reduce(
         n.main_nest.begin() + n.num_common_loop + 1, n.main_nest.end());
-    provide = op::Substitute(provide, n.main_vmap);
     provide = MergeNest(reduce, provide);
     if (debug_keep_trivial_loop) {
-      return MergeNest(common, provide);
+      provide = MergeNest(common, provide);
     } else {
-      return MergeNest(common, Block::make(init, provide));
+      provide = MergeNest(common, Block::make(init, provide));
     }
+    // run substitution in the on the full nest, because  loop condition
+    // could depend on outer loops.
+    return op::Substitute(provide, n.main_vmap);
   } else {
     std::vector<Stmt> provides;
     for (size_t i = 0; i < self->body.size(); ++i) {
       provides.emplace_back(MakeProvide(self, stage->op.output(i)));
     }
-    Stmt provide = op::Substitute(Block::make(provides), n.main_vmap);
-    return MergeNest(n.main_nest, provide);
+    Stmt provide = Block::make(provides);
+    provide = MergeNest(n.main_nest, provide);
+    // run substitution in the on the full nest, because  loop condition
+    // could depend on outer loops.
+    return op::Substitute(provide, n.main_vmap);
   }
 }
 
@@ -451,11 +457,11 @@ ComputeLoopNest ComputeLoopNest::make(
       ret.init_vmap[iv] = ret.main_vmap.at(iv);
     }
     ret.num_common_loop = begin_loop;
-    // skip loops that does not relates to axis.
+    // skip loops that are related to reduction and are unrelated to axis.
     std::unordered_set<IterVar> skip_iter;
     for (auto kv : update_state) {
       int flag = kv.second;
-      if ((flag & 1) == 0) skip_iter.insert(kv.first);
+      if (flag == 2) skip_iter.insert(kv.first);
     }
     ret.init_nest = op::MakeLoopNest(
         stage, dom_map, begin_loop, true,

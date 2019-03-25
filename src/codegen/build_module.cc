@@ -58,7 +58,7 @@ Target CreateTarget(const std::string& target_name,
   }
   t->device_type = kDLCPU;
   t->thread_warp_size = 1;
-  if (target_name == "llvm") {
+  if (target_name == "c" || target_name == "llvm") {
     t->keys_array.push_back(ir::StringImm::make("cpu"));
   } else if (target_name == "cuda" || target_name == "nvptx") {
     t->device_type = kDLGPU;
@@ -105,6 +105,8 @@ Target CreateTarget(const std::string& target_name,
     t->device_type = kDLExtDev;
   } else if (target_name == "nnpu") {
     t->device_type = kNNPU;
+  } else if (target_name == "hybrid") {
+    t->device_type = kDLCPU;
   } else {
     LOG(ERROR) << "Unknown target name " << target_name;
     return target::stackvm();
@@ -156,13 +158,15 @@ std::unordered_set<std::string> TargetNode::libs() const {
   return result;
 }
 
-std::string TargetNode::str() const {
+const std::string& TargetNode::str() const {
+  if (str_repr_.length() != 0) return str_repr_;
   std::ostringstream result;
   result << target_name;
   for (const auto &x : options()) {
     result << " " << x;
   }
-  return result.str();
+  str_repr_ = result.str();
+  return str_repr_;
 }
 
 
@@ -364,7 +368,8 @@ Stmt BuildStmt(Schedule sch,
   stmt = ir::InjectPrefetch(stmt);
 
   // Phase 1
-  stmt = ir::StorageFlatten(stmt, out_binds, 64);
+  stmt = ir::StorageFlatten(stmt, out_binds, 64,
+                            config->instrument_bound_checkers);
   stmt = ir::CanonicalSimplify(stmt);
   if (loop_partition) {
     stmt = ir::LoopPartition(stmt, config->partition_const_loop);
@@ -380,7 +385,12 @@ Stmt BuildStmt(Schedule sch,
   stmt = ir::Simplify(stmt);
   stmt = ir::LowerStorageAccessInfo(stmt);
   stmt = ir::RemoveNoOp(stmt);
-  stmt = ir::RewriteUnsafeSelect(stmt);
+
+  if (!(config->disable_select_rewriting))
+    stmt = ir::RewriteUnsafeSelect(stmt);
+
+  if (config->instrument_bound_checkers)
+    stmt = ir::InstrumentBoundCheckers(stmt);
 
   return stmt;
 }
@@ -530,7 +540,9 @@ TVM_STATIC_IR_FUNCTOR(IRPrinter, vtable)
   p->stream << "restricted_func=" << op->restricted_func << ", ";
   p->stream << "detect_global_barrier=" << op->detect_global_barrier << ", ";
   p->stream << "partition_const_loop=" << op->partition_const_loop << ", ";
-  p->stream << "dump_pass_ir=" << op->dump_pass_ir;
+  p->stream << "dump_pass_ir=" << op->dump_pass_ir << ", ";
+  p->stream << "instrument_bound_checkers=" << op->instrument_bound_checkers << ", ";
+  p->stream << "disable_select_rewriting=" << op->disable_select_rewriting;
   p->stream << ")";
 });
 

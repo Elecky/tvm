@@ -34,7 +34,7 @@ class IRUseDefAnalysis : public IRMutator {
         value = this->Mutate(value);
       }
       Stmt body = this->Mutate(op->body);
-      if (value.same_as(value) && body.same_as(body)) return s;
+      if (value.same_as(op->value) && body.same_as(op->body)) return s;
       return AttrStmt::make(op->node, op->attr_key, value, body);
     } else if (op->attr_key == attr::channel_write_scope ||
                op->attr_key == attr::channel_read_scope) {
@@ -153,7 +153,8 @@ class HostDeviceSplitter : public IRMutator {
 
   Stmt Mutate_(const AttrStmt *op, const Stmt& s) final {
     if (op->attr_key == attr::thread_extent ||
-        op->attr_key == attr::pipeline_exec_scope) {
+        op->attr_key == attr::pipeline_exec_scope ||
+        op->attr_key == attr::device_scope) {
       return SplitDeviceFunc(s);
     }
     return IRMutator::Mutate_(op, s);

@@ -40,6 +40,40 @@ struct MultiBoxPriorAttrs : public tvm::AttrsNode<MultiBoxPriorAttrs> {
   }
 };
 
+struct MultiBoxTransformLocAttrs
+    : public tvm::AttrsNode<MultiBoxTransformLocAttrs> {
+  bool clip;
+  double threshold;
+  Array<IndexExpr> variances;
+
+  TVM_DECLARE_ATTRS(MultiBoxTransformLocAttrs,
+                    "relay.attrs.MultiBoxTransformLocAttrs") {
+    TVM_ATTR_FIELD(clip).set_default(true)
+      .describe("Clip out-of-boundary boxes.");
+    TVM_ATTR_FIELD(threshold).set_default(0.01)
+      .describe("Threshold to be a positive prediction.");
+    TVM_ATTR_FIELD(variances)
+      .set_default(Array<IndexExpr>({0.1f, 0.1f , 0.2f, 0.2f}))
+      .describe("Variances to be decoded from box regression output.");
+  }
+};
+
+/*! \brief Attributes used in non_maximum_suppression operators */
+struct NMSAttrs : public tvm::AttrsNode<NMSAttrs>{
+  double overlap_threshold;
+  bool force_suppress;
+  int topk;
+
+  TVM_DECLARE_ATTRS(NMSAttrs, "relay.attrs.NMSAttrs") {
+      TVM_ATTR_FIELD(overlap_threshold).set_default(0.5)
+        .describe("Non-maximum suppression threshold.");
+      TVM_ATTR_FIELD(force_suppress).set_default(false)
+        .describe("Suppress all detections regardless of class_id.");
+      TVM_ATTR_FIELD(topk).set_default(-1)
+        .describe("Keep maximum top k detections before nms, -1 for no limit.");
+  }
+};
+
 }  // namespace relay
 }  // namespace tvm
 #endif  // TVM_RELAY_ATTRS_VISION_H_

@@ -1,8 +1,14 @@
 import tvm
 import numpy as np
 from tvm import relay
-from tvm.relay.ir_pass import alpha_equal
-from tvm.relay.ir_builder import convert
+from tvm.relay import ir_pass
+
+def alpha_equal(x, y):
+    """
+    Wrapper around alpha equality which ensures that
+    the hash function respects equality.
+    """
+    return ir_pass.alpha_equal(x, y) and ir_pass.structural_hash(x) == ir_pass.structural_hash(y)
 
 def test_tensor_type_alpha_equal():
     t1 = relay.TensorType((3, 4), "float32")
@@ -29,9 +35,9 @@ def test_incomplete_type_alpha_equal():
 
 
 def test_type_param_alpha_equal():
-    t1 = relay.TypeParam("v1", relay.Kind.Type)
-    t2 = relay.TypeParam("v2", relay.Kind.Shape)
-    t3 = relay.TypeParam("v3", relay.Kind.Type)
+    t1 = relay.TypeVar("v1", relay.Kind.Type)
+    t2 = relay.TypeVar("v2", relay.Kind.Shape)
+    t3 = relay.TypeVar("v3", relay.Kind.Type)
 
     # only pointer equality and eq_map allow equal params
     assert t1 == t1
@@ -54,10 +60,10 @@ def test_func_type_alpha_equal():
     t1 = relay.TensorType((1, 2), "float32")
     t2 = relay.TensorType((1, 2, 3), "float32")
 
-    tp1 = relay.TypeParam("v1", relay.Kind.Type)
-    tp2 = relay.TypeParam("v2", relay.Kind.Type)
-    tp3 = relay.TypeParam("v3", relay.Kind.Shape)
-    tp4 = relay.TypeParam("v3", relay.Kind.Shape)
+    tp1 = relay.TypeVar("v1", relay.Kind.Type)
+    tp2 = relay.TypeVar("v2", relay.Kind.Type)
+    tp3 = relay.TypeVar("v3", relay.Kind.Shape)
+    tp4 = relay.TypeVar("v3", relay.Kind.Shape)
 
     broadcast = tvm.get_env_func("tvm.relay.type_relation.Broadcast")
     identity = tvm.get_env_func("tvm.relay.type_relation.Identity")
@@ -113,8 +119,8 @@ def test_func_type_alpha_equal():
 def test_tuple_type_alpha_equal():
     t1 = relay.TensorType((1, 2, 3), "float32")
     t2 = relay.TensorType((1, 2, 3, 4), "float32")
-    tp1 = relay.TypeParam("v1", relay.Kind.Type)
-    tp2 = relay.TypeParam("v2", relay.Kind.Type)
+    tp1 = relay.TypeVar("v1", relay.Kind.Type)
+    tp2 = relay.TypeVar("v2", relay.Kind.Type)
 
     tup1 = relay.TupleType(tvm.convert([t1, t2, tp1]))
     tup2 = relay.TupleType(tvm.convert([t1, t2, tp1]))
@@ -140,7 +146,8 @@ def test_type_relation_alpha_equal():
 
     # attrs are also compared only by pointer equality
     attr1 = tvm.make.node("attrs.TestAttrs", name="attr", padding=(3,4))
-    attr2 = tvm.make.node("attrs.TestAttrs", name="attr", padding=(3,4))
+    attr1_same = tvm.make.node("attrs.TestAttrs", name="attr", padding=(3,4))
+    attr2 = tvm.make.node("attrs.TestAttrs", name="attr", padding=(3,4,4))
 
     tr = relay.TypeRelation(broadcast, tvm.convert([t1, t2]), 1, attr1)
     same = relay.TypeRelation(broadcast, tvm.convert([t1, t2]), 1, attr1)
@@ -148,6 +155,7 @@ def test_type_relation_alpha_equal():
     diff_order = relay.TypeRelation(broadcast, tvm.convert([t2, t1]), 1, attr1)
     diff_args = relay.TypeRelation(broadcast, tvm.convert([t2, t3]), 1, attr1)
     diff_attr = relay.TypeRelation(broadcast, tvm.convert([t1, t2]), 1, attr2)
+    same_attr = relay.TypeRelation(broadcast, tvm.convert([t1, t2]), 1, attr1_same)
 
     bigger = relay.TypeRelation(identity, tvm.convert([t1, t3, t2]), 2, attr1)
     diff_num_inputs = relay.TypeRelation(identity, tvm.convert([t1, t3, t2]), 1, attr2)
@@ -158,17 +166,18 @@ def test_type_relation_alpha_equal():
     assert tr != diff_order
     assert tr != diff_args
     assert tr != diff_attr
+    assert tr == same_attr
     assert tr != bigger
 
     assert bigger != diff_num_inputs
 
 
 def test_constant_alpha_equal():
-    x = convert(1)
-    y = convert(2)
+    x = relay.const(1)
+    y = relay.const(2)
     assert alpha_equal(x, x)
     assert not alpha_equal(x, y)
-    assert alpha_equal(x, convert(1))
+    assert alpha_equal(x, relay.const(1))
 
 
 def test_var_alpha_equal():
@@ -180,12 +189,31 @@ def test_var_alpha_equal():
     assert not alpha_equal(v1, v2)
 
     # let node allows for setting the eq_map
-    l1 = relay.Let(v1, convert(1), v1)
-    l2 = relay.Let(v2, convert(1), v2)
-    l3 = relay.Let(v1, convert(1), v2)
+    l1 = relay.Let(v1, relay.const(1), v1)
+    l2 = relay.Let(v2, relay.const(1), v2)
+    l3 = relay.Let(v1, relay.const(1), v2)
 
     assert alpha_equal(l1, l2)
     assert not alpha_equal(l1, l3)
+
+    # type annotations
+    tt1 = relay.TensorType([], "int32")
+    tt2 = relay.TensorType([], "int32")
+    tt3 = relay.TensorType([], "int64")
+    v3 = relay.Var("v3", tt1)
+    v4 = relay.Var("v4", tt2)
+    v5 = relay.Var("v5", tt3)
+
+    l4 = relay.Let(v3, relay.const(1), v3)
+    l5 = relay.Let(v4, relay.const(1), v4)
+    l6 = relay.Let(v5, relay.const(1), v5)
+
+    # same annotations
+    assert alpha_equal(l4, l5)
+    # different annotations
+    assert not alpha_equal(l4, l6)
+    # one null annotation
+    assert not alpha_equal(l1, l4)
 
 
 def test_global_var_alpha_equal():
@@ -198,40 +226,44 @@ def test_global_var_alpha_equal():
 
 
 def test_tuple_alpha_equal():
+    v0 = relay.Var("v0")
     v1 = relay.Var("v1")
     v2 = relay.Var("v2")
 
     # unit value is a valid tuple
     assert alpha_equal(relay.Tuple([]), relay.Tuple([]))
 
-    tup = relay.Tuple([v1, convert(2), convert(3), relay.Tuple([convert(4)])])
-    same = relay.Tuple([v1, convert(2), convert(3), relay.Tuple([convert(4)])])
+    tup = relay.Tuple([v0, relay.const(2), relay.const(3), relay.Tuple([relay.const(4)])])
+    same = relay.Tuple([v0, relay.const(2), relay.const(3), relay.Tuple([relay.const(4)])])
 
     assert alpha_equal(tup, same)
 
     # use the eq_map
+
+
     let_tup = relay.Let(v1, tup, v1)
-    let_mapped = relay.Let(v2, relay.Tuple([v2, convert(2), convert(3),
-                                            relay.Tuple([convert(4)])]),
+    let_mapped = relay.Let(v2, relay.Tuple([v0, relay.const(2), relay.const(3),
+                                            relay.Tuple([relay.const(4)])]),
                            v2)
+
     assert alpha_equal(let_tup, let_mapped)
 
-    more_fields = relay.Tuple([v1, convert(2), convert(3), relay.Tuple([convert(4)]), v2])
+    more_fields = relay.Tuple([v1, relay.const(2), relay.const(3), relay.Tuple([relay.const(4)]), v2])
     assert not alpha_equal(tup, more_fields)
 
-    fewer_fields = relay.Tuple([v1, convert(2), convert(3)])
+    fewer_fields = relay.Tuple([v1, relay.const(2), relay.const(3)])
     assert not alpha_equal(tup, fewer_fields)
 
-    different_end = relay.Tuple([v1, convert(2), convert(3),
-                           relay.Tuple([convert(5)])])
+    different_end = relay.Tuple([v1, relay.const(2), relay.const(3),
+                           relay.Tuple([relay.const(5)])])
     assert not alpha_equal(tup, different_end)
 
-    different_start = relay.Tuple([v2, convert(2), convert(3),
-                                 relay.Tuple([convert(4)])])
+    different_start = relay.Tuple([v2, relay.const(2), relay.const(3),
+                                 relay.Tuple([relay.const(4)])])
     assert not alpha_equal(tup, different_start)
 
-    longer_at_end = relay.Tuple([v1, convert(2), convert(3),
-                                 relay.Tuple([convert(4), convert(5)])])
+    longer_at_end = relay.Tuple([v1, relay.const(2), relay.const(3),
+                                 relay.Tuple([relay.const(4), relay.const(5)])])
     assert not alpha_equal(tup, longer_at_end)
 
 
@@ -254,10 +286,10 @@ def test_function_alpha_equal():
     v4 = relay.Var("v4", tt2)
     vret = relay.Constant(tvm.nd.array(np.ones(1)))
 
-    tp1 = relay.TypeParam("tp1", relay.Kind.Type)
-    tp2 = relay.TypeParam("tp2", relay.Kind.Type)
-    tp3 = relay.TypeParam("tp3", relay.Kind.Shape)
-    tp4 = relay.TypeParam("tp4", relay.Kind.Shape)
+    tp1 = relay.TypeVar("tp1", relay.Kind.Type)
+    tp2 = relay.TypeVar("tp2", relay.Kind.Type)
+    tp3 = relay.TypeVar("tp3", relay.Kind.Shape)
+    tp4 = relay.TypeVar("tp4", relay.Kind.Shape)
 
     basic_args = [relay.Var("v3", tt1), relay.Var("v4", tt2)]
     basic_tps = [tp1, tp2]
@@ -307,6 +339,14 @@ def test_function_alpha_equal():
     tupled_example = relay.Function(basic_args, relay.Tuple([v3, v4]), tt3)
     assert not alpha_equal(func, tupled_example)
 
+    # nullable
+    no_ret_type = relay.Function(basic_args, v4, None, [tp1, tp2])
+    # both null
+    assert alpha_equal(no_ret_type, no_ret_type)
+    # one null
+    assert not alpha_equal(func, no_ret_type)
+    assert not alpha_equal(no_ret_type, func)
+
 
 def test_call_alpha_equal():
     v1 = relay.Var("v1")
@@ -314,16 +354,17 @@ def test_call_alpha_equal():
 
     # attrs are compared only by pointer equality
     attr1 = tvm.make.node("attrs.TestAttrs", name="attr", padding=(3,4))
-    attr2 = tvm.make.node("attrs.TestAttrs", name="attr", padding=(3,4))
+    attr1_same = tvm.make.node("attrs.TestAttrs", name="attr", padding=(3,4))
+    attr2 = tvm.make.node("attrs.TestAttrs", name="attr", padding=(3,4,4))
 
     tt1 = relay.TensorType((1, 2, 3), "float32")
     tt2 = relay.TensorType((), "int8")
 
-    basic_args = [convert(1), convert(2), v2, relay.Tuple([])]
+    basic_args = [relay.const(1), relay.const(2), v2, relay.Tuple([])]
 
     # manually writing out args to ensure that args does not rely on
     # pointer equality
-    call = relay.Call(v1, [convert(1), convert(2), v2, relay.Tuple([])],
+    call = relay.Call(v1, [relay.const(1), relay.const(2), v2, relay.Tuple([])],
                       attr1, [tt1])
     same = relay.Call(v1, basic_args, attr1, [tt1])
     assert alpha_equal(call, same)
@@ -331,23 +372,26 @@ def test_call_alpha_equal():
     different_fn = relay.Call(v2, basic_args, attr1, [tt1])
     assert not alpha_equal(call, different_fn)
 
-    fewer_args = relay.Call(v1, [convert(1), convert(2), v2], attr1, [tt1])
+    fewer_args = relay.Call(v1, [relay.const(1), relay.const(2), v2], attr1, [tt1])
     assert not alpha_equal(call, fewer_args)
 
-    reordered_args = relay.Call(v1, [convert(2), convert(1),
+    reordered_args = relay.Call(v1, [relay.const(2), relay.const(1),
                                      relay.Tuple([]), v2], attr1, [tt1])
     assert not alpha_equal(call, reordered_args)
 
-    different_args = relay.Call(v1, [convert(1), convert(2), convert(3)],
+    different_args = relay.Call(v1, [relay.const(1), relay.const(2), relay.const(3)],
                                 attr1, [tt1])
     assert not alpha_equal(call, different_args)
 
-    more_args = relay.Call(v1, [convert(1), convert(2), v2, relay.Tuple([]),
-                                convert(3), convert(4)], attr1, [tt1])
+    more_args = relay.Call(v1, [relay.const(1), relay.const(2), v2, relay.Tuple([]),
+                                relay.const(3), relay.const(4)], attr1, [tt1])
     assert not alpha_equal(call, more_args)
 
     different_attrs = relay.Call(v1, basic_args, attr2, [tt1])
     assert not alpha_equal(call, different_attrs)
+
+    same_attrs = relay.Call(v1, basic_args, attr1_same, [tt1])
+    assert alpha_equal(call, same_attrs)
 
     no_type_args = relay.Call(v1, basic_args, attr1)
     assert not alpha_equal(call, no_type_args)
@@ -367,27 +411,27 @@ def test_let_alpha_equal():
     v2 = relay.Var("v2")
     v3 = relay.Var("v3")
 
-    let = relay.Let(v1, convert(2), v1)
-    mapped = relay.Let(v2, convert(2), v2)
+    let = relay.Let(v1, relay.const(2), v1)
+    mapped = relay.Let(v2, relay.const(2), v2)
     assert alpha_equal(let, mapped)
 
-    mismatched_var = relay.Let(v2, convert(2), v3)
+    mismatched_var = relay.Let(v2, relay.const(2), v3)
     assert not alpha_equal(let, mismatched_var)
 
-    different_value = relay.Let(v2, convert(3), v2)
+    different_value = relay.Let(v2, relay.const(3), v2)
     assert not alpha_equal(let, different_value)
 
-    different_body = relay.Let(v2, convert(3), convert(12))
+    different_body = relay.Let(v2, relay.const(3), relay.const(12))
     assert not alpha_equal(let, different_body)
 
     # specified types must match
 
-    let_with_type = relay.Let(v1_wtype, convert(2), v1_wtype)
-    same_type = relay.Let(v1_wtype, convert(2), v1_wtype)
+    let_with_type = relay.Let(v1_wtype, relay.const(2), v1_wtype)
+    same_type = relay.Let(v1_wtype, relay.const(2), v1_wtype)
     assert alpha_equal(let_with_type, same_type)
     assert not alpha_equal(let, let_with_type)
     v2 = relay.Var("v1", tt2)
-    different_type = relay.Let(v2, convert(2), v2)
+    different_type = relay.Let(v2, relay.const(2), v2)
     assert not alpha_equal(let_with_type, different_type)
 
 
@@ -395,17 +439,17 @@ def test_if_alpha_equal():
     v1 = relay.Var("v1")
     v2 = relay.Var("v2")
 
-    if_sample = relay.If(v1, convert(1), relay.Tuple([convert(2), convert(3)]))
-    same = relay.If(v1, convert(1), relay.Tuple([convert(2), convert(3)]))
+    if_sample = relay.If(v1, relay.const(1), relay.Tuple([relay.const(2), relay.const(3)]))
+    same = relay.If(v1, relay.const(1), relay.Tuple([relay.const(2), relay.const(3)]))
     assert alpha_equal(if_sample, same)
 
-    different_cond = relay.If(v2, convert(1), relay.Tuple([convert(2), convert(3)]))
+    different_cond = relay.If(v2, relay.const(1), relay.Tuple([relay.const(2), relay.const(3)]))
     assert not alpha_equal(if_sample, different_cond)
 
-    different_true = relay.If(v1, convert(2), relay.Tuple([convert(2), convert(3)]))
+    different_true = relay.If(v1, relay.const(2), relay.Tuple([relay.const(2), relay.const(3)]))
     assert not alpha_equal(if_sample, different_true)
 
-    different_false = relay.If(v1, convert(1), relay.Tuple([]))
+    different_false = relay.If(v1, relay.const(1), relay.Tuple([]))
     assert not alpha_equal(if_sample, different_false)
 
 
@@ -417,6 +461,27 @@ def test_op_alpha_equal():
 
     op3 = relay.op.get("take")
     assert not alpha_equal(op1, op3)
+
+
+def test_graph_equal():
+    x = relay.var("x")
+
+    y0 = relay.add(x, x)
+    z0 = relay.add(y0, y0)
+
+    y1 = relay.add(x, x)
+    z1 = relay.add(y1, y1)
+
+    z3 = relay.add(relay.add(x, x), relay.add(x, x))
+
+    assert alpha_equal(z0, z1)
+
+    # z3's dataflow format is different from z0
+    # z0 is computed from a common y0 node
+    # Relay view them as different programs
+    # Check the difference in the text format.
+    assert not alpha_equal(z0, z3)
+
 
 
 if __name__ == "__main__":
@@ -435,3 +500,5 @@ if __name__ == "__main__":
     test_let_alpha_equal()
     test_if_alpha_equal()
     test_op_alpha_equal()
+    test_var_alpha_equal()
+    test_graph_equal()

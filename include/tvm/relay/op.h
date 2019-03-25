@@ -74,6 +74,17 @@ class OpNode : public relay::ExprNode {
     v->Visit("support_level", &support_level);
   }
 
+  /*!
+   * \brief Check that if current op is a "primtive operator".
+   * That is the arguments are all type variables, and there is a single
+   * type relation applied to the input and output types.
+   */
+  bool IsPrimitiveOp() const {
+    if (is_primitive_ != -1) return is_primitive_ != 0;
+    is_primitive_ = this->IsPrimitiveOp_() ? 1 : 0;
+    return is_primitive_ != 0;
+  }
+
   static constexpr const char* _type_key = "relay.Op";
   TVM_DECLARE_NODE_TYPE_INFO(OpNode, ExprNode);
 
@@ -81,9 +92,24 @@ class OpNode : public relay::ExprNode {
   // friend class
   friend class GenericOpMap;
   friend class OpRegistry;
+  friend bool IsPrimitiveOp(const Expr&);
   // Program internal unique index of operator.
   // Used to help index the program.
   uint32_t index_{0};
+  // whether this is a primitive op. -1 means unknown.
+  mutable int is_primitive_{-1};
+  // Internal function to compute if it is primitive op
+  bool IsPrimitiveOp_() const {
+    const auto& fn_ty = this->op_type;
+    if (fn_ty->type_constraints.size() != 1) return false;
+    const TypeRelationNode* rel = fn_ty->type_constraints[0].as<TypeRelationNode>();
+    if (rel == nullptr) return false;
+    // validate if the type parameter matches up
+    for (size_t i = 0; i < fn_ty->type_params.size(); ++i) {
+      if (!fn_ty->type_params[i].same_as(rel->args[i])) return false;
+    }
+    return true;
+  }
 };
 
 /*!
@@ -250,6 +276,16 @@ class GenericOpMap {
    */
   template <typename ValueType>
   inline ValueType get(const Op& op, ValueType def_value) const;
+  /*!
+   * \brief get the corresponding value element at op with default value.
+   * \param expr The key to the map
+   * \param def_value The default value when the key does not exist
+   *         or if expr is not an Op.
+   * \return the const reference to the content value.
+   * \tparam ValueType The content value type.
+   */
+  template <typename ValueType>
+  inline ValueType get(const Expr& expr, ValueType def_value) const;
 
  private:
   friend class OpRegistry;
@@ -287,6 +323,14 @@ class OpMap {
    * \return the const reference to the content value.
    */
   inline ValueType get(const Op& op, ValueType def_value) const;
+  /*!
+   * \brief get the corresponding value element at op with default value.
+   * \param expr The key to the map
+   * \param def_value The default value when the key does not exist
+   *         or if expr is not an Op.
+   * \return the const reference to the content value.
+   */
+  inline ValueType get(const Expr& expr, ValueType def_value) const;
 
  private:
   friend class Op;
@@ -371,14 +415,14 @@ inline OpRegistry& OpRegistry::add_type_rel(
     env_type_rel_func = env_func;
   }
 
-  Array<TypeParam> type_params;
+  Array<TypeVar> type_params;
   Array<Type> arg_types;
 
   // Add inputs.
   std::string input_name_prefix = "in";
   for (int i = 0; i < get()->num_inputs; i++) {
     auto name = input_name_prefix + std::to_string(i);
-    auto param = TypeParamNode::make(name, TypeParamNode::Kind::kType);
+    auto param = TypeVarNode::make(name, TypeVarNode::Kind::kType);
     type_params.push_back(param);
     arg_types.push_back(param);
   }
@@ -386,7 +430,7 @@ inline OpRegistry& OpRegistry::add_type_rel(
   Array<Type> ty_call_args = arg_types;
 
   // Add output type.
-  auto out_param = TypeParamNode::make("out", TypeParamNode::Kind::kType);
+  auto out_param = TypeVarNode::make("out", TypeVarNode::Kind::kType);
   type_params.push_back(out_param);
   // this will trigger copy on write.
   ty_call_args.push_back(out_param);
@@ -471,6 +515,21 @@ inline ValueType GenericOpMap::get(const Op& op, ValueType value) const {
 }
 
 template <typename ValueType>
+inline ValueType GenericOpMap::get(const Expr& expr, ValueType value) const {
+  CHECK(expr.defined());
+  if (const OpNode* op = expr.as<OpNode>()) {
+    const uint32_t idx = op->index_;
+    if (idx < data_.size() && data_[idx].second != 0) {
+      return data_[idx].first;
+    } else {
+      return value;
+    }
+  } else {
+    return value;
+  }
+}
+
+template <typename ValueType>
 inline int OpMap<ValueType>::count(const Op& op) const {
   return map_.count(op);
 }
@@ -479,10 +538,33 @@ template <typename ValueType>
 inline ValueType OpMap<ValueType>::operator[](const Op& op) const {
   return map_[op];
 }
+
 template <typename ValueType>
 inline ValueType OpMap<ValueType>::get(const Op& op,
                                        ValueType def_value) const {
   return map_.get<ValueType>(op, def_value);
+}
+
+template <typename ValueType>
+inline ValueType OpMap<ValueType>::get(const Expr& expr,
+                                       ValueType def_value) const {
+  return map_.get<ValueType>(expr, def_value);
+}
+
+
+/*!
+ * \brief Check that an expression is a "primtive operator".
+ *
+ * Will return true if the expression is an operator which
+ * matches the form of primtive operators registered directly
+ * by the Relay codebase.
+ *
+ * That is the arguments are all type variables, and there is a single
+ * type relation applied to the input and output types.
+ */
+inline bool IsPrimitiveOp(const Expr& expr) {
+  const auto* op = expr.as<OpNode>();
+  return op != nullptr && op->IsPrimitiveOp();
 }
 
 }  // namespace relay

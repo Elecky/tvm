@@ -112,15 +112,17 @@ class ExprFunctor<R(const Expr& n, Args...)> {
   }
 };
 
-/*! \brief A simple visitor wrapper around ExprFunctor.
+/*!
+ * \brief A simple visitor wrapper around ExprFunctor.
+ *  Recursively visit the content.
  *
- * Exposes two visitors with default traversal strategies, one
- * which doesn't compute a result but can mutate internal state,
- * and another which functionally builds a new Expr.
+ * ExprVisitor treats Expr as dataflow graph,
+ * and only visit each Expr node once.
  */
-
-class ExprVisitor : public ::tvm::relay::ExprFunctor<void(const Expr& n)> {
+class ExprVisitor
+    : public ::tvm::relay::ExprFunctor<void(const Expr& n)> {
  public:
+  void VisitExpr(const Expr& expr) override;
   void VisitExpr_(const VarNode* op) override;
   void VisitExpr_(const GlobalVarNode* op) override;
   void VisitExpr_(const ConstantNode* op) override;
@@ -132,17 +134,30 @@ class ExprVisitor : public ::tvm::relay::ExprFunctor<void(const Expr& n)> {
   void VisitExpr_(const OpNode* op) override;
   void VisitExpr_(const TupleGetItemNode* op) override;
   virtual void VisitType(const Type& t);
+
+ protected:
+  // Internal visiting counter
+  std::unordered_map<const Node*, size_t> visit_counter_;
 };
 
-/*! \brief A wrapper around ExprFunctor which functionally updates the AST.
-*
-* ExprMutator uses memoization and self return in order to amortize
-* the cost of using functional updates.
-*/
+/*!
+ * \brief A wrapper around ExprFunctor which functionally updates the AST.
+ *
+ * ExprMutator treats Expr as dataflow graph, and only Mutate each Expr once.
+ * The mutated results are memoized in a map and reused so that
+ * local transformation on the dataflow preserves the graph structure.
+ */
 class ExprMutator
     : public ::tvm::relay::ExprFunctor<Expr(const Expr&)> {
  public:
-  Expr Mutate(const Expr& expr);
+  /*!
+   * \brief Mutate is alias for VisitExpr
+   * \return expr.
+   */
+  Expr Mutate(const Expr& expr) {
+    return this->VisitExpr(expr);
+  }
+  Expr VisitExpr(const Expr& expr) override;
   Expr VisitExpr_(const VarNode* op) override;
   Expr VisitExpr_(const ConstantNode* op) override;
   Expr VisitExpr_(const GlobalVarNode* op) override;
@@ -153,7 +168,8 @@ class ExprMutator
   Expr VisitExpr_(const LetNode* op) override;
   Expr VisitExpr_(const IfNode* op) override;
   Expr VisitExpr_(const TupleGetItemNode* op) override;
-  /*! \brief Used to visit the types inside of expressions.
+  /*!
+   * \brief Used to visit the types inside of expressions.
    *
    * Can be overloaded to transform the types in arbitrary
    * ways, one way would be to define a sub-class of type
@@ -161,10 +177,29 @@ class ExprMutator
    */
   virtual Type VisitType(const Type& t);
 
- private:
+ protected:
   /*! \brief Internal map used for memoization. */
   std::unordered_map<Expr, Expr, NodeHash, NodeEqual> memo_;
 };
+
+/*!
+ * \brief recursively visit the ir in post DFS order node, apply fvisit
+ * Each node is guaranteed to be visited only once.
+ * \param node The ir to be visited.
+ * \param fvisit The visitor function to be applied.
+ */
+void PostOrderVisit(const NodeRef& node, std::function<void(const NodeRef&)> fvisit);
+
+/*
+ * \brief Bind function parameters or free variables.
+ *
+ * Parameter binding can only happen if expr is a Function.
+ * binds cannot change internal arguments of internal functions.
+ *
+ * \param expr The function to be binded.
+ * \param binds The map of arguments to
+ */
+Expr Bind(const Expr& expr, const tvm::Map<Var, Expr>& binds);
 
 }  // namespace relay
 }  // namespace tvm

@@ -5,7 +5,13 @@
  */
 #include <tvm/relay/op.h>
 #include <tvm/relay/attrs/nn.h>
-#include "layout.h"
+#include <tvm/relay/op_attr_types.h>
+#include <tvm/build_module.h>
+#include <topi/elemwise.h>
+#include <topi/nn/upsampling.h>
+#include <vector>
+#include "../op_common.h"
+#include "../layout.h"
 
 namespace tvm {
 namespace relay {
@@ -25,7 +31,7 @@ bool UpSamplingRel(const Array<Type>& types,
   const UpSamplingAttrs* param = attrs.as<UpSamplingAttrs>();
   CHECK(param != nullptr);
   const Layout in_layout(param->layout);
-  CHECK(in_layout.convertible(kNCHW))
+  CHECK(in_layout.Convertible(kNCHW))
     << "UpSampling only support input layouts that are convertible from NCHW."
     << " But got " << in_layout;
 
@@ -78,10 +84,42 @@ RELAY_REGISTER_OP("nn.upsampling")
            (batch_size, in_height*scale, in_width*scale, channels)
 
 )code" TVM_ADD_FILELINE)
+.set_attrs_type_key("relay.attrs.UpSamplingAttrs")
 .set_num_inputs(1)
 .add_argument("data", "Tensor", "The input tensor.")
 .set_support_level(2)
-.add_type_rel("UpSampling", UpSamplingRel);
+.add_type_rel("UpSampling", UpSamplingRel)
+.set_attr<TOpPattern>("TOpPattern", kInjective)
+.set_attr<FTVMCompute>(
+  "FTVMCompute", [](const Attrs& attrs,
+                    const Array<Tensor>& inputs,
+                    const Type& out_type,
+                    const Target& target) {
+    const auto* uattrs = attrs.as<UpSamplingAttrs>();
+    CHECK(uattrs != nullptr);
+    auto out_tt = out_type.as<TensorTypeNode>();
+    CHECK(out_tt) << "expected a tensor type: " << out_type;
+    CHECK(uattrs->layout == "NCHW" || uattrs->layout == "NHWC")
+      << "unknown layout: " << uattrs->layout;
+
+    Array<HalideIR::Expr> oshape;
+    if (uattrs->layout == "NCHW") {
+      oshape.push_back(out_tt->shape[2]);
+      oshape.push_back(out_tt->shape[3]);
+    } else if (uattrs->layout == "NHWC") {
+      oshape.push_back(out_tt->shape[1]);
+      oshape.push_back(out_tt->shape[2]);
+    }
+
+    return Array<Tensor>{
+      topi::nn::upsampling(
+        inputs[0],
+        oshape,
+        uattrs->layout,
+        uattrs->method)
+    };
+});
+
 
 }  // namespace relay
 }  // namespace tvm

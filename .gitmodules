@@ -10,3 +10,6 @@
 [submodule "nnpu/NNPUSim"]
 	path = nnpu/NNPUSim
 	url = https://github.com/Elecky/NNPUSim.git
+[submodule "3rdparty/rang"]
+	path = 3rdparty/rang
+	url = https://github.com/agauniyal/rang

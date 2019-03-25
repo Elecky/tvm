@@ -21,20 +21,26 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import init_ops
 from tensorflow.core.framework import graph_pb2
 
-import nnvm.testing.tf
+import tvm.relay.testing.tf as tf_testing
 
 #######################################################################
 # Generic run functions for TVM & tensorflow
 # ------------------------------------------
-def run_tvm_graph(graph_def, input_data, input_node, num_output=1, target='llvm'):
+def convert_to_list(x):
+    if not isinstance(x, list):
+        x = [x]
+    return x
+
+def run_tvm_graph(graph_def, input_data, input_node, num_output=1, target='llvm', out_names=None):
     """ Generic function to compile on nnvm and execute on tvm """
+    input_data = convert_to_list(input_data)
+    input_node = convert_to_list(input_node)
 
     layout = None
     if target == "cuda":
         layout = "NCHW"
-
-    sym, params = nnvm.frontend.from_tensorflow(graph_def, layout=layout)
     target_host = 'llvm'
+
     if isinstance(input_data, list):
         shape_dict = {}
         dtype_dict = {}
@@ -44,7 +50,8 @@ def run_tvm_graph(graph_def, input_data, input_node, num_output=1, target='llvm'
     else:
         shape_dict = {input_node: input_data.shape}
         dtype_dict = {input_node: input_data.dtype}
-
+   
+    sym, params = nnvm.frontend.from_tensorflow(graph_def, layout=layout, shape=shape_dict, outputs=out_names)
     graph, lib, params = nnvm.compiler.build(sym, target=target, target_host=target_host, shape=shape_dict,
                                              dtype=dtype_dict, params=params)
 
@@ -52,37 +59,34 @@ def run_tvm_graph(graph_def, input_data, input_node, num_output=1, target='llvm'
     from tvm.contrib import graph_runtime
     m = graph_runtime.create(graph, lib, ctx)
     # set inputs
-    if isinstance(input_data, list):
-        for i, e in enumerate(input_node):
-            m.set_input(e, tvm.nd.array(input_data[i].astype(input_data[i].dtype)))
-    else:
-        m.set_input(input_node, tvm.nd.array(input_data.astype(input_data.dtype)))
+    for i, e in enumerate(input_node):
+        m.set_input(e, tvm.nd.array(input_data[i].astype(input_data[i].dtype)))
 
     m.set_input(**params)
     # execute
     m.run()
     # get outputs
-    if num_output > 1:
-        tvm_output_list = []
-        for i in range(0, num_output):
-            tvm_output = m.get_output(i)
-            tvm_output_list.append(tvm_output.asnumpy())
-        return tvm_output_list
-    else:
-        tvm_output = m.get_output(0)
-        return tvm_output.asnumpy()
+    assert out_names is None or num_output == len(out_names),"out_names: {} num_output: {}".format(
+                                                              out_names, num_output)
+    tvm_output_list = []
+    for i in range(0, num_output):
+        tvm_output = m.get_output(i)
+        tvm_output_list.append(tvm_output.asnumpy())
+    return tvm_output_list
 
 def run_tf_graph(sess, input_data, input_node, output_node):
     """ Generic function to execute tensorflow """
+    input_data = convert_to_list(input_data)
+    input_node = convert_to_list(input_node)
+    output_node = convert_to_list(output_node)
 
-    tensor = sess.graph.get_tensor_by_name(output_node)
+    tensor = [0] * len(output_node)
+    for i in range(len(output_node)):
+        tensor[i] = sess.graph.get_tensor_by_name(output_node[i])
 
-    if isinstance(input_data, list):
-        input_dict = {}
-        for i, e in enumerate(input_node):
-            input_dict[e] = input_data[i]
-    else:
-        input_dict = {input_node: input_data}
+    input_dict = {}
+    for i, e in enumerate(input_node):
+        input_dict[e] = input_data[i]
 
     output_data = sess.run(tensor, input_dict)
     return output_data
@@ -91,14 +95,16 @@ def run_tf_graph(sess, input_data, input_node, output_node):
 def compare_tf_with_tvm(in_data, in_name, out_name, init_global_variables=False, no_gpu=False):
     """Generic function to generate and compare tensorflow and TVM output"""
 
-    out_node = out_name.split(':')[0] if ":" in out_name else out_name
+    out_name = convert_to_list(out_name)
+    out_node = [0]*len(out_name)
+    for i in range(len(out_name)):
+        out_node[i] = out_name[i].split(':')[0] if ":" in out_name[i] else out_name[i]
 
-    if isinstance(in_name, list):
-        in_node = [0]*len(in_name)
-        for i in range(len(in_name)):
-            in_node[i] = in_name[i].split(':')[0] if ":" in in_name[i] else in_name[i]
-    else:
-        in_node = in_name.split(':')[0] if ":" in in_name else in_name
+    in_data = convert_to_list(in_data)
+    in_name = convert_to_list(in_name)
+    in_node = [0]*len(in_name)
+    for i in range(len(in_name)):
+        in_node[i] = in_name[i].split(':')[0] if ":" in in_name[i] else in_name[i]
 
     with tf.Session() as sess:
         if init_global_variables:
@@ -106,9 +112,8 @@ def compare_tf_with_tvm(in_data, in_name, out_name, init_global_variables=False,
         final_graph_def = tf.graph_util.convert_variables_to_constants(
             sess,
             sess.graph.as_graph_def(add_shapes=True),
-            [out_node],
+            out_node,
             )
-
         tf_output = run_tf_graph(sess, in_data, in_name, out_name)
 
         for device in ["llvm", "cuda"]:
@@ -119,8 +124,12 @@ def compare_tf_with_tvm(in_data, in_name, out_name, init_global_variables=False,
             if no_gpu and device == 'cuda':
                 continue
 
-            tvm_output = run_tvm_graph(final_graph_def, in_data, in_node, target=device)
-            np.testing.assert_allclose(tf_output, tvm_output, atol=1e-5, rtol=1e-5)
+            tvm_output = run_tvm_graph(final_graph_def, in_data, in_node,
+                                       num_output=len(out_node), target=device, out_names=out_name)
+            # since the names from tensorflow and nnvm runs are not exactly same, 
+            # first len(tf_output) will be compared
+            for i in range(len(tf_output)):
+                tvm.testing.assert_allclose(tf_output[i], tvm_output[i], atol=1e-5, rtol=1e-5)
 
         sess.close()
 
@@ -259,6 +268,7 @@ def test_forward_reshape():
     _test_reshape(np.arange(6), [3, -1])
     _test_reshape(np.arange(6), [-1])
 
+#######################################################################
 #######################################################################
 # Squeeze
 # -------
@@ -426,11 +436,15 @@ def _test_stridedslice(ip_shape, begin, end, stride, dtype,
 
 def test_forward_stridedslice():
     '''test StridedSlice'''
-    return
+
     _test_stridedslice((3, 4, 3), [1, -1, 0], [4, -5, 3], [2, -1, 1], 'float32')
     _test_stridedslice((3, 4, 3), [1, 0], [4, 3], [2, 1], 'float32', ellipsis_mask=8)
+    _test_stridedslice((3, 4, 3), [1, 0], [4, 2], [2, 1], 'float32', ellipsis_mask=2)
+    _test_stridedslice((3, 4, 5, 3), [1, 0], [4, 2], [2, 1], 'float32', ellipsis_mask=2)
+    _test_stridedslice((3, 4, 5, 3), [1, 0, 1], [4, 2, 2], [2, 1, 1], 'float32', ellipsis_mask=2)
     _test_stridedslice((3, 4, 3), [1, 1, 0], [4, 4, 2], [2, 1, 1], 'float32', new_axis_mask=5)
     _test_stridedslice((3, 4, 3), [1, 1, 1], [4, 4, 1], [2, 1, 1], 'float32', ellipsis_mask=2, new_axis_mask=4)
+    _test_stridedslice((6, 4, 5), [1, 1, 1], [6, 3, 4], [2, 1, 1], 'float32', ellipsis_mask=2, new_axis_mask=5)
     _test_stridedslice((3, 4, 3), [1, 1, 2], [4, 4, 3], [2, 1, 1], 'float32', ellipsis_mask=4, new_axis_mask=2)
     _test_stridedslice((3, 4, 3), [1, 1, 2], [4, 4, 3], [2, 1, 1], 'float32', ellipsis_mask=2, new_axis_mask=3)
     _test_stridedslice((3, 4, 3), [1, 1, 0], [4, 4, 1], [2, 1, 1], 'float32', ellipsis_mask=2, new_axis_mask=3)
@@ -449,6 +463,7 @@ def test_forward_stridedslice():
     _test_stridedslice((3, 4, 5, 4, 5, 6), [1, 2, 0, -3], [4, 5, 3, 3], [2, 2, 1, 1],
                        'float32', shrink_axis_mask=8, new_axis_mask=1, ellipsis_mask=2, begin_mask=5,
                        end_mask=8)
+    _test_stridedslice((1), [0], [1], [1], 'float32', shrink_axis_mask=1)
 
 
 #######################################################################
@@ -490,6 +505,85 @@ def test_forward_gather():
 
 
 #######################################################################
+# Split
+# -----
+
+def _test_split(in_shape, axis, num_or_size_splits, dtype):
+    np_data = np.random.uniform(-5, 5, size=in_shape).astype(dtype)
+
+    """ One iteration of a Split """
+    tf.reset_default_graph()
+    in_data = tf.placeholder(dtype, in_shape, name="in_data")
+    num_split = len(num_or_size_splits) if isinstance(num_or_size_splits, list) else num_or_size_splits
+    tf.split(in_data, num_or_size_splits, axis=axis)
+
+    compare_tf_with_tvm([np_data], ['in_data:0'], [f'split:{n}' for n in range(num_split)])
+
+    # and now test together with concat
+    tf.reset_default_graph()
+    in_data = tf.placeholder(dtype, in_shape, name="in_data")
+    splitted = tf.split(in_data, num_or_size_splits, axis=axis)
+    tf.concat(splitted, axis)
+
+    compare_tf_with_tvm([np_data], 'in_data:0', 'concat:0')
+
+def test_forward_split():
+    '''test split layer'''
+    # rank 1
+    _test_split((3,), 0, 1, 'float32')
+    _test_split((3,), 0, 3, 'float32')
+    _test_split((6,), 0, 3, 'float32')
+    # rank 2
+    _test_split((6, 2), 0, 3, 'float32')
+    _test_split((2, 6), 1, 6, 'float32')
+    # rank 3
+    _test_split((6, 2, 4), 0, 2, 'int32')
+    _test_split((2, 6, 4), 1, 3, 'float32')
+    _test_split((2, 4, 6), 2, 1, 'float32')
+    # rank 4
+    _test_split((6, 1, 3, 5), 0, 3, 'float32')
+    _test_split((1, 6, 3, 5), 1, 3, 'float32')
+    _test_split((1, 3, 6, 5), 2, 3, 'float32')
+    _test_split((1, 3, 5, 6), 3, 3, 'float32')
+    # split along negative axis
+    _test_split((6, 1, 3, 5), -4, 3, 'float32')
+    _test_split((1, 6, 3, 5), -3, 3, 'float32')
+    _test_split((1, 3, 6, 5), -2, 3, 'float32')
+    _test_split((1, 3, 5, 6), -1, 3, 'float32')
+    # size_splits list
+    _test_split((6,), 0, [1, 2, 3], 'int32')
+    _test_split((3, 6, 4), -2, [1, 4, 1], 'float32')
+
+
+#######################################################################
+# Unstack
+# -------
+
+def _test_unstack(ip_shape, axis, dtype):
+    np_data = np.random.uniform(-5, 5, size=ip_shape).astype(dtype)
+
+    tf.reset_default_graph()
+    in_data = tf.placeholder(dtype, ip_shape, name="in_data")
+    tf.unstack(in_data, axis=axis)
+
+    compare_tf_with_tvm([np_data], ['in_data:0'], [f'unstack:{n}' for n in range(ip_shape[axis])])
+
+    tf.reset_default_graph()
+    in_data = tf.placeholder(dtype, ip_shape, name="in_data")
+    tf.stack(tf.unstack(in_data, axis=axis), axis=axis)
+
+    compare_tf_with_tvm([np_data], ['in_data:0'], 'stack:0')
+
+def test_forward_unstack():
+    '''test unstack layer'''
+    _test_unstack((6,), 0, 'int32')
+    _test_unstack((2,6), 1, 'float64')
+    # negative axis
+    _test_unstack((1,4), -1, 'int32')
+    _test_unstack((3,6,4), -2, 'float32')
+
+
+#######################################################################
 # Multi Input to graph
 # --------------------
 
@@ -507,6 +601,35 @@ def test_forward_multi_input():
 
         compare_tf_with_tvm([in_data, in_data, in_data, in_data],
                             ['in1:0', 'in2:0', 'in3:0', 'in4:0'], 'out:0')
+
+#######################################################################
+# Multi Output to Graph
+# ---------------------
+
+def test_forward_multi_output():
+    with tf.Graph().as_default():
+        in1 = tf.placeholder(tf.int32, shape=[3, 3], name='in1')
+        in2 = tf.placeholder(tf.int32, shape=[3, 3], name='in2')
+        in3 = tf.placeholder(tf.int32, shape=[3, 3], name='in3')
+        in4 = tf.placeholder(tf.int32, shape=[3, 3], name='in4')
+
+        out1 = tf.add(in1, in2, name='out1')
+        out2 = tf.subtract(in3, in4, name='out2')
+        in_data = np.arange(9, dtype='int32').reshape([3, 3])
+        in_data = [in_data] * 4
+        in_name = ['in1:0', 'in2:0', 'in3:0', 'in4:0']
+        out_name = ['out1:0', 'out2:0']
+        out_node = [out.strip(':0') for out in out_name]
+        in_node = [inp.strip(':0') for inp in in_name]
+        
+        with tf.Session() as sess:
+            final_graph_def = tf.graph_util.convert_variables_to_constants(
+                sess, sess.graph.as_graph_def(add_shapes=True), out_node,)
+            tf_output = run_tf_graph(sess, in_data, in_name, out_name)
+            tvm_output = run_tvm_graph(final_graph_def, in_data, in_node, target='llvm',
+                                       out_names=out_node, num_output=2)
+            for i in range(len(tf_output)):
+                tvm.testing.assert_allclose(tf_output[i], tvm_output[i], atol=1e-5, rtol=1e-5)
 
 #######################################################################
 # Resize Bilinear
@@ -530,6 +653,23 @@ def test_forward_resize_bilinear():
 
     _test_resize_bilinear((4, 16, 32, 32), [50, 50], False)
     _test_resize_bilinear((6, 32, 64, 64), [20, 20], True)
+
+
+#######################################################################
+# Crop to bounding box
+# --------------------
+
+def _test_crop(in_shape, off_h, off_w, tar_h, tar_w):
+    """ Crop to bounding box """
+    data = np.random.uniform(size=in_shape).astype('float32')
+    with tf.Graph().as_default():
+        in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
+        tf.image.crop_to_bounding_box(in_data, off_h, off_w, tar_h, tar_w)
+        compare_tf_with_tvm(data, 'Placeholder:0', 'crop_to_bounding_box/Slice:0')
+
+def test_forward_crop():
+    """ Crop to bounding box """
+    _test_crop((1, 224, 224, 3), 20, 20, 120, 120)
 
 
 #######################################################################
@@ -580,7 +720,7 @@ def _test_lstm_cell(batch_size, num_hidden, num_layers, forget_bias, dtype):
     out_state_c = np.reshape(out_state_tup[0], (batch_size, num_hidden))
     out_state_h = np.reshape(out_state_tup[1], (batch_size, num_hidden))
     tvm_out = [out, out_state_c, out_state_h]
-    np.testing.assert_allclose(tf_out, tvm_out, rtol=1e-3, atol=1e-3)
+    tvm.testing.assert_allclose(tf_out[0], tvm_out[0], rtol=1e-3, atol=1e-3)
 
 def test_forward_lstm():
     '''test LSTM block cell'''
@@ -644,16 +784,16 @@ def test_forward_pad():
 def test_forward_inception_v3():
     '''test inception V3 model'''
     with tf.Graph().as_default():
-        graph_def = nnvm.testing.tf.get_workload('InceptionV3/inception_v3_2016_08_28_frozen-with_shapes.pb')
+        graph_def = tf_testing.get_workload('InceptionV3/inception_v3_2016_08_28_frozen-with_shapes.pb')
         # Call the utility to import the graph definition into default graph.
-        graph_def = nnvm.testing.tf.ProcessGraphDefParam(graph_def)
+        graph_def = tf_testing.ProcessGraphDefParam(graph_def)
 
         data = np.random.uniform(size=(1, 299, 299, 3)).astype('float32')
 
         with tf.Session() as sess:
             tf_output = run_tf_graph(sess, data, 'input:0', 'InceptionV3/Predictions/Reshape_1:0')
             tvm_output = run_tvm_graph(graph_def, data, 'input')
-            np.testing.assert_allclose(tf_output, tvm_output, rtol=1e-5, atol=1e-5)
+            tvm.testing.assert_allclose(tf_output[0], tvm_output[0], rtol=1e-5, atol=1e-5)
 
 #######################################################################
 # Inception V1
@@ -661,9 +801,9 @@ def test_forward_inception_v3():
 def test_forward_inception_v1():
     '''test inception V1 model'''
     with tf.Graph().as_default():
-        graph_def = nnvm.testing.tf.get_workload("InceptionV1/classify_image_graph_def-with_shapes.pb")
+        graph_def = tf_testing.get_workload("InceptionV1/classify_image_graph_def-with_shapes.pb")
         # Call the utility to import the graph definition into default graph.
-        graph_def = nnvm.testing.tf.ProcessGraphDefParam(graph_def)
+        graph_def = tf_testing.ProcessGraphDefParam(graph_def)
 
         # Build an image from random data.
         from PIL import Image
@@ -689,25 +829,30 @@ def test_forward_inception_v1():
         with tf.Session() as sess:
             tf_output = run_tf_graph(sess, data, 'DecodeJpeg/contents:0', 'softmax:0')
             tvm_output = run_tvm_graph(graph_def, tvm_data, 'DecodeJpeg/contents')
-            np.testing.assert_allclose(tf_output, tvm_output, rtol=1e-5, atol=1e-5)
+            tvm.testing.assert_allclose(tf_output[0], tvm_output[0], rtol=1e-5, atol=1e-5)
 
 #######################################################################
 # Mobilenet
 # ---------
 def test_forward_mobilenet():
     '''test mobilenet model'''
+    # MobilenetV2
     with tf.Graph().as_default():
-        graph_def = nnvm.testing.tf.get_workload("MobilenetV1/mobilenet_v1_1.0_224_frozen-with-shapes.pb")
+        graph_def = tf_testing.get_workload(
+            "https://storage.googleapis.com/mobilenet_v2/checkpoints/mobilenet_v2_1.4_224.tgz",
+            "mobilenet_v2_1.4_224_frozen.pb")
         # Call the utility to import the graph definition into default graph.
-        graph_def = nnvm.testing.tf.ProcessGraphDefParam(graph_def)
+        graph_def = tf_testing.ProcessGraphDefParam(graph_def)
 
         data = np.random.uniform(size=(1, 224, 224, 3)).astype('float32')
-        out_node = 'MobilenetV1/Predictions/Reshape_1'
+        out_node = 'MobilenetV2/Predictions/Reshape_1'
 
         with tf.Session() as sess:
+            # Add shapes to the graph.
+            graph_def = tf_testing.AddShapesToGraphDef(sess, out_node)
             tf_output = run_tf_graph(sess, data, 'input:0', out_node + ':0')
             tvm_output = run_tvm_graph(graph_def, data, 'input')
-            np.testing.assert_allclose(np.squeeze(tvm_output), np.squeeze(tf_output), rtol=1e-5, atol=1e-5)
+            tvm.testing.assert_allclose(np.squeeze(tvm_output[0]), np.squeeze(tf_output[0]), rtol=1e-5, atol=1e-5)
 
 #######################################################################
 # ResnetV2
@@ -716,9 +861,9 @@ def test_forward_resnetv2():
     '''test resnet model'''
     if is_gpu_available():
         with tf.Graph().as_default():
-            graph_def = nnvm.testing.tf.get_workload("ResnetV2/resnet-20180601_resnet_v2_imagenet-shapes.pb")
+            graph_def = tf_testing.get_workload("ResnetV2/resnet-20180601_resnet_v2_imagenet-shapes.pb")
             # Call the utility to import the graph definition into default graph.
-            graph_def = nnvm.testing.tf.ProcessGraphDefParam(graph_def)
+            graph_def = tf_testing.ProcessGraphDefParam(graph_def)
 
             data = np.random.uniform(size=(128, 224, 224, 3)).astype('float32')
             out_node = 'ArgMax'
@@ -726,7 +871,7 @@ def test_forward_resnetv2():
             with tf.Session() as sess:
                 tf_output = run_tf_graph(sess, data, 'input_tensor:0', out_node + ':0')
                 tvm_output = run_tvm_graph(graph_def, data, 'input_tensor', tf_output.shape, 'float32')
-                np.testing.assert_allclose(np.squeeze(tvm_output), np.squeeze(tf_output), rtol=1e-5, atol=1e-5)
+                tvm.testing.assert_allclose(np.squeeze(tvm_output[0]), np.squeeze(tf_output[0]), rtol=1e-5, atol=1e-5)
 
 #######################################################################
 # PTB
@@ -734,7 +879,7 @@ def test_forward_resnetv2():
 dir(tf.contrib)
 def test_forward_ptb():
     '''test ptb model'''
-    config = nnvm.testing.tf.get_config()
+    config = tf_testing.get_config()
     num_steps = config.num_steps
     num_hidden = config.hidden_size
     num_layers = config.num_layers
@@ -791,7 +936,8 @@ def test_forward_ptb():
                                                       "float32")).asnumpy()
             state_output = model.get_output(1, tvm.nd.empty(out_state_shape,
                                                         "float32")).asnumpy()
-            sample = nnvm.testing.tf.pick_from_weight(tvm_output[0])
+            sample = tf_testing.pick_from_weight(tvm_output[0])
+
             return sample, state_output
 
         for x in data:
@@ -810,10 +956,10 @@ def test_forward_ptb():
         return samples, state
 
     with tf.Graph().as_default():
-        word_to_id, id_to_word, graph_def = nnvm.testing.tf.get_workload_ptb()
+        word_to_id, id_to_word, graph_def = tf_testing.get_workload_ptb()
         vocab_size = len(word_to_id)
         # Call the utility to import the graph definition into default graph.
-        graph_def = nnvm.testing.tf.ProcessGraphDefParam(graph_def)
+        graph_def = tf_testing.ProcessGraphDefParam(graph_def)
         sess = tf.Session()
 
     #TVM graph module creation
@@ -829,12 +975,12 @@ def test_forward_ptb():
                                                     for word in seed_for_sample],
                                                 in_state, params, cnt_sample)
         tvm_sample_str = _pretty_print(tvm_samples, False, id_to_word)
-        tf_samples, tf_state = nnvm.testing.tf.do_tf_sample(sess,
+        tf_samples, tf_state = tf_testing.do_tf_sample(sess,
                                 [word_to_id[word] for word in seed_for_sample],
                                 in_state, cnt_sample)
         tf_sample_str = _pretty_print(tf_samples, False, id_to_word)
         inpt = tvm_sample_str
-        np.testing.assert_allclose(tf_samples, tvm_samples, rtol=1e-5, atol=1e-5)
+        tvm.testing.assert_allclose(tf_samples, tvm_samples, rtol=1e-5, atol=1e-5)
         assert(tvm_sample_str == tf_sample_str)
 
 #######################################################################
@@ -937,7 +1083,7 @@ def test_forward_leaky_relu():
     with tf.Graph().as_default():
         in1 = tf.placeholder(shape=inp_array.shape, dtype=inp_array.dtype)
         tf.nn.leaky_relu(in1, alpha=0.4)
-        compare_tf_with_tvm(inp_array, 'Placeholder:0', 'LeakyRelu:0')
+        compare_tf_with_tvm(inp_array, 'Placeholder:0', 'LeakyRelu/mul:0')
 
 def test_forward_elu():
     ishape = (1, 3, 10, 10)
@@ -1010,9 +1156,12 @@ if __name__ == '__main__':
     test_forward_squeeze()
     test_forward_pack()
     test_forward_resize_bilinear()
+    test_forward_crop()
     test_forward_pad()
     test_forward_gather()
-    #test_forward_stridedslice()
+    test_forward_stridedslice()
+    test_forward_split()
+    test_forward_unstack()
 
     # Activations
     test_forward_sigmoid()
@@ -1037,6 +1186,7 @@ if __name__ == '__main__':
 
     # General
     test_forward_multi_input()
+    test_forward_multi_output()
     test_forward_variable()
 
     # End to End

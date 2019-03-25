@@ -119,6 +119,7 @@ class TVMContext(ctypes.Structure):
         'llvm': 1,
         'stackvm': 1,
         'cpu': 1,
+        'c': 1,
         'gpu': 2,
         'cuda': 2,
         'nvptx': 2,

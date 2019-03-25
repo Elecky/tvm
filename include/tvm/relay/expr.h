@@ -40,6 +40,18 @@ class ExprNode : public RelayNode {
                                       "field for this node";
     return this->checked_type_;
   }
+  /*!
+   * \brief Check if the inferred(checked) type of the Expr
+   *  is backed by a TTypeNode and return it.
+   *
+   * \note This function will thrown an error if the node type
+   *       of this Expr is not TTypeNode.
+   *
+   * \return The corresponding TTypeNode pointer.
+   * \tparam The specific TypeNode we look for.
+   */
+  template<typename TTypeNode>
+  inline const TTypeNode* type_as() const;
 
   static constexpr const char* _type_key = "relay.Expr";
   TVM_DECLARE_BASE_NODE_INFO(ExprNode, RelayNode);
@@ -112,18 +124,22 @@ RELAY_DEFINE_NODE_REF(Tuple, TupleNode, Expr);
  * Its semantics are similar to tvm.Var node used in TVM's low level
  * tensor expression language.
  *
- * \note Each Var is bind only once and is immutable/
+ * \note Each Var is bind only once and is immutable.
  */
 class Var;
 /*! \brief Container for Var */
 class VarNode : public ExprNode {
  public:
   /*!
-   * \brief The name of the variable,
-   *  this only acts as a hint to the user,
-   *  and is not used for equality.
+   * \brief The unique identifier of the Var.
+   *
+   * vid will be preserved for the same Var during type inference
+   * and other rewritings, while the VarNode might be recreated
+   * to attach additional information.
+   * This property can be used to keep track of parameter Var
+   * information across passes.
    */
-  std::string name_hint;
+  Id vid;
   /*!
    * \brief type annotaion of the variable.
    * This field records user provided type annotation of the Var.
@@ -131,13 +147,22 @@ class VarNode : public ExprNode {
    */
   Type type_annotation;
 
+  /*! \return The name hint of the variable */
+  const std::string& name_hint() const {
+    return vid->name_hint;
+  }
+
   void VisitAttrs(tvm::AttrVisitor* v) final {
-    v->Visit("name_hint", &name_hint);
+    v->Visit("vid", &vid);
     v->Visit("type_annotation", &type_annotation);
+    v->Visit("span", &span);
     v->Visit("_checked_type_", &checked_type_);
   }
 
   TVM_DLL static Var make(std::string name_hint,
+                          Type type_annotation);
+
+  TVM_DLL static Var make(Id vid,
                           Type type_annotation);
 
   static constexpr const char* _type_key = "relay.Var";
@@ -147,7 +172,7 @@ class VarNode : public ExprNode {
 RELAY_DEFINE_NODE_REF(Var, VarNode, Expr);
 
 /*!
- * \brief Global variable that leaves in the top-level environment.
+ * \brief Global variable that leaves in the top-level module.
  * This is used to enable recursive calls between function.
  *
  * \note A GlobalVar may only point to functions.
@@ -161,6 +186,7 @@ class GlobalVarNode : public ExprNode {
 
   void VisitAttrs(tvm::AttrVisitor* v) final {
     v->Visit("name_hint", &name_hint);
+    v->Visit("span", &span);
     v->Visit("_checked_type_", &checked_type_);
   }
 
@@ -197,7 +223,12 @@ class FunctionNode : public ExprNode {
    *
    * \note This can be usually empty for non-polymorphic functions.
    */
-  tvm::Array<TypeParam> type_params;
+  tvm::Array<TypeVar> type_params;
+
+  /*!
+   * \brief The attributes which store metadata about functions.
+   */
+  tvm::Attrs attrs;
 
   void VisitAttrs(tvm::AttrVisitor* v) final {
     v->Visit("params", &params);
@@ -205,6 +236,7 @@ class FunctionNode : public ExprNode {
     v->Visit("ret_type", &ret_type);
     v->Visit("type_params", &type_params);
     v->Visit("span", &span);
+    v->Visit("attrs", &attrs);
     v->Visit("_checked_type_", &checked_type_);
   }
 
@@ -216,16 +248,29 @@ class FunctionNode : public ExprNode {
    */
   TVM_DLL FuncType func_type_annotation() const;
 
+  /*!
+   * \brief Check whether the function is a primitive function.
+   *
+   * \return Whether the function is primitive or not.
+   */
+  bool IsPrimitive() const;
+
   TVM_DLL static Function make(tvm::Array<Var> params,
                                Expr body,
                                Type ret_type,
-                               tvm::Array<TypeParam> ty_params);
+                               tvm::Array<TypeVar> ty_params,
+                               tvm::Attrs attrs = Attrs());
 
   static constexpr const char* _type_key = "relay.Function";
   TVM_DECLARE_NODE_TYPE_INFO(FunctionNode, ExprNode);
 };
 
 RELAY_DEFINE_NODE_REF(Function, FunctionNode, Expr);
+
+
+TVM_DLL NodeRef FunctionGetAttr(const Function& func, const std::string& key);
+TVM_DLL Function FunctionSetAttr(const Function& func, const std::string& key, const NodeRef& data);
+
 
 /*!
  * \brief Call corresponds to operator invocation.
@@ -375,26 +420,72 @@ class TupleGetItemNode : public ExprNode {
   int index;
 
   void VisitAttrs(tvm::AttrVisitor* v) final {
-    v->Visit("tuple", &tuple);
+    v->Visit("tuple_value", &tuple);
     v->Visit("index", &index);
+    v->Visit("span", &span);
+    v->Visit("_checked_type_", &checked_type_);
   }
 
   TVM_DLL static TupleGetItem make(Expr tuple, int index);
 
-  static constexpr const char * _type_key = "relay.GetItem";
+  static constexpr const char * _type_key = "relay.TupleGetItem";
   TVM_DECLARE_NODE_TYPE_INFO(TupleGetItemNode, ExprNode);
 };
 
 RELAY_DEFINE_NODE_REF(TupleGetItem, TupleGetItemNode, Expr);
 
-/*! \brief Print a debug representation of the expression to the stream.
- *  \param env The environment.
- *  \param e The expression
- *  \param os the stream
- *  \returns A reference to the stream.
+/*!
+ * \brief Base class of the temporary expression.
+ *
+ * TempExprs are pass specific expression that can be
+ * useful to define intermediate result in the
+ * rewriting pass such as layout or type transformation.
+ *
+ * Subclass TempExprNode allows us to pattern match on
+ * specific kind TempExpr and use them for expression rewriting.
+ *
+ * TempExpr should only be used within a pass,
  */
-std::ostream& DebugPrint(const Environment& env, const Expr& e, std::ostream& os);
+class TempExprNode : public ExprNode {
+ public:
+  /*!
+   * \brief Convert the expression to a normal(non-temp) Expr.
+   * \return The corresponding normal(non-temp) expression.
+   */
+  virtual Expr Realize() const = 0;
 
+  static constexpr const char* _type_key = "relay.TempExpr";
+  TVM_DECLARE_BASE_NODE_INFO(TempExprNode, ExprNode);
+};
+
+RELAY_DEFINE_NODE_REF(TempExpr, TempExprNode, Expr);
+
+// implementataions
+template<typename TTypeNode>
+inline const TTypeNode* ExprNode::type_as() const {
+  static_assert(std::is_base_of<TypeNode, TTypeNode>::value,
+                "TType must be a special case of type");
+  CHECK(checked_type_.defined())
+      << "Type inference for this Expr has not completed. Try to call infer_type pass.";
+  const TTypeNode* node = checked_type_.as<TTypeNode>();
+  CHECK(node != nullptr)
+      << "Expected type to be " << TTypeNode::_type_key
+      << ", but get " << checked_type_->type_key();
+  return node;
+}
+
+/*!
+ * \brief Print node as text format.
+ * \param node The node to be printed.
+ * \param show_meta_data Whether to print meta data section.
+ * \param annotate An optional callback function for attaching
+ *        additional comment block to an expr.
+ * \return The text representation.
+ */
+std::string RelayPrint(
+    const NodeRef& node,
+    bool show_meta_data = true,
+    runtime::TypedPackedFunc<std::string(Expr)> annotate = nullptr);
 }  // namespace relay
 }  // namespace tvm
 #endif  // TVM_RELAY_EXPR_H_

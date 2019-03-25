@@ -13,6 +13,8 @@
 #include <chrono>
 #include <vector>
 #include <utility>
+#include <cmath>
+#include <algorithm>
 #include "rpc_session.h"
 #include "../../common/ring_buffer.h"
 
@@ -484,29 +486,28 @@ class RPCSession::EventHandler : public dmlc::Stream {
           arg_recv_stage_ = 1;
           this->RequestBytes(len);
           break;
-        break;
-      }
-      case kArrayHandle: {
-        temp_array_.reset(new RPCDataArrayBuffer());
-        uint64_t handle;
-        this->Read(&handle);
-        DLTensor& tensor = temp_array_->tensor;
-        tensor.data = reinterpret_cast<void*>(handle);
-        this->Read(&(tensor.ctx));
-        this->Read(&(tensor.ndim));
-        this->Read(&(tensor.dtype));
-        temp_array_->shape.resize(tensor.ndim);
-        tensor.shape = temp_array_->shape.data();
-        arg_recv_stage_ = 1;
-        tensor.strides = nullptr;
-        tensor.byte_offset = 0;
-        this->RequestBytes(sizeof(int64_t) * tensor.ndim);
-        break;
-      }
-      default: {
-        LOG(FATAL) << "RPC cannot handle type " << TypeCode2Str(tcode);
-        break;
-      }
+        }
+        case kArrayHandle: {
+          temp_array_.reset(new RPCDataArrayBuffer());
+          uint64_t handle;
+          this->Read(&handle);
+          DLTensor& tensor = temp_array_->tensor;
+          tensor.data = reinterpret_cast<void*>(handle);
+          this->Read(&(tensor.ctx));
+          this->Read(&(tensor.ndim));
+          this->Read(&(tensor.dtype));
+          temp_array_->shape.resize(tensor.ndim);
+          tensor.shape = temp_array_->shape.data();
+          arg_recv_stage_ = 1;
+          tensor.strides = nullptr;
+          tensor.byte_offset = 0;
+          this->RequestBytes(sizeof(int64_t) * tensor.ndim);
+          break;
+        }
+        default: {
+          LOG(FATAL) << "RPC cannot handle type " << TypeCode2Str(tcode);
+          break;
+        }
       }
     } else {
       CHECK_EQ(arg_recv_stage_, 1);
@@ -1002,9 +1003,9 @@ void RPCSession::CopyFromRemote(void* from,
 }
 
 RPCFuncHandle RPCSession::GetTimeEvaluator(
-    RPCFuncHandle fhandle, TVMContext ctx, int number, int repeat) {
+    RPCFuncHandle fhandle, TVMContext ctx, int number, int repeat, int min_repeat_ms) {
   return this->CallRemote(
-      RPCCode::kGetTimeEvaluator, fhandle, ctx, number, repeat);
+      RPCCode::kGetTimeEvaluator, fhandle, ctx, number, repeat, min_repeat_ms);
 }
 
 // Event handler functions
@@ -1138,7 +1139,7 @@ void RPCNDArrayFree(TVMArgs args, TVMRetValue *rv) {
 
 void RPCGetTimeEvaluator(TVMArgs args, TVMRetValue *rv) {
   PackedFunc *pf = static_cast<PackedFunc*>(args[0].operator void*());
-  void *fhandle = new PackedFunc(WrapTimeEvaluator(*pf, args[1], args[2], args[3]));
+  void *fhandle = new PackedFunc(WrapTimeEvaluator(*pf, args[1], args[2], args[3], args[4]));
   delete pf;
   *rv = fhandle;
 }
@@ -1190,21 +1191,42 @@ void RPCSession::EventHandler::HandlePackedCall() {
   CHECK_EQ(state_, kRecvCode);
 }
 
-PackedFunc WrapTimeEvaluator(PackedFunc pf, TVMContext ctx, int number, int repeat) {
-  auto ftimer = [pf, ctx, number, repeat](TVMArgs args, TVMRetValue *rv) {
+PackedFunc WrapTimeEvaluator(PackedFunc pf,
+                             TVMContext ctx,
+                             int number,
+                             int repeat,
+                             int min_repeat_ms) {
+  auto ftimer = [pf, ctx, number, repeat, min_repeat_ms](TVMArgs args, TVMRetValue *rv) mutable {
     TVMRetValue temp;
     std::ostringstream os;
     // skip first time call, to activate lazy compilation components.
     pf.CallPacked(args, &temp);
     DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
+
     for (int i = 0; i < repeat; ++i) {
-      // start timing
-      auto tbegin = std::chrono::high_resolution_clock::now();
-      for (int i = 0; i < number; ++i) {
-        pf.CallPacked(args, &temp);
-      }
-      DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
-      auto tend = std::chrono::high_resolution_clock::now();
+      std::chrono::time_point<
+        std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin, tend;
+      double duration_ms = 0.0;
+
+      do {
+        if (duration_ms > 0.0) {
+          number = static_cast<int>(
+              std::max((min_repeat_ms / (duration_ms / number) + 1),
+                       number * 1.618));   // 1.618 is chosen by random
+        }
+
+        tbegin = std::chrono::high_resolution_clock::now();
+        // start timing
+        for (int i = 0; i < number; ++i) {
+          pf.CallPacked(args, &temp);
+        }
+        DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
+        tend = std::chrono::high_resolution_clock::now();
+
+        duration_ms = std::chrono::duration_cast<std::chrono::duration<double> >
+            (tend - tbegin).count() * 1000;
+      } while (duration_ms < min_repeat_ms);
+
       double speed = std::chrono::duration_cast<std::chrono::duration<double> >(
           tend - tbegin).count() / number;
       os.write(reinterpret_cast<char*>(&speed), sizeof(speed));

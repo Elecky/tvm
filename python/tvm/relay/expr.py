@@ -1,15 +1,19 @@
 # pylint: disable=no-else-return, unidiomatic-typecheck, invalid-name
 """The expression nodes of Relay."""
 from __future__ import absolute_import
+from numbers import Number as _Number
 
 import numpy as _np
 from .base import RelayNode, register_relay_node
 from . import _make
+from . import _expr
 from . import ty as _ty
-from .._ffi import base as _base, node as _node
+from .._ffi import base as _base
 from .. import nd as _nd
 from .. import convert
 
+# will be registered afterwards
+_op_make = None
 
 class Expr(RelayNode):
     """The base type for all Relay expressions."""
@@ -28,8 +32,80 @@ class Expr(RelayNode):
                              " the checked_type for this node")
         return ret
 
-    def __call__(self, *args):
-        return Call(self, args, None, None)
+    def astype(self, dtype):
+        """Cast the content type of the current data to dtype.
+
+        Parameters
+        ----------
+        dtype : str
+            The target data type.
+
+        Note
+        ----
+        This function only works for TensorType Exprs.
+
+        Returns
+        -------
+        result : tvm.relay.Expr
+            The result expression.
+        """
+        return _make.cast(self, dtype)
+
+    def __add__(self, other):
+        if isinstance(other, Expr):
+            return _op_make.add(self, other)
+        elif isinstance(other, _Number):
+            raise TypeError('convert "%s" with `const` first' % str(other))
+        else:
+            raise TypeError("type %s not supported" % str(type(other)))
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __sub__(self, other):
+        if isinstance(other, Expr):
+            return _op_make.subtract(self, other)
+        elif isinstance(other, _Number):
+            raise TypeError('convert "%s" with `const` first' % str(other))
+        else:
+            raise TypeError("type %s not supported" % str(type(other)))
+
+    def __rsub__(self, other):
+        if isinstance(other, _Number):
+            raise TypeError('convert "%s" with `const` first' % str(other))
+        else:
+            raise TypeError("type %s not supported" % str(type(other)))
+
+    def __mul__(self, other):
+        if isinstance(other, Expr):
+            return _op_make.multiply(self, other)
+        elif isinstance(other, _Number):
+            raise TypeError('convert "%s" with `const` first' % str(other))
+        else:
+            raise TypeError("type %s not supported" % str(type(other)))
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __div__(self, other):
+        if isinstance(other, Expr):
+            return _op_make.divide(self, other)
+        elif isinstance(other, _Number):
+            raise TypeError('convert "%s" with `const` first' % str(other))
+        else:
+            raise TypeError("type %s not supported" % str(type(other)))
+
+    def __rdiv__(self, other):
+        if isinstance(other, _Number):
+            raise TypeError('convert "%s" with `const` first' % str(other))
+        else:
+            raise TypeError("type %s not supported" % str(type(other)))
+
+    def __truediv__(self, other):
+        return self.__div__(other)
+
+    def __rtruediv__(self, other):
+        return self.__rdiv__(other)
 
 
 @register_relay_node
@@ -57,6 +133,17 @@ class Tuple(Expr):
     def __init__(self, fields):
         self.__init_handle_by_constructor__(_make.Tuple, fields)
 
+    def __getitem__(self, index):
+        if index >= len(self):
+            raise IndexError("Tuple index out of range")
+        return self.fields[index]
+
+    def __len__(self):
+        return len(self.fields)
+
+    def astype(self, _):
+        raise TypeError("astype cannot be used on tuple")
+
 
 @register_relay_node
 class Var(Expr):
@@ -79,13 +166,19 @@ class Var(Expr):
         self.__init_handle_by_constructor__(
             _make.Var, name_hint, type_annotation)
 
+    @property
+    def name_hint(self):
+        """Get name hint of the current var."""
+        name = self.vid.name_hint
+        return name
+
 
 @register_relay_node
 class GlobalVar(Expr):
     """A global variable in Tvm.Relay.
 
     GlobalVar is used to refer to the global functions
-    stored in the environment.
+    stored in the module.
 
     Parameters
     ----------
@@ -94,6 +187,16 @@ class GlobalVar(Expr):
     """
     def __init__(self, name_hint):
         self.__init_handle_by_constructor__(_make.GlobalVar, name_hint)
+
+    def __call__(self, *args):
+        """Invoke the gobal function.
+
+        Parameters
+        ----------
+        args: List[relay.Expr]
+            Arguments.
+        """
+        return Call(self, args, None, None)
 
 
 @register_relay_node
@@ -119,12 +222,23 @@ class Function(Expr):
                  params,
                  body,
                  ret_type=None,
-                 type_params=None):
+                 type_params=None,
+                 attrs=None):
         if type_params is None:
             type_params = convert([])
 
         self.__init_handle_by_constructor__(
-            _make.Function, params, body, ret_type, type_params)
+            _make.Function, params, body, ret_type, type_params, attrs)
+
+    def __call__(self, *args):
+        """Invoke the global function.
+
+        Parameters
+        ----------
+        args: List[relay.Expr]
+            Arguments.
+        """
+        return Call(self, args, None, None)
 
 
 @register_relay_node
@@ -213,7 +327,24 @@ class TupleGetItem(Expr):
             _make.TupleGetItem, tuple_value, index)
 
 
-class TupleWrapper(_node.NodeGeneric):
+class TempExpr(Expr):
+    """Baseclass of all TempExpr.
+
+    TempExprs are pass specific expression that can be
+    useful to define intermediate result in the
+    rewriting pass such as layout or type transformation.
+    """
+    def realize(self):
+        """Convert the expression to a normal(non-temp) Expr.
+
+        Returns
+        -------
+        The corresponding normal expression.
+        """
+        return _expr.TempExprRealize(self)
+
+
+class TupleWrapper(object):
     """TupleWrapper.
 
     This class is a Python wrapper for a Relay tuple of known size.
@@ -232,17 +363,35 @@ class TupleWrapper(_node.NodeGeneric):
         self.tuple_value = tuple_value
         self.size = size
 
-    def asnode(self):
+    def astuple(self):
         """Returns the underlying Relay tuple if this wrapper is passed
         as an argument to an FFI function."""
-
         return self.tuple_value
 
-    def __getitem__(self, key):
-        return self.tuple_value.fields[key]
+    def astext(self):
+        """Get the text format of the tuple expression.
+
+        Returns
+        -------
+        text : str
+            The text format of the tuple expression.
+        """
+        return self.tuple_value.astext()
+
+    def __getitem__(self, index):
+        if index >= len(self):
+            raise IndexError("Tuple index out of range")
+        return TupleGetItem(self.tuple_value, index)
 
     def __len__(self):
-        return len(self.tuple_value.fields)
+        return self.size
+
+    def __repr__(self):
+        return ("TupleWrapper(" + self.tuple_value.__repr__() +
+                ", " + str(self.size) + ")")
+
+    def astype(self, _):
+        raise TypeError("astype cannot be used on tuple")
 
 
 def var(name_hint,
@@ -304,13 +453,50 @@ def const(value, dtype=None):
 
     dtype: str, optional
         The data type of the value.
+
+    Note
+    ----
+    When dtype is None, we use the following rule:
+
+    - int maps to "int32"
+    - float maps to "float32"
+    - bool maps to "bool"
+    - other using the same default rule as numpy.
     """
-    if isinstance(value, _base.numeric_types):
+    if isinstance(value, (_base.numeric_types, (bool, list))):
         value = _np.array(value, dtype=dtype)
-    elif isinstance(value, (bool, list)):
-        value = _np.array(value, dtype=dtype)
+    if not dtype:
+        # when dtype is None: int maps to "int32", float maps to "float32"
+        map_dtype = {
+            _np.dtype('int64'): _np.int32,
+            _np.dtype('float64'): _np.float32
+            }.get(value.dtype, None)
+        if map_dtype:
+            value = value.astype(map_dtype)
     if isinstance(value, (_np.ndarray, _np.generic)):
         value = _nd.array(value)
+
     if not isinstance(value, _nd.NDArray):
         raise ValueError("value has to be scalar or NDArray")
     return Constant(value)
+
+
+def bind(expr, binds):
+    """Bind an free variables in expr or function arguments.
+
+    We can bind parameters expr if it is a function.
+
+    Parameters
+    ----------
+    expr : tvm.relay.Expr
+        The input expression.
+
+    binds : Union[Map[tvm.relay.Var, tvm.relay.Expr], Map[str, tvm.relay.Expr]]
+        The specific bindings.
+
+    Returns
+    -------
+    result : tvm.relay.Expr
+        The expression or function after binding.
+    """
+    return _expr.Bind(expr, binds)

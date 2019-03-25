@@ -213,3 +213,9 @@ nnpu/nnpu_config.yaml
 
 # vscode configs
 .vscode/*
+# patch sentinel
+patched.txt
+
+# Python type checking
+.mypy_cache/
+.pyre/

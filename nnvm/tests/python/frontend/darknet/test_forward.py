@@ -107,7 +107,7 @@ def test_forward(net, build_dtype='float32'):
                 out.insert(0, attributes)
                 out.insert(0, _read_memory_buffer((layer.total*2, ), layer.biases))
                 out.insert(0, _read_memory_buffer((layer.n, ), layer.mask, dtype='int32'))
-                layer_ou tshape = (layer.batch, layer.out_c,
+                layer_outshape = (layer.batch, layer.out_c,
                                   layer.out_h, layer.out_w)
                 out.insert(0, _read_memory_buffer(layer_outshape, layer.output))
             elif i == net.n-1:
@@ -139,7 +139,7 @@ def test_forward(net, build_dtype='float32'):
 
     tvm_out = _get_tvm_output(net, data, build_dtype)
     for tvm_outs, darknet_out in zip(tvm_out, darknet_output):
-        np.testing.assert_allclose(darknet_out, tvm_outs, rtol=1e-3, atol=1e-3)
+        tvm.testing.assert_allclose(darknet_out, tvm_outs, rtol=1e-3, atol=1e-3)
 
 def test_rnn_forward(net):
     '''Test network with given input data on both darknet and tvm'''
@@ -158,7 +158,7 @@ def test_rnn_forward(net):
     last_layer = net.layers[net.n-1]
     darknet_outshape = (last_layer.batch, last_layer.outputs)
     darknet_out = darknet_out.reshape(darknet_outshape)
-    np.testing.assert_allclose(darknet_out, tvm_out, rtol=1e-4, atol=1e-4)
+    tvm.testing.assert_allclose(darknet_out, tvm_out, rtol=1e-4, atol=1e-4)
 
 def test_forward_extraction():
     '''test extraction model'''
@@ -361,6 +361,19 @@ def test_forward_upsample():
     test_forward(net)
     LIB.free_network(net)
 
+def test_forward_l2normalize():
+    '''test l2 normalization layer'''
+    net = LIB.make_network(1)
+    layer = LIB.make_l2norm_layer(1, 224*224*3)
+    layer.c = layer.out_c = 3
+    layer.h = layer.out_h = 224
+    layer.w = layer.out_w = 224
+    net.layers[0] = layer
+    net.w = net.h = 224
+    LIB.resize_network(net, 224, 224)
+    test_forward(net)
+    LIB.free_network(net)
+
 def test_forward_elu():
     '''test elu activation layer'''
     net = LIB.make_network(1)
@@ -520,6 +533,7 @@ if __name__ == '__main__':
     test_forward_region()
     test_forward_yolo_op()
     test_forward_upsample()
+    test_forward_l2normalize()
     test_forward_elu()
     test_forward_rnn()
     test_forward_crnn()

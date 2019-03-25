@@ -31,10 +31,10 @@ import numpy as np
 
 ######################################################################
 # We first write a very simple vector add and build it with the default schedule. Then, we use
-# our customized lowering pass to manipulate the IR directly instead of using schedule premitives.
+# our customized lowering pass to manipulate the IR directly instead of using schedule primitives.
 #
 
-n = tvm.const(128)
+n = tvm.const(128, "int32")
 a = tvm.placeholder((n, ), name="a")
 b = tvm.placeholder((n, ), name="b")
 c = tvm.compute((n, ), lambda i: a[i] + b[i], name='c')

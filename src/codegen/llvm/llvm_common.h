@@ -9,6 +9,7 @@
 
 #include <llvm/ExecutionEngine/MCJIT.h>
 
+#include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Support/SourceMgr.h>
 
@@ -26,6 +27,7 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/MDBuilder.h>
+#include <llvm/IR/Verifier.h>
 
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/Utils/Cloning.h>
@@ -79,9 +81,8 @@ void ParseLLVMTargetOptions(const std::string& target_str,
  * \reloc_model desired relocation-model of the target machine.
  * \return target machine
  */
-llvm::TargetMachine*
-GetLLVMTargetMachine(const std::string& target_str, 
-                     bool allow_null = false,
+std::unique_ptr<llvm::TargetMachine>
+GetLLVMTargetMachine(const std::string& target_str, bool allow_null = false,
                      llvm::Reloc::Model reloc_model = llvm::Reloc::PIC_);
 
 }  // namespace codegen
