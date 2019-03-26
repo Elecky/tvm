@@ -46,7 +46,8 @@ def build_config(debug_flag=0, **kwargs):
                  (1, ir_pass.inject_scratchpad_copy),
                  (1, ir_pass.inject_accTobuffer),
                  (1, tvm.ir_pass.CoProcSync),
-                 (2, ir_pass.lift_coproc_scope)
+                #  (2, ir_pass.lift_coproc_scope)
+                 (1, lambda x: tvm.ir_pass.LiftAttrScope(x, "coproc_scope", True))
                 ]
 
     return tvm.build_config(add_lower_pass=pass_list, **kwargs)

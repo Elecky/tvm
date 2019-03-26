@@ -432,6 +432,7 @@ def inject_accTobuffer(stmt_in):
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.copy_acc2buf, _inject_copy)
 
 # functions related to lift_coproc_scope ir pass starts from here.
+''' The code is deprecated already, use tvm.ir_pass.LiftAttrScope instead.
 def _is_coproc_scope_attr(op):
     return (isinstance(op, tvm.stmt.AttrStmt) and
             op.attr_key == 'coproc_scope')
@@ -523,3 +524,4 @@ def lift_coproc_scope(stmt):
     stmt = tvm.ir_pass.IRTransform(stmt, _check_coproc_scope_attr, 
                                    _lift_coproc_scope_attr, [])
     return stmt
+'''
