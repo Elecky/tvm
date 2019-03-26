@@ -494,11 +494,12 @@ class IntrinManager(object):
                 num = 0.0
                 intrin_func = 'VAddV'
             elif(intrin_op == 'VMulMerge'):
-                expr = lambda *i: tvm.sum(in1(k, *i), axis=k)
-                num = 1.0
-                intrin_func = 'VMulV'
+                # expr = lambda *i: tvm.mul(in1(k, *i), axis=k)
+                # num = 1.0
+                # intrin_func = 'VMulV'
+                raise ValueError('VMulMerge not supported now')
             elif(intrin_op == 'VGTMMerge'):
-                expr = lambda *i: tvm.sum(in1(k, *i), axis=k)
+                expr = lambda *i: tvm.max(in1(k, *i), axis=k)
                 num = float('-inf')
                 intrin_func = 'VGTMV'
             else:
