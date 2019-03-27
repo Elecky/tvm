@@ -13,7 +13,7 @@ if(PYTHON)
   set(SIM_SRC nnpu/NNPUSim/src/)
   set(NNPU_SIM_COMMON ${SIM_SRC}/common/bit_packer.cpp ${SIM_SRC}/common/bit_packer_factory.cpp
                       ${SIM_SRC}/common/bit_wrapper.cpp ${SIM_SRC}/common/wire.cpp
-                      ${SIM_SRC}/common/data_types.cpp
+                      ${SIM_SRC}/common/data_types.cpp ${SIM_SRC}/misc/semaphore.cpp
                       )
 
   set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/S0Simulator.cpp)

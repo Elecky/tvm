@@ -11,7 +11,6 @@ def test():
         print('-----')
     with ScheduleProcHelper():
         env = nnpu.get_env()
-        nnpu.set_device(env, type='SC')
 
         shape = (16, 64)
         a_host = tvm.placeholder(shape, env.cfg['dtype_n'], 'a_host')
@@ -90,7 +89,6 @@ def test():
 def test2():
     with ScheduleProcHelper():
         env = nnpu.get_env()
-        nnpu.set_device(env, type='SC')
 
         shape = (4, 16, 16)
         a_host = tvm.placeholder(shape, env.cfg['dtype_n'], 'a_host')
@@ -174,6 +172,10 @@ if __name__ == '__main__':
     parser.add_argument('--tiled', dest='tiled', action='store_const',
                         const=True, default=False)
     args = parser.parse_args()
+    
+    env = nnpu.get_env()
+    nnpu.set_device(env, type='SC')
+
     if (args.tiled):
         test2()
     else:
