@@ -7,7 +7,7 @@ import numpy as np
 def test():
     with ScheduleProcHelper():
         env = nnpu.get_env()
-        nnpu.set_device(env, type="S1")
+        nnpu.set_device(env, type="S0")
         # nnpu.set_dump(True)
 
         dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
@@ -35,9 +35,9 @@ def test():
         xo, xi = s[c_buf].split(c_buf.op.axis[0], factor=nvctr_unit)
         s[c_buf].tensorize(xi, env.intrins.get('VAddV', mode='n'))
 
-        print(nnpu.lower(s, [a, b, c_host, plus2], simple_mode=True))
+        print(nnpu.lower(s, [a, b, plus2], simple_mode=True))
         # exit()
-        func = nnpu.build(s, [a, b, c_host, plus2], 'nnpu', 'llvm', name='nnpu_exp')
+        func = nnpu.build(s, [a, b, plus2], 'nnpu', 'llvm', name='nnpu_exp')
         # exit()
 
         ctx = tvm.nd.TVMContext(13, 0)
@@ -49,8 +49,11 @@ def test():
         b_np = np.random.randint(size=shape, dtype=b.dtype, low = -64, high = 63)    
         b_nd = tvm.nd.array(b_np, ctx)
         
-        c_nd = tvm.nd.array(np.zeros(shape).astype(c_host.dtype), ctx)
+        # c_nd = tvm.nd.array(np.zeros(shape).astype(c_host.dtype), ctx)
         plus2_nd = tvm.nd.array(np.zeros(shape).astype(plus2.dtype), ctx)
+
+        # print('------------------- host module llvm IR: ')
+        # print(func.get_source('ll'))
 
         print('------------------- device module 1 llvm IR: ')
         print(func.imported_modules[0].get_source('ll'))
@@ -59,18 +62,18 @@ def test():
         print(func.imported_modules[0].get_source('asm'))
 
         # exit()
-        func(a_nd, b_nd, c_nd, plus2_nd)
+        func(a_nd, b_nd, plus2_nd)
         
         print('a = ')
         print(a_np)
         print('b = ')
         print(b_np)
-        print('a + b =')
-        print(c_nd.asnumpy())
+        print('a + b + 2 =')
+        print(plus2_nd.asnumpy())
         print("numpy ground truth is")
-        gt = a_np + b_np
+        gt = a_np + b_np + 2
         print(gt)
-        np.testing.assert_allclose(c_nd.asnumpy(), gt)
+        np.testing.assert_allclose(plus2_nd.asnumpy(), gt)
         print('test passed!!')
 
 

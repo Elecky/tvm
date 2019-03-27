@@ -431,6 +431,132 @@ def inject_accTobuffer(stmt_in):
     
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.copy_acc2buf, _inject_copy)
 
+def cpu_access_rewrite(stmt_in):
+    """Detect CPU access to VTA buffer and get address correctly. copied from VTA.
+
+    VTA's buffer is an opaque handle that do not
+    correspond to address in CPU.
+    This pass detect CPU access and rewrite to use pointer
+    returned VTABufferCPUPtr for CPU access.
+
+    Parameters
+    ----------
+    stmt_in : Stmt
+        Input statement
+
+    Returns
+    -------
+    stmt_out : Stmt
+        Transformed statement
+    """
+    env = get_env()
+    rw_info = {}
+    def _post_order(op):
+        if isinstance(op, tvm.stmt.Allocate):
+            buffer_var = op.buffer_var
+            if not buffer_var in rw_info:
+                return None
+            new_var = rw_info[buffer_var]
+            let_stmt = tvm.make.LetStmt(
+                new_var, tvm.call_extern(
+                    "handle", "NNPUBufferCPUPtr",
+                    # env.dev.command_handle,
+                    buffer_var), op.body)
+            alloc = tvm.make.Allocate(
+                buffer_var, op.dtype, op.extents,
+                op.condition, let_stmt)
+            del rw_info[buffer_var]
+            return alloc
+        elif isinstance(op, tvm.expr.Load):
+            buffer_var = op.buffer_var
+            if not buffer_var in rw_info:
+                rw_info[buffer_var] = tvm.var(
+                    buffer_var.name + "_ptr", "handle")
+            new_var = rw_info[buffer_var]
+            return tvm.make.Load(op.dtype, new_var, op.index)
+        elif isinstance(op, tvm.stmt.Store):
+            buffer_var = op.buffer_var
+            if not buffer_var in rw_info:
+                rw_info[buffer_var] = tvm.var(
+                    buffer_var.name + "_ptr", "handle")
+            new_var = rw_info[buffer_var]
+            return tvm.make.Store(new_var, op.value, op.index)
+        else:
+            raise RuntimeError("not reached")
+    stmt = tvm.ir_pass.IRTransform(
+        stmt_in, None, _post_order, ["Allocate", "Load", "Store"])
+    for buffer_var, new_var in rw_info.items():
+        stmt = tvm.make.LetStmt(
+            new_var, tvm.call_extern(
+                    "handle", "NNPUBufferCPUPtr",
+                    # env.dev.command_handle,
+                    buffer_var), stmt)
+    return stmt
+
+
+def lift_alloc_to_scope_begin(stmt_in):
+    """Lift allocate to beginning of the current scope. copied from VTA.
+
+    Parameters
+    ----------
+    stmt_in : Stmt
+        Input statement
+
+    Returns
+    -------
+    stmt_out : Stmt
+        Transformed statement
+    """
+    lift_stmt = [[]]
+    def _merge_block(slist, body):
+        for op in slist:
+            if op.body == body:
+                body = op
+            elif isinstance(op, tvm.stmt.Allocate):
+                body = tvm.make.Allocate(
+                    op.buffer_var, op.dtype,
+                    op.extents, op.condition, body)
+            elif isinstance(op, tvm.stmt.AttrStmt):
+                body = tvm.make.AttrStmt(
+                    op.node, op.attr_key, op.value, body)
+            elif isinstance(op, tvm.stmt.For):
+                body = tvm.make.For(
+                    op.loop_var, op.min, op.extent, op.for_type,
+                    op.device_api, body)
+            else:
+                raise RuntimeError("unexpected op")
+        del slist[:]
+        return body
+
+    def _pre_order(op):
+        if isinstance(op, tvm.stmt.For):
+            lift_stmt.append([])
+        elif isinstance(op, tvm.stmt.AttrStmt):
+            if op.attr_key == "virtual_thread":
+                lift_stmt.append([])
+
+        return None
+
+    def _post_order(op):
+        if isinstance(op, tvm.stmt.Allocate):
+            lift_stmt[-1].append(op)
+            return op.body
+        elif isinstance(op, tvm.stmt.AttrStmt):
+            if op.attr_key == "storage_scope":
+                lift_stmt[-1].append(op)
+                return op.body
+            elif op.attr_key == "virtual_thread":
+                return _merge_block(lift_stmt.pop() + [op], op.body)
+            return op
+        elif isinstance(op, tvm.stmt.For):
+            return _merge_block(lift_stmt.pop() + [op], op.body)
+        else:
+            raise RuntimeError("not reached")
+    stmt = tvm.ir_pass.IRTransform(
+        stmt_in, _pre_order, _post_order, ["Allocate", "AttrStmt", "For"])
+    assert len(lift_stmt) == 1
+    return _merge_block(lift_stmt[0], stmt)
+
 # functions related to lift_coproc_scope ir pass starts from here.
 ''' The code is deprecated already, use tvm.ir_pass.LiftAttrScope instead.
 def _is_coproc_scope_attr(op):

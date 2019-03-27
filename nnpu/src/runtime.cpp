@@ -1126,6 +1126,12 @@ void NNPUBufferCopy(const void *from,
     }
 }
 
+void *NNPUBufferCPUPtr(void *buffer)
+{
+    auto handle = nnpu::DataBuffer::FromHandle(buffer)->virt_addr();
+    return handle;
+}
+
 using std::vector;
 using std::string;
 

@@ -9,6 +9,7 @@ runtime function declarations of NNPU simulator
 #include <vector>
 #include <nnpu/driver.h>
 #include <nnpu/insn.h>
+#include <tvm/runtime/c_runtime_api.h>
 
 using nnpu_dram_addr_t = uint32_t;
 using nnpu_buf_addr_t = uint32_t;
@@ -32,6 +33,8 @@ void NNPU_AssembleAndRun(std::string asm_code,
                          std::string func_name,
                          int coproc_scope, 
                          std::vector<int32_t> args);
+
+TVM_DLL void *NNPUBufferCPUPtr(void *buffer);
 
 #ifdef __cplusplus
 }
