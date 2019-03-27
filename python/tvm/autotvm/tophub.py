@@ -26,7 +26,7 @@ PACKAGE_VERSION = {
     'rocm':    "v0.01",
     'opencl':  "v0.01",
     'mali':    "v0.03",
-
+    'nnpu':    "v0.01",
     'vta':     "v0.01",
 }
 
@@ -36,7 +36,7 @@ def _alias(name):
     """convert alias for some packages"""
     table = {
         'vtacpu': 'vta',
-
+        'nnpucpu': 'nnpu',
         'metal': 'opencl',
         'nvptx': 'cuda',
     }

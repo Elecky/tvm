@@ -430,6 +430,12 @@ def opengl(options=None):
     options = _merge_opts([], options)
     return _api_internal._TargetCreate("opengl", *options)
 
+def nnpu(options = None):
+
+    # Returns a nnpu target.
+    
+    options = _merge_opts([], options)
+    return _api_internal._TargetCreate("nnpu", *options)
 
 def arm_cpu(model='unknown', options=None):
     """Returns a ARM CPU target.
