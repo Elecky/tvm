@@ -3,10 +3,10 @@
  * \file text_printer.cc
  * \brief Text printer to print relay in text form.
  */
-#include <tvm/relay/environment.h>
+#include <tvm/relay/module.h>
 #include <tvm/relay/expr_functor.h>
 #include <sstream>
-#include "../pass/type_functor.h"
+#include "type_functor.h"
 #include "../../lang/attr_functor.h"
 
 namespace tvm {
@@ -38,15 +38,15 @@ inline std::ostream& operator<<(std::ostream& os, const TextValue& val) {  // NO
  * It can be hard to design a text format for all the possible nodes
  * as the set of nodes can grow when we do more extensions.
  *
- * Instead of trying to design readable text format for every nodes,
+ * Instead of trying to design readable text format for every node,
  * we support a meta-data section in the text format.
  * We allow the text format to refer to a node in the meta-data section.
  *
- * The meta-data section is a json serialized string of an Array<NodeRef>.
+ * The meta-data section is a json serialized string of an Map<string, Array<NodeRef>>.
  * Each element in the meta-data section can be referenced by the text format.
  * Each meta data node is printed in the following format.
  *
- * meta.<type-key-of-node>(<index-in-meta-section>)
+ * meta[type-key-of-node>][<index-in-meta-section>]
  *
  * Specifically, consider the following IR(constructed by python).
  *
@@ -63,7 +63,7 @@ inline std::ostream& operator<<(std::ostream& os, const TextValue& val) {  // NO
  *
  * \code
  *
- * function(%x: Tensor[(meta.Variable(id=0),), float32]) {
+ * fn (%x: Tensor[(meta[Variable][0],), float32]) {
  *   %x
  * }
  * # Meta data section is a json-serialized string
@@ -73,8 +73,8 @@ inline std::ostream& operator<<(std::ostream& os, const TextValue& val) {  // NO
  * \endcode
  *
  * Note that we store tvm.var("n") in the meta data section.
- * Since it is stored in the index-0 in the meta-data seciton,
- * we print it as meta.Variable(0).
+ * Since it is stored in the index-0 in the meta-data section,
+ * we print it as meta[Variable][0].
  *
  * The text parser can recover this object by loading from the corresponding
  * location in the meta data section.
@@ -91,18 +91,18 @@ class TextMetaDataContext {
    * \return A string representation of the meta node.
    */
   std::string GetMetaNode(const NodeRef& node) {
-    std::ostringstream os;
-    auto it = meta_index_.find(node);
-    int64_t index;
-    if (it != meta_index_.end()) {
-      index = it->second;
-    } else {
-      index = static_cast<int64_t>(meta_data_.size());
-      meta_data_.push_back(node);
-      meta_index_[node] = index;
+    auto it = meta_repr_.find(node);
+    if (it != meta_repr_.end()) {
+      return it->second;
     }
-    os << "meta." << node->type_key() << "(id=" << index << ")";
-    return os.str();
+    Array<NodeRef>& mvector =
+        meta_data_[node->type_key()];
+    int64_t index = static_cast<int64_t>(mvector.size());
+    mvector.push_back(node);
+    std::ostringstream os;
+    os << "meta[" << node->type_key() << "][" << index << "]";
+    meta_repr_[node] = os.str();
+    return meta_repr_[node];
   }
   /*!
    * \brief Get the metadata section in json format.
@@ -110,21 +110,30 @@ class TextMetaDataContext {
    */
   std::string GetMetaSection() const {
     if (meta_data_.size() == 0) return std::string();
-    return SaveJSON(Array<NodeRef>(meta_data_));
+    return SaveJSON(Map<std::string, NodeRef>(
+        meta_data_.begin(), meta_data_.end()));
+  }
+
+  /*! \return whether the meta data context is empty. */
+  bool empty() const {
+    return meta_data_.empty();
   }
 
  private:
   /*! \brief additional metadata stored in TVM json format */
-  std::vector<NodeRef> meta_data_;
-  /*! \brief map from meta data into its index */
-  std::unordered_map<NodeRef, int64_t, NodeHash, NodeEqual> meta_index_;
+  std::unordered_map<std::string, Array<NodeRef> > meta_data_;
+  /*! \brief map from meta data into its string representation */
+  std::unordered_map<NodeRef, std::string, NodeHash, NodeEqual> meta_repr_;
 };
 
 class TextPrinter :
-    public ExprFunctor<TextValue(const Expr&)> ,
+    public ExprFunctor<TextValue(const Expr&)>,
     public TypeFunctor<void (const Type&, std::ostream& os)>,  // NOLINT(*)
     public AttrFunctor<void (const NodeRef&, std::ostream& os)> { // NOLINT(*)
  public:
+  explicit TextPrinter(bool show_meta_data,
+                       runtime::TypedPackedFunc<std::string(Expr)> annotate)
+      : show_meta_data_(show_meta_data), annotate_(annotate) {}
   /*!
    * \brief Print a node to string.
    * \param node.
@@ -133,8 +142,8 @@ class TextPrinter :
   std::string Print(const NodeRef& node) {
     if (node.as<FunctionNode>()) {
       this->PrintFunc(Downcast<Function>(node));
-    } else if (node.as<EnvironmentNode>()) {
-      this->PrintEnv(Downcast<Environment>(node));
+    } else if (node.as<ModuleNode>()) {
+      this->PrintEnv(Downcast<Module>(node));
     } else if (node.as_derived<TypeNode>()) {
       this->PrintType(Downcast<Type>(node), stream_);
     } else if (node.as_derived<ExprNode>()) {
@@ -142,25 +151,29 @@ class TextPrinter :
     } else {
       stream_ << node;
     }
-    std::string meta_json = meta_.GetMetaSection();
-    if (meta_json.length() != 0) {
-      // append meta data in the end.
-      stream_ << "# meta data\n"
-              << "r\"\"\"\n"
-              << meta_json << "\n"
-              << "\"\"\"";
+    if (!meta_.empty()) {
+      if (show_meta_data_) {
+        std::string meta_json = meta_.GetMetaSection();
+        // append meta data in the end.
+        stream_ << "# meta data\n"
+                << "r\"\"\"\n"
+                << meta_json << "\n"
+                << "\"\"\"";
+      } else {
+        stream_ << "# meta data omitted. you can use show_meta_data=True to include meta-data\n";
+      }
     }
     return stream_.str();
   }
 
   void PrintFunc(const Function& func) {
-    this->PrintFuncInternal("function", func);
+    this->PrintFuncInternal("fn ", func);
     stream_ << "\n";
   }
 
-  void PrintEnv(const Environment& env) {
+  void PrintEnv(const Module& mod) {
     int counter = 0;
-    for (const auto& kv : env->functions) {
+    for (const auto& kv : mod->functions) {
       std::ostringstream os;
       if (counter++ != 0) {
         stream_ << "\n";
@@ -217,13 +230,17 @@ class TextPrinter :
         return ConstScalar(dtype, static_cast<const float*>(op->data->data));
       } else if (dtype == Float(64)) {
         return ConstScalar(dtype, static_cast<const double*>(op->data->data));
+      } else if (dtype == Bool()) {
+        return ConstScalar(dtype, static_cast<const uint8_t*>(op->data->data));
       }
     }
     // default fall-back, record it as meta node.
     TextValue id = this->AllocTempVar();
     this->PrintIndent();
     stream_ << id << " = " << meta_.GetMetaNode(GetRef<NodeRef>(op));
-    this->PrintEndInst("\n");
+    this->PrintEndInst("");
+    this->PrintOptionalInfo(GetRef<Expr>(op));
+    stream_ << '\n';
     return id;
   }
 
@@ -242,6 +259,9 @@ class TextPrinter :
       if (i + 1 != fields.size()) {
         stream_ << ", ";
       }
+    }
+    if (fields.size() == 1) {
+      stream_ << ',';
     }
     stream_ << ')';
     this->PrintEndInst("\n");
@@ -266,25 +286,38 @@ class TextPrinter :
   TextValue VisitExpr_(const FunctionNode* op) final {
     TextValue id = AllocTempVar();
     std::ostringstream os;
-    os << id << " = function";
+    os << id << " = fn";
     this->PrintFuncInternal(os.str(), GetRef<Function>(op));
     this->PrintEndInst("\n");
     return id;
   }
 
   TextValue VisitExpr_(const CallNode* op) final {
-    // TODO(tqchen, M.K.): support generic call
     // possibly through meta-data
-    CHECK_EQ(op->type_args.size(), 0U)
-        << "generic call not yet supported";
-    TextValue call_op = GetValue(op->op);
     std::vector<TextValue> args;
     for (Expr arg : op->args) {
       args.emplace_back(GetValue(arg));
     }
+    TextValue call_op = GetValue(op->op);
     TextValue id = this->AllocTempVar();
     this->PrintIndent();
-    stream_ << id << " = " << call_op << "(";
+
+    stream_ << id << " = " << call_op;
+
+    auto type_args = op->type_args;
+
+    if (!IsPrimitiveOp(op->op) && type_args.size() > 0U) {
+      stream_ << "<";
+      for (size_t i = 0; i < op->type_args.size(); ++i) {
+        this->PrintType(type_args[i], stream_);
+        if (i + 1 != type_args.size()) {
+          stream_ << ", ";
+        }
+      }
+      stream_ << ">";
+    }
+
+    stream_ << "(";
     for (size_t i = 0; i < args.size(); ++i) {
       stream_ << args[i];
       if (i + 1 != args.size()) {
@@ -325,7 +358,7 @@ class TextPrinter :
     TextValue tuple = GetValue(op->tuple);
     TextValue id = this->AllocTempVar();
     this->PrintIndent();
-    stream_ << id << " = " << tuple << "[" << op->index << "]";
+    stream_ << id << " = " << tuple << "." << op->index << "";
     this->PrintEndInst("\n");
     return id;
   }
@@ -361,6 +394,17 @@ class TextPrinter :
     os << "), " << runtime::TVMType2String(Type2TVMType(node->dtype)) << "]";
   }
 
+  void VisitType_(const TupleTypeNode* node, std::ostream& os) final {  // NOLINT(*)
+    os << "Tuple[";
+    for (size_t i = 0; i < node->fields.size(); ++i) {
+      this->PrintType(node->fields[i], os);
+      if (i + 1 != node->fields.size()) {
+        os << ", ";
+      }
+    }
+    os << "]";
+  }
+
   void VisitTypeDefault_(const Node* node, std::ostream& os) final {  // NOLINT(*)
     // by default always print as meta-data
     os << meta_.GetMetaNode(GetRef<NodeRef>(node));
@@ -372,7 +416,11 @@ class TextPrinter :
    * \param os The output type.
    */
   void PrintAttr(const NodeRef& value, std::ostream& os) {  // NOLINT(*)
-    this->VisitAttr(value, os);
+    if (value.defined()) {
+      this->VisitAttr(value, os);
+    } else {
+      os << "None";
+    }
   }
   //------------------------------------
   // Overload of Attr printing functions
@@ -487,11 +535,14 @@ class TextPrinter :
         stream_ << ",\n";
       }
     }
-    stream_ << ") ";
+    stream_ << ')';
     if (fn->ret_type.defined()) {
-      stream_ << " -> ";
+      stream_ << '\n';
+      this->PrintIndent(decl_indent);
+      stream_ << "-> ";
       this->PrintType(fn->ret_type, stream_);
     }
+    stream_ << ' ';
     this->PrintScope(fn->body);
   }
   /*!
@@ -500,7 +551,9 @@ class TextPrinter :
    */
   void PrintOptionalInfo(const Expr& expr) {
     // additional information in comment.
-    if (expr->checked_type_.defined()) {
+    if (annotate_ != nullptr) {
+      stream_ << " # " << annotate_(expr);
+    } else if (expr->checked_type_.defined()) {
       stream_ << " # ty=";
       this->PrintType(expr->checked_type(), stream_);
     }
@@ -638,9 +691,18 @@ class TextPrinter :
    * \return The corresponding name.
    */
   TextValue AllocVarName(const Var& var) {
-    std::string name = GetUniqueName('%' + var->name_hint);
-    TextValue val(name);
-    CHECK(!memo_.count(var));
+    std::string name = var->name_hint();
+    // always make sure first name is alpha
+    if (name.length() != 0 && !std::isalpha(name[0])) {
+      name = "%v" + name;
+    } else {
+      name = "%" + name;
+    }
+    TextValue val(GetUniqueName(name));
+    // still print if ir is malformed, but show the error.
+    if (memo_.count(var)) {
+      memo_[var] = TextValue(val.name + "-malformed-ir");
+    }
     memo_[var] = val;
     return val;
   }
@@ -648,6 +710,10 @@ class TextPrinter :
  private:
   class AttrPrinter;
   friend class AttrPrinter;
+  /*! \brief Whether to print meta data. */
+  bool show_meta_data_;
+  /*! \brief additional comment function */
+  runtime::TypedPackedFunc<std::string(Expr)> annotate_;
   /*! \brief meta data context */
   TextMetaDataContext meta_;
   /*! \brief Check whether scope is still valid */
@@ -738,12 +804,16 @@ void TextPrinter::PrintCallAttrs(const Expr& op,
   os << ", " << meta_.GetMetaNode(attrs);
 }
 
-std::string RelayPrint(const NodeRef& node) {
-  return TextPrinter().Print(node);
+std::string RelayPrint(const NodeRef& node,
+                       bool show_meta_data,
+                       runtime::TypedPackedFunc<std::string(Expr)> annotate) {
+  return TextPrinter(show_meta_data, annotate).Print(node);
 }
 
-TVM_REGISTER_API("relay._expr._text_print")
-.set_body_typed<std::string(const NodeRef&)>(RelayPrint);
+TVM_REGISTER_API("relay._expr.RelayPrint")
+.set_body_typed<std::string(
+    const NodeRef&, bool,
+    runtime::TypedPackedFunc<std::string(Expr)>)>(RelayPrint);
 
 }  // namespace relay
 }  // namespace tvm

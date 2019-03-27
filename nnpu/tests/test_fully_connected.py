@@ -6,7 +6,7 @@ import numpy as np
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
 
     out_channel = 32
     in_channel = 64
@@ -61,6 +61,8 @@ with ScheduleProcHelper():
     print(nnpu.lower(s, [weight, data, bias, res_host], simple_mode=True))
 
     func = nnpu.build(s, [weight, data, bias, res_host], 'nnpu', 'llvm', name='nnpu_func')
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
 
     ctx = tvm.nd.TVMContext(13, 0)
     a_np = np.random.randint(size=weight_shape, dtype=weight.dtype, low = -32, high = 32)

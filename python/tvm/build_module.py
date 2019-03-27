@@ -5,8 +5,8 @@ LoweredFunc and compiled Module.
 """
 from __future__ import absolute_import as _abs
 import warnings
-import types
 
+from ._ffi.function import Function
 from ._ffi.node import NodeBase, register_node
 from . import api
 from . import _api_internal
@@ -69,7 +69,7 @@ class DumpIR(object):
             vset[k] = v
         for k, v in vset.items():
             self._recover_list.append(recover)
-            vset[k] = self.decorate(v) if isinstance(v, types.FunctionType) else v
+            vset[k] = self.decorate(v) if isinstance(v, Function) else v
 
     def decorate_custompass(self, custom_pass):
         """decorate given list of custom passes, and return decorated passes"""
@@ -125,7 +125,9 @@ class BuildConfig(NodeBase):
         "data_alignment": -1,
         "restricted_func": True,
         "double_buffer_split_loop": 1,
-        "dump_pass_ir": False
+        "dump_pass_ir": False,
+        "instrument_bound_checkers": False,
+        "disable_select_rewriting": False
     }
     _dump_ir = DumpIR()
 
@@ -290,6 +292,25 @@ def get_binds(args, binds=None):
     return binds, arg_list
 
 
+def form_body(sch):
+    """According to the given schedule, form the raw body
+    Parameters
+    ----------
+    sch : tvm.schedule.Schedule
+    The given scheduler to form the raw body
+
+    Returns
+    -------
+    The body formed according to the given schedule
+    """
+    # normalize schedule first
+    sch = sch.normalize()
+    bounds = schedule.InferBound(sch)
+    stmt = schedule.ScheduleOps(sch, bounds)
+    stmt = ir_pass.InjectPrefetch(stmt)
+    return stmt
+
+
 def lower(sch,
           args,
           name="default_function",
@@ -299,8 +320,8 @@ def lower(sch,
 
     Parameters
     ----------
-    sch : tvm.Schedule
-        The schedule to be builded
+    sch : tvm.schedule.Schedule
+        The schedule to be built
 
     args : list of Buffer or Tensor or Var
         The argument lists to the function.
@@ -335,21 +356,12 @@ def lower(sch,
 
     # Phase 0
     if isinstance(sch, schedule.Schedule):
-        # normalize schedule first
-        sch = sch.normalize()
-        bounds = schedule.InferBound(sch)
-        stmt = schedule.ScheduleOps(sch, bounds)
-        stmt = ir_pass.InjectPrefetch(stmt)
-    else:
-        #So far there is no op for hybrid script, so a plain ir body is given
-        if not isinstance(sch, _stmt.Stmt):
-            raise ValueError("sch should be either a Schedule or a Stmt")
-        stmt = sch
+        stmt = form_body(sch)
 
     for f in lower_phase0:
         stmt = f(stmt)
     # Phase 1
-    stmt = ir_pass.StorageFlatten(stmt, binds, 64)
+    stmt = ir_pass.StorageFlatten(stmt, binds, 64, cfg.instrument_bound_checkers)
     stmt = ir_pass.CanonicalSimplify(stmt)
     for f in lower_phase1:
         stmt = f(stmt)
@@ -372,9 +384,13 @@ def lower(sch,
     stmt = ir_pass.Simplify(stmt)
     stmt = ir_pass.LowerStorageAccessInfo(stmt)
     stmt = ir_pass.RemoveNoOp(stmt)
-    stmt = ir_pass.RewriteUnsafeSelect(stmt)
+    if not cfg.disable_select_rewriting:
+        stmt = ir_pass.RewriteUnsafeSelect(stmt)
     for f in lower_phase3:
         stmt = f(stmt)
+    # Instrument BoundCheckers
+    if cfg.instrument_bound_checkers:
+        stmt = ir_pass.InstrumentBoundCheckers(stmt)
     if simple_mode:
         return stmt
     return ir_pass.MakeAPI(stmt, name, arg_list, 0, cfg.restricted_func)
@@ -419,8 +435,19 @@ def _build_for_device(flist, target, target_host):
             func = ir_pass.ThreadSync(func, "warp")
             warp_size = target.thread_warp_size
             func = ir_pass.LowerThreadAllreduce(func, warp_size)
-            # TODO: implement our own spliter.
             fsplits = [s for s in ir_pass.SplitHostDevice(func)]
+            # split host device for nnpu backend.
+            if (target.target_name == 'nnpu'):
+                # print('trying to split')
+                fsplits = [s for s in ir_pass.NNPUSplitHostDevice(func)]
+                # print(len(fsplits))
+                # print('host func:')
+                # print(fsplits[0].body)
+                # for i, x in enumerate(fsplits[1:], 1):
+                #     print('device func {0}'.format(i))
+                #     print(x.args)
+                #     print(x.body)
+            
             fhost.append(fsplits[0])
             for x in fsplits[1:]:
                 fdevice.append(x)

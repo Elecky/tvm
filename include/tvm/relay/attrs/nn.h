@@ -12,6 +12,23 @@
 namespace tvm {
 namespace relay {
 
+/*!
+ * \brief Add a 1D Tensor to an axis of a data.
+ *
+ * \note bias_add is a special add operator that is in nn
+ *   and enables automatic derivation of bias's shape.
+ *   You can directly use add for more generalized case.
+ */
+struct BiasAddAttrs : public tvm::AttrsNode<BiasAddAttrs> {
+  int axis;
+
+  TVM_DECLARE_ATTRS(BiasAddAttrs, "relay.attrs.BiasAddAttrs") {
+    TVM_ATTR_FIELD(axis)
+        .describe("The axis to add the bias")
+        .set_default(1);
+  }
+};
+
 /*! \brief Attributes used in convolution operators */
 struct Conv2DAttrs : public tvm::AttrsNode<Conv2DAttrs> {
   Array<IndexExpr> strides;
@@ -21,7 +38,7 @@ struct Conv2DAttrs : public tvm::AttrsNode<Conv2DAttrs> {
   IndexExpr channels;
   Array<IndexExpr> kernel_size;
   std::string data_layout;
-  std::string weight_layout;
+  std::string kernel_layout;
   std::string out_layout;
   DataType out_dtype;
 
@@ -51,7 +68,7 @@ struct Conv2DAttrs : public tvm::AttrsNode<Conv2DAttrs> {
                   "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
                   "dimensions respectively. Convolution is applied on the 'H' and"
                   "'W' dimensions.");
-    TVM_ATTR_FIELD(weight_layout).set_default("OIHW")
+    TVM_ATTR_FIELD(kernel_layout).set_default("OIHW")
         .describe("Dimension ordering of weight. Can be 'OIHW', 'OIHW16o16i', etc."
                   "'O', 'I', 'H', 'W' stands for num_filter, input_channel, height, and width"
                   "dimensions respectively.");
@@ -67,13 +84,85 @@ struct Conv2DAttrs : public tvm::AttrsNode<Conv2DAttrs> {
   }
 };
 
+
+/*! \brief Attributes used in winograd weight transformation operators */
+struct Conv2DWinogradWeightTransformAttrs :
+    public tvm::AttrsNode<Conv2DWinogradWeightTransformAttrs> {
+  int tile_size;
+
+  TVM_DECLARE_ATTRS(Conv2DWinogradWeightTransformAttrs,
+      "relay.attrs.Conv2DWinogradWeightTransformAttrs") {
+    TVM_ATTR_FIELD(tile_size)
+      .describe("Tile size of winograd. E.g. 2 for F(2x2, 3x3) and 4 for F(4x4, 3x3)");
+  }
+};
+
+/*! \brief Attributes used in convolution operators with winograd algorithm */
+struct Conv2DWinogradAttrs : public tvm::AttrsNode<Conv2DWinogradAttrs> {
+  int tile_size;
+  Array<IndexExpr> strides;
+  Array<IndexExpr> padding;
+  Array<IndexExpr> dilation;
+  int groups;
+  IndexExpr channels;
+  Array<IndexExpr> kernel_size;
+  std::string data_layout;
+  std::string kernel_layout;
+  std::string out_layout;
+  DataType out_dtype;
+
+  TVM_DECLARE_ATTRS(Conv2DWinogradAttrs, "relay.attrs.Conv2DWinogradAttrs") {
+    TVM_ATTR_FIELD(tile_size)
+      .describe("The tile size of winograd. E.g. 2 for F(2x2, 3x3) and 4 for F(4x4, 3x3)");
+    TVM_ATTR_FIELD(strides).set_default(Array<IndexExpr>({1, 1}))
+        .describe("Specifies the strides of the convolution.");
+    TVM_ATTR_FIELD(padding).set_default(Array<IndexExpr>({0, 0}))
+        .describe("If padding is non-zero, then the input is implicitly zero-padded"
+                  "on both sides for padding number of points");
+    TVM_ATTR_FIELD(dilation).set_default(Array<IndexExpr>({1, 1}))
+        .describe("Specifies the dilation rate to use for dilated convolution.");
+    TVM_ATTR_FIELD(groups).set_default(1)
+        .describe("Controls the connections between inputs and outputs."
+                  "At groups=1, all inputs are convolved to all outputs."
+                  "At groups=2, the operation becomes equivalent to having two convolution"
+                  "layers side by side, each seeing half the input channels, and producing"
+                  "half the output channels, and both subsequently concatenated.");
+    TVM_ATTR_FIELD(channels)
+        .describe("The number of output channels in the convolution."
+                  " If it is not set, inferred by shape of the weight.")
+        .set_default(NullValue<IndexExpr>());
+    TVM_ATTR_FIELD(kernel_size)
+        .describe("Specifies the dimensions of the convolution window.")
+        .set_default(NullValue<Array<IndexExpr> >());
+    TVM_ATTR_FIELD(data_layout).set_default("NCHW")
+        .describe("Dimension ordering of input data. Can be 'NCHW', 'NHWC', etc."
+                  "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+                  "dimensions respectively. Convolution is applied on the 'H' and"
+                  "'W' dimensions.");
+    TVM_ATTR_FIELD(kernel_layout).set_default("OIHW")
+        .describe("Dimension ordering of weight. Can be 'OIHW', 'OIHW16o16i', etc."
+                  "'O', 'I', 'H', 'W' stands for num_filter, input_channel, height, and width"
+                  "dimensions respectively.");
+    TVM_ATTR_FIELD(out_layout).set_default("")
+        .describe("Dimension ordering of output. Can be 'NCHW', 'NHWC', etc."
+                  "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+                  "dimensions respectively. Default to be same as input layout.");
+
+    // use 0 bits to indicate none.
+    TVM_ATTR_FIELD(out_dtype)
+        .set_default(NullValue<DataType>())
+        .describe("Output data type, set to explicit type under mixed precision setting");
+  }
+};
+
+
 /*! \brief Attributes used in softmax operators */
 struct SoftmaxAttrs : public tvm::AttrsNode<SoftmaxAttrs> {
   int axis;
 
   TVM_DECLARE_ATTRS(SoftmaxAttrs, "relay.attrs.SoftmaxAttrs") {
-      TVM_ATTR_FIELD(axis).set_default(1)
-          .describe("The axis to sum over when computing softmax.");
+    TVM_ATTR_FIELD(axis).set_default(-1)
+      .describe("The axis to sum over when computing softmax.");
   }
 };
 
@@ -87,7 +176,8 @@ struct Conv2DTransposeAttrs : public tvm::AttrsNode<Conv2DTransposeAttrs> {
   Array<IndexExpr> dilation;
   int groups;
   std::string data_layout;
-  std::string weight_layout;
+  std::string kernel_layout;
+  std::string out_layout;
   DataType out_dtype;
 
   TVM_DECLARE_ATTRS(Conv2DTransposeAttrs, "relay.attrs.Conv2DTransposeAttrs") {
@@ -118,10 +208,14 @@ struct Conv2DTransposeAttrs : public tvm::AttrsNode<Conv2DTransposeAttrs> {
                 "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
                 "dimensions respectively. Convolution is applied on the 'H' and"
                 "'W' dimensions.");
-    TVM_ATTR_FIELD(weight_layout).set_default("OIHW")
+    TVM_ATTR_FIELD(kernel_layout).set_default("OIHW")
       .describe("Dimension ordering of data and weight. Can be 'OIHW', 'OIHW16o16i', etc."
                 "'O', 'I', 'H', 'W' stands for num_filter, input_channel, height, and width"
                 "dimensions respectively.");
+    TVM_ATTR_FIELD(out_layout).set_default("")
+        .describe("Dimension ordering of output. Can be 'NCHW', 'NHWC', etc."
+                      "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+                      "dimensions respectively. Default to be same as input layout.");
     TVM_ATTR_FIELD(out_dtype)
         .set_default(NullValue<DataType>())
         .describe("Output data type, set to explicit type under mixed precision setting");
@@ -254,9 +348,20 @@ struct PadAttrs : public tvm::AttrsNode<PadAttrs> {
 struct LeakyReluAttrs : public tvm::AttrsNode<LeakyReluAttrs> {
   double alpha;
 
-  TVM_DECLARE_ATTRS(DenseAttrs, "relay.attrs.LeakyReluAttrs") {
+  TVM_DECLARE_ATTRS(LeakyReluAttrs, "relay.attrs.LeakyReluAttrs") {
     TVM_ATTR_FIELD(alpha).set_lower_bound(0.0).set_default(0.25)
         .describe("Slope coefficient for the negative half axis.");
+  }
+};
+
+
+/*! \brief Attributes for prelu operator */
+struct PReluAttrs : public tvm::AttrsNode<PReluAttrs> {
+  int axis;
+
+  TVM_DECLARE_ATTRS(PReluAttrs, "relay.attrs.PReluAttrs") {
+    TVM_ATTR_FIELD(axis).set_default(1)
+        .describe("Specify which shape axis the channel is specified.");
   }
 };
 
@@ -299,8 +404,8 @@ struct BatchNormAttrs : public tvm::AttrsNode<BatchNormAttrs> {
 
 /*! \brief Attributes for LRN operator */
 struct LRNAttrs : public tvm::AttrsNode<LRNAttrs> {
-  IndexExpr size;
-  IndexExpr axis;
+  int size;
+  int axis;
   double bias;
   double alpha;
   double beta;
@@ -323,7 +428,7 @@ struct LRNAttrs : public tvm::AttrsNode<LRNAttrs> {
 /*! \brief Attributes for L2Normalize operator */
 struct L2NormalizeAttrs : public tvm::AttrsNode<L2NormalizeAttrs> {
   double eps;
-  Array<IndexExpr> axis;
+  Array<Integer> axis;
 
   TVM_DECLARE_ATTRS(L2NormalizeAttrs, "relay.attrs.L2NormalizeAttrs") {
     TVM_ATTR_FIELD(eps)

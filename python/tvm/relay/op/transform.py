@@ -1,6 +1,27 @@
 """Transform operators."""
 
 from . import _make
+from ..expr import TupleWrapper
+
+
+def cast(data, dtype):
+    """Cast input tensor to data type.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input data to the operator.
+
+    dtype: str
+        The target data type
+
+    Returns
+    -------
+    result : relay.Expr
+        The casted result.
+    """
+    from .. import _make as _relay_make
+    return _relay_make.cast(data, dtype)
 
 
 def expand_dims(data, axis, num_newaxis=1):
@@ -44,31 +65,31 @@ def transpose(data, axes=None):
     result : relay.Expr
         The transposed result.
     """
-    axes = axes or []
-    return _make.transpose(data, list(axes))
+
+    if axes is not None:
+        axes = list(axes)
+    return _make.transpose(data, axes)
 
 
-def squeeze(data, axes=None):
+def squeeze(data, axis=None):
     """Squeeze axes in the array.
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
-    axes : None or List[int]
-        Axes to remove.
-        If axes = [] or = None, remove all axis of dimensions 1.
-        Otherwise, remove all axis in axes.
-        If any axis in axes has dimension that does not equal 1, it is an error.
+    axis : None or List[int]
+        The set of axes to remove.
+        If axis = None, remove all axis of dimensions 1.
+        If any specified axis has dimension that does not equal 1, it is an error.
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The squeezed result.
     """
-    axes = axes or []
-    return _make.squeeze(data, list(axes))
+    return _make.squeeze(data, axis)
 
 
 def reshape(data, newshape):
@@ -120,7 +141,7 @@ def reshape(data, newshape):
 
     Example::
 
-    - data.shape = (2,3,4), newshape = (-4,1,2,-2), result.shape =(1,2,3,4)
+    - data.shape = (2,3,4), newshape = (-4,1,2,-2), result.shape = (1,2,3,4)
     - data.shape = (2,3,4), newshape = (2,-4,-1,3,-2), result.shape = (2,1,3,4)
 
     Parameters
@@ -141,12 +162,35 @@ def reshape(data, newshape):
     return _make.reshape(data, list(newshape))
 
 
+def reshape_like(data, shape_like):
+    """Reshapes the input array by the size of another array.
+    For an input array with shape ``(d1, d2, ..., dk)``, `reshape_like` operation reshapes
+    the input array into an output array with the same shape as the second input array.
+    .. note::
+    Sizes for both array should be compatible.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input data to the operator.
+
+    shape_like : tuple of int
+        The new shape. Should be compatible with the original shape.
+
+    Returns
+    -------
+    ret : relay.Expr
+        The computed result.
+    """
+    return _make.reshape_like(data, shape_like)
+
+
 def take(data, indices, axis=None):
     """Take elements from an array along an axis.
 
     Parameters
     ----------
-    a : relay.Expr
+    data : relay.Expr
         The source array.
 
     indices : rely.Expr
@@ -187,7 +231,7 @@ def full(fill_value, shape=(), dtype=""):
 
 
 def full_like(data, fill_value):
-    """Return an scalar value array with the same shape and type as the input array.
+    """Return a scalar value array with the same shape and type as the input array.
 
     Parameters
     ----------
@@ -242,3 +286,197 @@ def where(condition, x, y):
     Note that the shape of condition, x, and y needs to be the same.
     """
     return _make.where(condition, x, y)
+
+def broadcast_to(data, shape):
+    """Return a scalar value array with the same type, broadcast to
+    the provided shape.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input tensor.
+
+    shape : shape
+        Provide the shape to broadcast to.
+
+    Returns
+    -------
+    result : relay.Expr
+        The resulting tensor.
+    """
+    return _make.broadcast_to(data, shape)
+
+def broadcast_to_like(data, broadcast_type):
+    """Return a scalar value array with the same shape and type as the input array.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input tensor.
+
+    broadcast_type : relay.Expr
+        Provide the type to broadcast to.
+
+    Returns
+    -------
+    result : relay.Expr
+        The resulting tensor.
+    """
+    return _make.broadcast_to_like(data, broadcast_type)
+
+
+def collapse_sum_like(data, collapse_type):
+    """Return a scalar value array with the same shape and type as the input array.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input tensor.
+
+    collapse_type : relay.Expr
+        Provide the type to collapse to.
+
+    Returns
+    -------
+    result : relay.Expr
+        The resulting tensor.
+    """
+    return _make.collapse_sum_like(data, collapse_type)
+
+
+def split(data, indices_or_sections, axis=0):
+    """Split input tensor along axis by sections or indices.
+
+    If indices_or_sections is an integer, the input will be divided equally
+    along given axis. If such a split is not possible, an error is raised.
+
+    If indices_or_sections is a tuple of sorted integers,
+    the entries indicate where along axis the array is split.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The source array.
+
+    indices_or_sections : int or tuple of int
+        Indices or sections to split into. Accepts an int or a tuple
+
+    axis : int, optional
+        The axis over which to split.
+
+    Returns
+    -------
+    ret : relay.Tuple([relay.Expr, relay.Expr])
+        The computed result.
+    """
+    if isinstance(indices_or_sections, int):
+        ret_size = indices_or_sections
+    else:
+        ret_size = len(indices_or_sections) + 1
+    return TupleWrapper(_make.split(data, indices_or_sections, axis), ret_size)
+
+
+def strided_slice(data, begin, end, strides=None):
+    """Strided slice of an array.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The source array to be sliced.
+
+    begin: list of int
+        The indices to begin with in the slicing.
+
+    end: list of int
+        Indicies indicating end of the slice.
+
+    strides: list of int, optional
+        Specifies the stride values, it can be negative in that case,
+        the input tensor will be reversed in that particular axis.
+
+    Returns
+    -------
+    ret : relay.Expr
+        The computed result.
+    """
+    strides = strides or []
+    return _make.strided_slice(data, list(begin), list(end), list(strides))
+
+
+def slice_like(data, shape_like, axes=None):
+    """Slice the first input with respect to the second input.
+
+    For an input array with shape ``(d1, d2, ..., dk)``, `slice_like` operation slices the
+    the input array corresponding size of second array. By default will slice on all axes.
+
+    Parameters
+    ----------
+    data : tvm.relay.Expr
+        The source array.
+
+    shape_like : tvm.relay.Expr
+        The new shape.
+
+    axes : Optional[Tuple[int]]
+        List of axes on which input data will be sliced according to the corresponding size of
+        the second input. By default will slice on all axes. Negative axes mean counting in reverse.
+
+    Returns
+    -------
+    result : relay.Expr
+        The computed result.
+    """
+    return _make.slice_like(data, shape_like, axes)
+
+
+def layout_transform(data, src_layout, dst_layout):
+    """Transform the layout of a tensor
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The source tensor to be transformed
+
+    src_layout: str
+        The source layout.  (e.g NCHW)
+
+    dst_layout: str
+        The destination layout.  (e.g. NCHW16c)
+
+    Returns
+    -------
+    ret : relay.Expr
+        The transformed tensor.
+    """
+    return _make.layout_transform(data, src_layout, dst_layout)
+
+
+def reverse_reshape(data, newshape):
+    """Reshapes the input array where the special values are inferred from
+    right to left.
+
+    Example::
+
+    The special values have the same semantics as :py:class:`tvm.relay.reshape`.
+    The difference is that special values are inferred from right to left. It
+    can be explained in the example below::
+
+    - data.shape = (10,5,4), newshape = (-1,0), reshape results in (40,5)
+    - data.shape = (10,5,4), newshape = (-1,0), reverse_reshape results in (40,5)
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input data to the operator.
+
+    newshape : Union[int, Tuple[int], List[int]]
+        The new shape. Should be compatible with the original shape.
+
+    Returns
+    -------
+    result : relay.Expr
+        The reshaped result.
+    """
+    if isinstance(newshape, int):
+        newshape = [newshape]
+    return _make._contrib_reverse_reshape(data, list(newshape))

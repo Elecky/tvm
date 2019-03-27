@@ -6,7 +6,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     shape = (8, 16)
     a = tvm.placeholder(shape, env.cfg['dtype_n'], 'a')
     b = tvm.placeholder(shape, env.cfg['dtype_n'], 'b')
@@ -31,6 +31,12 @@ def test():
 
     print(nnpu.lower(s, [a,b, dot_host], simple_mode=True))
     func = nnpu.build(s, [a,b, dot_host], 'nnpu', 'llvm', name='nnpu_func')
+
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
     
     ctx = tvm.nd.TVMContext(13, 0)
 

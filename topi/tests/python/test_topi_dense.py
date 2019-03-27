@@ -37,14 +37,14 @@ def verify_dense(batch, in_dim, out_dim, use_bias=True):
         with tvm.target.create(device):
             D = topi.nn.dense(A, B, C if use_bias else None)
             D = topi.nn.relu(D)
-            s = topi.generic.schedule_dense(D)
+            s = topi.generic.schedule_dense([D])
         a = tvm.nd.array(a_np, ctx)
         b = tvm.nd.array(b_np, ctx)
         c = tvm.nd.array(c_np, ctx)
         d = tvm.nd.array(np.zeros(get_const_tuple(D.shape), dtype=dtype), ctx)
         f = tvm.build(s, [A, B, C, D], device, name="dense")
         f(a, b, c, d)
-        np.testing.assert_allclose(d.asnumpy(), d_np, rtol=1e-5)
+        tvm.testing.assert_allclose(d.asnumpy(), d_np, rtol=1e-5)
 
     for device in get_all_backend():
         check_device(device)

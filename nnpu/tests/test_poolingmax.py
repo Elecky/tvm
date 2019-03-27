@@ -19,7 +19,7 @@ def max_pooling(inshape,outshape,cell_shape,innp,outdetype):
 # reduce max
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type="S1")
+    nnpu.set_device(env, type="S0")
     nnpu.set_dump(False)
     in_shape = (20,20,32)
     cell_shape = 5
@@ -35,14 +35,14 @@ def test():
     k1 = tvm.reduce_axis(reduce_shap, 'k1')
     step1_buf = tvm.compute((in_shape[0],in_shape[1]//cell_shape,in_shape[2]), 
                         lambda i,j,k: 
-                         tvm.sum(a_buf[i,j*cell_shape+k1,k],axis=k1),
+                         tvm.max(a_buf[i,j*cell_shape+k1,k],axis=k1),
                        'step1_buf')
     sph.MarkScope(step1_buf)
 
     k1 = tvm.reduce_axis(reduce_shap, 'k2')
     step2_buf = tvm.compute(out_shape, 
                         lambda i,j,k: 
-                         tvm.sum(step1_buf[i*cell_shape+k1,j,k],axis=k1),
+                         tvm.max(step1_buf[i*cell_shape+k1,j,k],axis=k1),
                        'step2_buf')
     sph.MarkScope(step2_buf)
     

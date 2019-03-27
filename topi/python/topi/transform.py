@@ -3,10 +3,9 @@
 from __future__ import absolute_import as _abs
 import tvm
 import topi
-from . import tag
 from . import cpp
 
-@tvm.tag_scope(tag=tag.BROADCAST)
+
 def expand_dims(a, axis, num_newaxis=1):
     """Expand the shape of an array.
 
@@ -25,7 +24,6 @@ def expand_dims(a, axis, num_newaxis=1):
     return cpp.expand_dims(a, axis, num_newaxis)
 
 
-@tvm.tag_scope(tag=tag.BROADCAST)
 def expand_like(a, shape_like, axis):
     """Expand an input array with the shape of second array.
     This operation can always be composed of unsqueezing and
@@ -79,7 +77,6 @@ def expand_like(a, shape_like, axis):
     return tvm.compute(shape_like.shape, _compute)
 
 
-@tvm.tag_scope(tag=tag.INJECTIVE)
 def transpose(a, axes=None):
     """Permute the dimensions of an array.
 
@@ -141,7 +138,6 @@ def strided_slice(a, begin, end, strides=None):
     return cpp.strided_slice(a, begin, end, strides)
 
 
-@tvm.tag_scope(tag=tag.INJECTIVE)
 def reshape(a, newshape):
     """Reshape the array
 
@@ -159,7 +155,6 @@ def reshape(a, newshape):
     return cpp.reshape(a, newshape)
 
 
-@tvm.tag_scope(tag=tag.INJECTIVE)
 def squeeze(a, axis=None):
     """Remove single-dimensional entries from the shape of an array.
 
@@ -178,7 +173,6 @@ def squeeze(a, axis=None):
     return cpp.squeeze(a, axis)
 
 
-@tvm.tag_scope(tag=tag.INJECTIVE)
 def concatenate(a_tuple, axis=0):
     """Join a sequence of arrays along an existing axis.
 
@@ -197,7 +191,6 @@ def concatenate(a_tuple, axis=0):
     return cpp.concatenate(a_tuple, axis)
 
 
-@tvm.tag_scope(tag=tag.INJECTIVE)
 def split(ary, indices_or_sections, axis=0):
     """Split an array into multiple sub-arrays.
 
@@ -240,6 +233,24 @@ def take(a, indices, axis=None):
     return cpp.take(a, indices, int(axis))
 
 
+def gather_nd(a, indices):
+    """Gather elements from a n-dimension array..
+
+    Parameters
+    ----------
+    a : tvm.Tensor
+        The source array.
+
+    indices : tvm.Tensor
+        The indices of the values to extract.
+
+    Returns
+    -------
+    ret : tvm.Tensor
+    """
+    return cpp.gather_nd(a, indices)
+
+
 def matmul(a, b, transp_a=False, transp_b=False):
     """
     Creates an operation that calculates a matrix multiplication (row-major notation):
@@ -258,3 +269,23 @@ def matmul(a, b, transp_a=False, transp_b=False):
     A Tensor whose op member is the matmul operation
     """
     return cpp.matmul(a, b, transp_a, transp_b)
+
+
+def tensordot(a, b, axes):
+    """A generalization of matrix multiplication to tensor.
+
+    Parameters
+    ----------
+    a : The tensor A
+    b : The tensor B
+    axes : The number of dimensions to reduce over
+
+    Returns
+    -------
+    A Tensor computing the result
+    """
+    if isinstance(axes, int):
+        return cpp.tensordot(a, b, axes)
+    if isinstance(axes[0], int):
+        return cpp.tensordot(a, b, (axes[0],), (axes[1],))
+    return cpp.tensordot(a, b, axes[0], axes[1])

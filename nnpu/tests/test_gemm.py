@@ -4,7 +4,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
 
     shape = (16, 16)
     a_host = tvm.placeholder(shape, env.cfg['dtype_n'], 'a_host')
@@ -81,6 +81,8 @@ def test():
     func = nnpu.build(s, [a_host, b_host, bias_host, out_host], 'nnpu', 'llvm', name='nnpu_exp')
 
     print('function built: ')
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
     #print(func.get_source())
 
     # prepare data

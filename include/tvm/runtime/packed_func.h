@@ -32,6 +32,9 @@ struct Expr;
 #endif
 
 namespace tvm {
+// forward declarations
+class Integer;
+
 namespace runtime {
 // forward declarations
 class TVMArgs;
@@ -70,6 +73,8 @@ class PackedFunc {
   using FType = std::function<void (TVMArgs args, TVMRetValue* rv)>;
   /*! \brief default constructor */
   PackedFunc() {}
+  /*! \brief constructor from null */
+  PackedFunc(std::nullptr_t null) {}  // NOLINT(*)
   /*!
    * \brief constructing a packed function from a std::function.
    * \param body the internal container of packed function.
@@ -158,6 +163,8 @@ class TypedPackedFunc<R(Args...)> {
   using TSelf = TypedPackedFunc<R(Args...)>;
   /*! \brief default constructor */
   TypedPackedFunc() {}
+  /*! \brief constructor from null */
+  TypedPackedFunc(std::nullptr_t null) {}  // NOLINT(*)
   /*!
    * \brief construct by wrap a PackedFunc
    *
@@ -559,6 +566,7 @@ class TVMArgValue : public TVMPODValue_ {
   inline bool IsNodeType() const;
   inline operator HalideIR::Type() const;
   inline operator HalideIR::Expr() const;
+  inline operator tvm::Integer() const;
   // get internal node ptr, if it is node
   inline NodePtr<Node>& node_sptr();
 };
@@ -598,8 +606,7 @@ class TVMRetValue : public TVMPODValue_ {
   using TVMPODValue_::operator DLTensor*;
   using TVMPODValue_::operator TVMContext;
   using TVMPODValue_::operator NDArray;
-  // Disable copy and assign from another value, but allow move.
-  TVMRetValue(const TVMRetValue& other) {
+  TVMRetValue(const TVMRetValue& other) : TVMPODValue_() {
     this->Assign(other);
   }
   // conversion operators
@@ -884,6 +891,7 @@ inline std::ostream& operator<<(std::ostream& os, TVMType t) {  // NOLINT(*)
   }
   return os;
 }
+
 #endif
 
 inline std::string TVMType2String(TVMType t) {
@@ -937,9 +945,11 @@ inline TVMType String2TVMType(std::string s) {
   char* xdelim;  // emulate sscanf("%ux%u", bits, lanes)
   uint8_t bits = static_cast<uint8_t>(strtoul(scan, &xdelim, 10));
   if (bits != 0) t.bits = bits;
+  char* endpt = xdelim;
   if (*xdelim == 'x') {
-    t.lanes = static_cast<uint16_t>(strtoul(xdelim + 1, nullptr, 10));
+    t.lanes = static_cast<uint16_t>(strtoul(xdelim + 1, &endpt, 10));
   }
+  CHECK(endpt == s.c_str() + s.length()) << "unknown type " << s;
   return t;
 }
 

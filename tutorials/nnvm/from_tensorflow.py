@@ -23,7 +23,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import tensor_util
 
 # Tensorflow utility functions
-import nnvm.testing.tf
+import tvm.relay.testing.tf as tf_testing
 
 # Base location for model related files.
 repo_base = 'https://github.com/dmlc/web-data/raw/master/tensorflow/models/InceptionV1/'
@@ -32,13 +32,18 @@ repo_base = 'https://github.com/dmlc/web-data/raw/master/tensorflow/models/Incep
 img_name = 'elephant-299.jpg'
 image_url = os.path.join(repo_base, img_name)
 
-# InceptionV1 model protobuf
+######################################################################
+# Tutorials
+# ---------
 # .. note::
 #
 #   protobuf should be exported with :any:`add_shapes=True` option.
 #   Could use https://github.com/dmlc/web-data/tree/master/tensorflow/scripts/tf-to-nnvm.py
 #   to add shapes for existing models.
 #
+# Please refer docs/frontend/tensorflow.md for more details for various models
+# from tensorflow.
+
 model_name = 'classify_image_graph_def-with_shapes.pb'
 model_url = os.path.join(repo_base, model_name)
 
@@ -82,16 +87,17 @@ with tf.gfile.FastGFile(os.path.join("./", model_name), 'rb') as f:
     graph_def.ParseFromString(f.read())
     graph = tf.import_graph_def(graph_def, name='')
     # Call the utility to import the graph definition into default graph.
-    graph_def = nnvm.testing.tf.ProcessGraphDefParam(graph_def)
+    graph_def = tf_testing.ProcessGraphDefParam(graph_def)
     # Add shapes to the graph.
-    graph_def = nnvm.testing.tf.AddShapesToGraphDef('softmax')
+    with tf.Session() as sess:
+        graph_def = tf_testing.AddShapesToGraphDef(sess, 'softmax')
 
 ######################################################################
 # Decode image
 # ------------
 # .. note::
 #
-#   tensorflow frontend import doesn't support preprocessing ops like JpegDecode
+#   tensorflow frontend import doesn't support preprocessing ops like JpegDecode.
 #   JpegDecode is bypassed (just return source node).
 #   Hence we supply decoded frame to TVM instead.
 #
@@ -151,7 +157,7 @@ predictions = tvm_output.asnumpy()
 predictions = np.squeeze(predictions)
 
 # Creates node ID --> English string lookup.
-node_lookup = nnvm.testing.tf.NodeLookup(label_lookup_path=os.path.join("./", map_proto),
+node_lookup = tf_testing.NodeLookup(label_lookup_path=os.path.join("./", map_proto),
                                          uid_lookup_path=os.path.join("./", lable_map))
 
 # Print top 5 predictions from TVM output.
@@ -174,7 +180,7 @@ def create_graph():
         graph_def.ParseFromString(f.read())
         graph = tf.import_graph_def(graph_def, name='')
         # Call the utility to import the graph definition into default graph.
-        graph_def = nnvm.testing.tf.ProcessGraphDefParam(graph_def)
+        graph_def = tf_testing.ProcessGraphDefParam(graph_def)
 
 def run_inference_on_image(image):
     """Runs inference on an image.
@@ -203,7 +209,7 @@ def run_inference_on_image(image):
         predictions = np.squeeze(predictions)
 
         # Creates node ID --> English string lookup.
-        node_lookup = nnvm.testing.tf.NodeLookup(label_lookup_path=os.path.join("./", map_proto),
+        node_lookup = tf_testing.NodeLookup(label_lookup_path=os.path.join("./", map_proto),
                                                  uid_lookup_path=os.path.join("./", lable_map))
 
         # Print top 5 predictions from tensorflow.

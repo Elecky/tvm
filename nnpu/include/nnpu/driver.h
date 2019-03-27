@@ -11,7 +11,12 @@ driver function declarations of nnpu simulator
 #include <mutex>
 #include <unordered_map>
 #include <map>
-#include <nnpu/insn.h>
+#include <nnpusim/typedef.h>
+
+namespace nnpu
+{
+    struct NNPUInsn;  // forward declare NNPU insn for simulation.
+}  // end namespace nnpu
 
 #ifdef __cplusplus
 extern "C"{
@@ -34,7 +39,7 @@ void NNPUMemFree(void *buf);
 void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns);
 
 /*!
- * relate device[id] with current thread.
+ * \brief relate device[id] with current thread.
 */
 void NNPUSetDevice(int id);
 
@@ -47,7 +52,7 @@ namespace nnpu
 
 enum class DevType
 {
-    S0, S1
+    S0, S1, SC
 };
 
 /*
@@ -56,26 +61,48 @@ base class for simulators
 class Simulator
 {
 public:
-    /*!
-    * \brief base simulator default constructor
-    * \param type: the device type(or just indicator)
-    */
-    Simulator(DevType type) : devType(type) {}
 
     const DevType devType;
 
     /*!
     * \brief run instructions on the simultor, pure virtual method.
     * \param insns: instructions to run.
+    * \param pc: program counter where execution starts.
     */
-    virtual void Run(const std::vector<NNPUInsn> &insns) = 0;
+    virtual void Run(const std::vector<NNPUInsn> &insns, std::size_t pc = 0) = 0;
 
     virtual ~Simulator() {}
 
     /*!
+     * \brief set register value,
+     *        simulator implementations have to implement this function.
+     * \param regNo: register number to be set.
+     * \param regVal: the value to set.
+     */
+    virtual void WriteRegister(regNo_t regNo, reg_t regVal) = 0;
+
+    /*!
+     * \brief writer to scalar memory.
+     *        used to pass arguments before running function on device.
+     * \param addr: the address to write.
+     * \param value: the value to be written.
+     */
+    virtual void WriteSclrMem(std::size_t addr, reg_t value) = 0;
+
+    /*!
+     * \brief get the scalar memory size.
+     *        simulator implementions have to implement this function.
+     * \return scalar memory size.
+    */
+    virtual std::size_t GetSclrMemSize() const = 0;
+
+    // some static members for device setting and finding.
+    /*!
     * \brief get a thread local simulator instance 
     */
-    static std::shared_ptr<Simulator>& ThreadLocal();
+    static std::shared_ptr<Simulator> ThreadLocal();
+
+    static void SetThreadLocal(std::shared_ptr<Simulator> sim);
 
     /*! 
     * \brief default simulator type
@@ -85,6 +112,13 @@ public:
     static void SetDevice(int id, std::shared_ptr<Simulator> device);
 
     static std::shared_ptr<Simulator> GetDevice(int id);
+
+protected:
+    /*!
+     * \brief base simulator default constructor
+     * \param type: the device type(or just indicator)
+     */
+    Simulator(DevType type) : devType(type) {}
 
 private:
     static std::unordered_map<int, std::shared_ptr<Simulator>> devices;

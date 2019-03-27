@@ -7,14 +7,76 @@
 #include <tvm/relay/op.h>
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/image.h>
+#include <topi/nn.h>
+#include <topi/nn/softmax.h>
+#include <topi/nn/flatten.h>
 #include <vector>
 #include "../type_relations.h"
+#include "../../pass/alter_op_layout.h"
 #include "../op_common.h"
-#include "layout.h"
+#include "../layout.h"
 
 namespace tvm {
 namespace relay {
 
+// relay.nn.bias_add
+TVM_REGISTER_NODE_TYPE(BiasAddAttrs);
+
+bool BiasAddRel(const Array<Type>& types,
+                int num_inputs,
+                const Attrs& attrs,
+                const TypeReporter& reporter) {
+  CHECK_EQ(types.size(), 3);
+  const auto* data = types[0].as<TensorTypeNode>();
+  if (data == nullptr) return false;
+
+  const BiasAddAttrs* param = attrs.as<BiasAddAttrs>();
+  CHECK(param != nullptr);
+  int axis = param->axis;
+  if (axis < 0) {
+    axis = data->shape.size() + axis;
+  }
+  CHECK_LE(axis, static_cast<int>(data->shape.size()))
+      << "axis " << param->axis << " is out of range";
+
+  // assign output type
+  reporter->Assign(types[1], TensorTypeNode::make(
+      {data->shape[axis]}, data->dtype));
+  reporter->Assign(types[2], types[0]);
+  return true;
+}
+
+
+// Positional relay function to create dense operator used by frontend FFI.
+Expr MakeBiasAdd(Expr data,
+                 Expr bias,
+                 int axis) {
+  auto attrs = make_node<BiasAddAttrs>();
+  attrs->axis = axis;
+  static const Op& op = Op::Get("nn.bias_add");
+  return CallNode::make(op, {data, bias}, Attrs(attrs), {});
+}
+
+
+TVM_REGISTER_API("relay.op.nn._make.bias_add")
+.set_body([](const TVMArgs& args, TVMRetValue* rv) {
+    runtime::detail::unpack_call<Expr, 3>(MakeBiasAdd, args, rv);
+  });
+
+
+RELAY_REGISTER_OP("nn.bias_add")
+.describe(R"code(Add bias to an axis of the input.
+
+)code" TVM_ADD_FILELINE)
+.set_attrs_type_key("relay.attrs.BiasAddAttrs")
+.set_num_inputs(2)
+.add_argument("data", "nD Tensor", "Input data.")
+.add_argument("bias", "1D Tensor", "Bias.")
+.set_support_level(1)
+.add_type_rel("BiasAdd", BiasAddRel);
+
+
+// relay.nn.dense
 TVM_REGISTER_NODE_TYPE(DenseAttrs);
 
 
@@ -35,16 +97,15 @@ bool DenseRel(const Array<Type>& types,
   Array<tvm::Expr> oshape = data->shape;
   if (param->units.defined()) {
     Array<tvm::Expr> dshape = data->shape;
-
     // validate the weight shape is proper if defined
     // Assign weight type
-    Array<IndexExpr> wshape({dshape[dshape.size() - 1], param->units});
+    Array<IndexExpr> wshape({param->units, dshape[dshape.size() - 1]});
     reporter->Assign(types[1], TensorTypeNode::make(wshape, data->dtype));
     oshape.Set((oshape.size() - 1), param->units);
   } else {
     if (weight == nullptr) return false;
     Array<tvm::Expr> wshape = weight->shape;
-    oshape.Set((oshape.size() - 1), wshape[wshape.size() - 1]);
+    oshape.Set((oshape.size() - 1), wshape[0]);
   }
 
   // assign output type
@@ -82,9 +143,11 @@ RELAY_REGISTER_OP("nn.dense")
 .set_num_inputs(2)
 .add_argument("data", "nD Tensor", "Input data.")
 .add_argument("weight", "2D Tensor", "Weight matrix.")
-.set_support_level(2)
+.set_support_level(1)
 .add_type_rel("Dense", DenseRel);
 
+// relay.leaky_relu
+TVM_REGISTER_NODE_TYPE(LeakyReluAttrs);
 
 // Positional relay function to create leaky relu operator used by frontend FFI.
 Expr MakeLeakyRelu(Expr data,
@@ -112,8 +175,86 @@ RELAY_REGISTER_OP("nn.leaky_relu")
 .set_num_inputs(1)
 .add_argument("data", "Tensor", "Input data.")
 .set_support_level(3)
-.add_type_rel("Identity", IdentityRel);
+.add_type_rel("Identity", IdentityRel)
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
+.set_attr<FTVMCompute>(
+  "FTVMCompute", [](const Attrs& attrs,
+                    const Array<Tensor>& inputs,
+                    const Type& out_type,
+                    const Target& target) {
+    const auto* param = attrs.as<LeakyReluAttrs>();
+    return Array<Tensor>{ topi::leaky_relu(inputs[0], param->alpha) };
+});
 
+
+// relay.prelu
+TVM_REGISTER_NODE_TYPE(PReluAttrs);
+
+bool PReluRel(const Array<Type>& types,
+              int num_inputs,
+              const Attrs& attrs,
+              const TypeReporter& reporter) {
+  CHECK_EQ(types.size(), 3);
+  const auto* data = types[0].as<TensorTypeNode>();
+  if (data == nullptr) return false;
+
+  const PReluAttrs* param = attrs.as<PReluAttrs>();
+  CHECK(param != nullptr);
+
+  CHECK(param->axis < static_cast<int>(data->shape.size()))
+    << "Wrong axis ("  << param->axis << ")value.";
+
+  // assign alpha type
+  Array<IndexExpr> alpha_shape({data->shape[param->axis]});
+  reporter->Assign(types[1], TensorTypeNode::make(alpha_shape, data->dtype));
+
+  // assign output type
+  reporter->Assign(types[2], TensorTypeNode::make(data->shape, data->dtype));
+  return true;
+}
+
+// Positional relay function to create prelu operator used by frontend FFI.
+Expr MakePRelu(Expr data,
+               Expr alpha,
+               int axis) {
+  auto attrs = make_node<PReluAttrs>();
+  attrs->axis = axis;
+  static const Op& op = Op::Get("nn.prelu");
+  return CallNode::make(op, {data, alpha}, Attrs(attrs), {});
+}
+
+
+TVM_REGISTER_API("relay.op.nn._make.prelu")
+.set_body([](const TVMArgs& args, TVMRetValue* rv) {
+    runtime::detail::unpack_call<Expr, 3>(MakePRelu, args, rv);
+  });
+
+
+RELAY_REGISTER_OP("nn.prelu")
+.describe(R"code(Parametric version of a Rectified Linear Unit.
+It accepts two arguments: an input ``x`` and a channelwise slope ``alpha``
+and computes the output as :math:`PReLU(x) y = x > 0 ? x : alpha * x`,
+where :math:`*` is an channelwise multiplication for each sample in the batch.
+)code" TVM_ADD_FILELINE)
+.set_attrs_type_key("relay.attrs.PReluAttrs")
+.set_num_inputs(2)
+.add_argument("data", "Tensor", "Input data.")
+.add_argument("alpha", "Tensor", "Input channelwise alpha.")
+.set_support_level(3)
+.add_type_rel("PRelu", PReluRel)
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
+.set_attr<FTVMCompute>(
+  "FTVMCompute", [](const Attrs& attrs,
+                    const Array<Tensor>& inputs,
+                    const Type& out_type,
+                    const Target& target) {
+    const auto* param = attrs.as<PReluAttrs>();
+    return Array<Tensor>{ topi::prelu(inputs[0], inputs[1], param->axis)};
+});
+
+
+// relay.softmax
+TVM_REGISTER_NODE_TYPE(SoftmaxAttrs);
 
 TVM_REGISTER_API("relay.op.nn._make.softmax")
 .set_body([](const TVMArgs& args, TVMRetValue* rv) {
@@ -141,9 +282,18 @@ RELAY_REGISTER_OP("nn.softmax")
 .set_num_inputs(1)
 .add_argument("data", "Tensor", "The input tensor.")
 .set_support_level(1)
-.add_type_rel("Identity", IdentityRel);
+.add_type_rel("Identity", IdentityRel)
+.set_attr<FTVMCompute>("FTVMCompute", [](const Attrs& attrs,
+                                         const Array<Tensor>& inputs,
+                                         const Type& out_type,
+                                         const Target& target) {
+  const auto* param = attrs.as<SoftmaxAttrs>();
+  CHECK(param != nullptr);
+  return Array<Tensor>{ topi::nn::softmax(inputs[0], param->axis) };
+});
 
 
+// relay.nn.log_softmax
 TVM_REGISTER_API("relay.op.nn._make.log_softmax")
 .set_body([](const TVMArgs& args, TVMRetValue* rv) {
   auto make_func = [](Expr data, int axis) {
@@ -170,10 +320,20 @@ RELAY_REGISTER_OP("nn.log_softmax")
 .set_num_inputs(1)
 .add_argument("data", "Tensor", "The input tensor.")
 .set_support_level(1)
-.add_type_rel("Identity", IdentityRel);
+.add_type_rel("Identity", IdentityRel)
+.set_attr<FTVMCompute>("FTVMCompute", [](const Attrs& attrs,
+                                         const Array<Tensor>& inputs,
+                                         const Type& out_type,
+                                         const Target& target) {
+  const auto* param = attrs.as<SoftmaxAttrs>();
+  CHECK(param != nullptr);
+  CHECK(param->axis == -1 || param->axis == static_cast<int32_t>(inputs[0].ndim()) - 1)
+      << "log_softmax currently only works on last dimension";
+  return Array<Tensor>{ topi::nn::log_softmax(inputs[0]) };
+});
 
 
-// BatchFlatten
+// relay.nn.batch_flatten
 bool BatchFlattenRel(const Array<Type>& types,
                      int num_inputs,
                      const Attrs& attrs,
@@ -233,23 +393,49 @@ Example::
 .set_num_inputs(1)
 .add_argument("data", "Tensor", "The input tensor.")
 .set_support_level(2)
-.add_type_rel("BatchFlatten", BatchFlattenRel);
+.add_type_rel("BatchFlatten", BatchFlattenRel)
+.set_attr<FTVMCompute>(
+  "FTVMCompute", [](const Attrs& attrs,
+                    const Array<Tensor>& inputs,
+                    const Type& out_type,
+                    const Target& target) {
+    return Array<Tensor>{ topi::nn::flatten(inputs[0]) };
+});
 
-RELAY_REGISTER_UNARY_OP("relay.op.nn._make.", "relu")
+
+// relu
+TVM_REGISTER_API("relay.op.nn._make.relu")
+.set_body_typed<Expr(Expr)>([](Expr data) {
+    static const Op& op = Op::Get("nn.relu");
+    return CallNode::make(op, {data}, Attrs(), {});
+  });
+
+RELAY_REGISTER_OP("nn.relu")
 .describe(R"code(Returns the relu input array, computed element-wise.
 
 .. math::
    max(x, 0)
 
 )code" TVM_ADD_FILELINE)
+.set_num_inputs(1)
+.add_argument("data", "Tensor", "The input tensor.")
 .set_support_level(1)
-.add_type_rel("Identity", IdentityRel);
+.add_type_rel("Identity", IdentityRel)
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
+.set_attr<FTVMCompute>("FTVMCompute", [](const Attrs& attrs,
+                                         const Array<Tensor>& inputs,
+                                         const Type& out_type,
+                                         const Target& target) {
+  return Array<Tensor>{ topi::relu(inputs[0], 0.0f) };
+});
 
 
 // Positional relay function to create LRN operator used by frontend FFI.
+TVM_REGISTER_NODE_TYPE(LRNAttrs);
+
 Expr MakeLRN(Expr data,
-             IndexExpr size,
-             IndexExpr axis,
+             int size,
+             int axis,
              double alpha,
              double beta,
              double bias) {
@@ -269,7 +455,7 @@ TVM_REGISTER_API("relay.op.nn._make.lrn")
   });
 
 RELAY_REGISTER_OP("nn.lrn")
-    .describe(R"code(LRN layer.
+.describe(R"code(LRN layer.
 
 Normalize the input in a local region across or within feature maps.
 Each input value is divided by (1 + (\alpha/n) \sum_i x_i^2)^\beta,
@@ -286,13 +472,16 @@ centered at that value (zero padding is added where necessary).
 .set_num_inputs(1)
 .add_argument("data", "Tensor", "The input tensor.")
 .set_support_level(2)
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
 .add_type_rel("Identity", IdentityRel);
 
 
 // Positional relay function to create L2Normalize operator used by frontend FFI.
+TVM_REGISTER_NODE_TYPE(L2NormalizeAttrs);
+
 Expr MakeL2Normalize(Expr data,
                      double eps,
-                     Array<IndexExpr> axis) {
+                     Array<Integer> axis) {
   auto attrs = make_node<L2NormalizeAttrs>();
   attrs->eps = eps;
   attrs->axis = std::move(axis);
@@ -315,9 +504,11 @@ Normalizes along dimension axis using an L2 norm
 
 - **data**: The input tensor.
 )code" TVM_ADD_FILELINE)
+.set_attrs_type_key("relay.attrs.L2NormalizeAttrs")
 .set_num_inputs(1)
 .add_argument("data", "Tensor", "The input tensor.")
 .set_support_level(2)
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
 .add_type_rel("Identity", IdentityRel);
 
 // Dropout
@@ -361,28 +552,11 @@ The whole array is rescaled by ``1/(1-p)`` to keep the expected sum of the input
 .set_num_inputs(1)
 .add_argument("data", "Tensor", "Input to which dropout will be applied.")
 .set_support_level(1)
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
 .add_type_rel("Dropout", DropoutRel);
 
 // batch_norm
 TVM_REGISTER_NODE_TYPE(BatchNormAttrs);
-
-bool CheckVectorLength(int64_t dim, const DataType& dtype, Type vector, const char* name) {
-  const auto* candidate = vector.as<TensorTypeNode>();
-  CHECK(candidate != nullptr)
-    << name << " should be a vector but is not a tensor type,";
-  CHECK_EQ(dtype, candidate->dtype)
-    << name << " should be of the same data type as the original but it is not.";
-  CHECK_EQ(candidate->shape.size(), 1)
-    << name << " should be a vector but has a shape of "
-    << candidate->shape.size() << " dimensions instead of 1.";
-
-  const int64_t* length = as_const_int(candidate->shape[0]);
-  if (length == nullptr) return false;
-  CHECK(*length == dim)
-    << name << " should be as long as the channel but has length "
-    << *length << " instead of " << dim << ".";
-  return true;
-}
 
 bool BatchNormRel(const Array<Type>& types,
                   int num_inputs,
@@ -391,33 +565,19 @@ bool BatchNormRel(const Array<Type>& types,
   CHECK_EQ(types.size(), 6);
   const auto* data = types[0].as<TensorTypeNode>();
   if (data == nullptr) return false;
-  if (data->shape.size() == 0) return false;
 
   const BatchNormAttrs* param = attrs.as<BatchNormAttrs>();
 
   // axis of -1 means use the last dimension
   CHECK(param->axis >= -1 && param->axis < (int)data->shape.size());
   int axis = (param->axis != -1) ? param->axis : data->shape.size() - 1;
-
-  auto dim = as_const_int(data->shape[axis]);
-  if (dim == nullptr) return false;
+  auto axis_size = data->shape[axis];
 
   // if we are using beta and gamma, they need to be of shape (dim,)
-  if (param->scale && !CheckVectorLength(*dim, data->dtype, types[1], "The gamma scale factor")) {
-    return false;
-  }
-
-  if (param->center && !CheckVectorLength(*dim, data->dtype, types[2], "The beta offset factor")) {
-    return false;
-  }
-
-  // the two running averages must also be vectors of length dim
-  if (!CheckVectorLength(*dim, data->dtype, types[3], "The moving mean")) {
-    return false;
-  }
-  if (!CheckVectorLength(*dim, data->dtype, types[4], "The moving variance")) {
-    return false;
-  }
+  reporter->Assign(types[1], TensorTypeNode::make({axis_size}, data->dtype));
+  reporter->Assign(types[2], TensorTypeNode::make({axis_size}, data->dtype));
+  reporter->Assign(types[3], TensorTypeNode::make({axis_size}, data->dtype));
+  reporter->Assign(types[4], TensorTypeNode::make({axis_size}, data->dtype));
 
   // output is a tuple of the normed data (same shape as input), new running mean,
   // and new running average (the latter two are both vectors of length dim)

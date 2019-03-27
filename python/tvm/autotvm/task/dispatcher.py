@@ -60,6 +60,53 @@ class DispatchContext(object):
             ret = self._old_ctx.query(target, workload)
         return ret
 
+    def update(self, target, workload, cfg):
+        """
+        Update context with a specific config.
+
+        Parameters
+        ----------
+        target: Target
+            The current target
+        workload : Workload
+            The current workload.
+        cfg : ConfigSpace
+            The specific configuration.
+
+        Note
+        ----
+        This interface is for cases when TVM decides to replace an operator in the graph.
+        For example, `AlterOpLayout` pass (enables when `opt_level = 3`) replaces `NCHW`
+        convolution with `NCHW[x]c` implementation on x86 CPUs.
+        Thus in TOPI, we first query schedule using original `NCHW` workload,
+        then update the dispatcher with the new `NCHW[x]c` workload.
+        So that later on, `NCHW[x]c` convolution can get schedule from the dispatcher using
+        its own workload directly.
+
+        .. code-block:: python
+
+            @conv2d_alter_layout.register("cpu")
+            def _alter_conv2d_layout(attrs, inputs, tinfo):
+                workload = get_conv2d_workload(...)
+                dispatch_ctx = autotvm.task.DispatchContext.current
+                target = tvm.target.current_target()
+                config = dispatch_ctx.query(target, workload)
+
+                # Get conv2d_NCHWc workload from config
+                # new_workload = ...
+                # new_inputs = ...
+                # new_attrs = ...
+
+                # Store altered operator's config
+                dispatch_ctx.update(target, new_workload, config)
+                return sym.contrib.conv2d_NCHWc(*new_inputs, **new_attrs)
+
+        We directly store `config` back because `conv2d_NCHW` and `conv2d_NCHWc`
+        share the same schedule parameters.
+        One can construct a new `ConfigEntity` if this is not the case.
+        """
+        raise NotImplementedError()
+
     def _query_inside(self, target, workload):
         """
         Query the context to get the specific config for a template.
@@ -179,6 +226,11 @@ class ApplyConfig(DispatchContext):
         self.workload = workload
         return self._config
 
+    def update(self, target, workload, cfg):
+        """Override update"""
+        self.workload = workload
+        self._config = cfg
+
 
 class ApplyHistoryBest(DispatchContext):
     """
@@ -197,6 +249,7 @@ class ApplyHistoryBest(DispatchContext):
 
         self.best_by_targetkey = {}
         self.best_by_model = {}
+        self._best_user_defined = {}
 
         if records:
             self.load(records)
@@ -239,17 +292,13 @@ class ApplyHistoryBest(DispatchContext):
                         best_by_targetkey[key] = (inp, res)
 
             # use model as key to build best map
-            for opt in inp.target.options:
-                if opt.startswith("-model"):
-                    model = opt[7:]
-                    key = (model, inp.task.workload)
-                    if key not in best_by_model:
-                        best_by_model[key] = (inp, res)
-                    else:
-                        _, other_res = best_by_model[key]
-                        if np.mean(other_res.costs) > np.mean(res.costs):
-                            best_by_model[key] = (inp, res)
-                    break
+            key = (inp.target.model, inp.task.workload)
+            if key not in best_by_model:
+                best_by_model[key] = (inp, res)
+            else:
+                _, other_res = best_by_model[key]
+                if np.mean(other_res.costs) > np.mean(res.costs):
+                    best_by_model[key] = (inp, res)
 
         logger.debug("Finish loading %d records", counter)
 
@@ -260,20 +309,30 @@ class ApplyHistoryBest(DispatchContext):
                                " above the dispatcher call. So does other target. ")
 
         # first try matching by model
-        for opt in target.options:
-            if opt.startswith("-model"):
-                model = opt[7:]
-                key = (model, workload)
-                if key in self.best_by_model:
-                    return self.best_by_model[key][0].config
+        key = (target.model, workload)
+        if key in self._best_user_defined:
+            return self._best_user_defined[key]
+        if key in self.best_by_model:
+            return self.best_by_model[key][0].config
 
         # then try matching by target key
         for k in target.keys:
             key = (k, workload)
+            if key in self._best_user_defined:
+                return self._best_user_defined[key]
             if key in self.best_by_targetkey:
                 return self.best_by_targetkey[key][0].config
 
         return None
+
+    def update(self, target, workload, cfg):
+        model = target.model
+        key = (model, workload)
+        self._best_user_defined[key] = cfg
+
+        for k in target.keys:
+            key = (k, workload)
+            self._best_user_defined[key] = cfg
 
 
 class FallbackContext(DispatchContext):
@@ -323,6 +382,10 @@ class FallbackContext(DispatchContext):
         key = (str(target), workload)
         if key in self.memory:
             del self.memory[key]
+
+    def update(self, target, workload, cfg):
+        key = (str(target), workload)
+        self.memory[key] = cfg
 
 DispatchContext.current = FallbackContext()
 
@@ -391,37 +454,23 @@ class ApplyGraphBest(DispatchContext):
         cfg : ConfigSpace
             The specific configuration.
         """
-        cfg = self._records[self._counter][0].config
-        self._counter += 1
+        if self._counter < len(self._records):
+            cfg = self._records[self._counter][0].config
+            self._counter += 1
+            self.update(target, workload, cfg)
+            return cfg
+        key = (str(target), workload)
+        if key not in self._global_cfg_dict:
+            msg = "Config for target=%s, workload=%s is missing in ApplyGraphBest context. " \
+                  "A fallback configuration is used, which may bring great performance " \
+                  "regression." % (target, workload)
+            logger.warning(msg)
+            cfg = FallbackConfigEntity()
+            self._global_cfg_dict[key] = cfg
+        else:
+            cfg = self._global_cfg_dict[key]
         return cfg
 
-    def query_global_dict(self, key):
-        """
-        Query the context to get config from global
-        config dictionary.
-
-        Parameters
-        ----------
-        key : str
-            Key to query the config.
-
-        Returns
-        -------
-        cfg : ConfigSpace
-            The specific configuration.
-        """
-        return self._global_cfg_dict[key]
-
-    def update_global_dict(self, key, val):
-        """
-        Update the global config dictionary.
-
-        Parameters
-        ----------
-        key : str
-            Key of config.
-
-        val : ConfigSpace
-            Value of config.
-        """
-        self._global_cfg_dict[key] = val
+    def update(self, target, workload, cfg):
+        key = (str(target), workload)
+        self._global_cfg_dict[key] = cfg

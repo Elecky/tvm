@@ -59,7 +59,10 @@ void VctrUnaryInsn::Dump(ostream& os) const
        << " $" << this->VctrOutAddrReg 
        << ", $" << this->VctrInAddrReg;
 }
-
+void VReduceKeyInsn::Dump(ostream& os) const
+{
+    os<<"VReduceKey"<<", $"<<this->Out1AddrReg<<", $"<<this->Out2AddrReg<<", $"<<this->InAddrReg;
+}
 void DMACopyInsn::Dump(ostream& os) const
 {
     os << "DMACopy" << ToString(this->Dir) << " $" << this->HostPhyAddrReg << ", $"
@@ -242,50 +245,33 @@ void NOPInsn::Dump(ostream &os) const
 
 void JumpInsn::Dump(ostream &os) const
 {
-    os << "Jump #" << Offset;
+    os << "Jump #" << static_cast<int32_t>(Offset);
 }
 
 void BEZInsn::Dump(ostream &os) const
 {
-    os << "BEZ $" << CondReg << ", #" << Offset;
+    os << "BEZ $" << CondReg << ", #" << static_cast<int32_t>(Offset);
 }
 
 void BNEZInsn::Dump(ostream &os) const
 {
-    os << "BNEZ $" << CondReg << ", #" << Offset;
+    os << "BNEZ $" << CondReg << ", #" << static_cast<int32_t>(Offset);
 }
-
-ALUBinaryInsn::ALUBinaryInsn(regNo_t _rdReg, regNo_t _rsReg, regNo_t _rtReg, ALUBinaryOp _op) :
-    RdReg(_rdReg), RsReg(_rsReg), RtReg(_rtReg), Op(_op)
-{}
 
 void ALUBinaryInsn::Dump(ostream &os) const
 {
     os << ToString(Op) << " $" << RdReg << ", $" << RsReg << ", $" << RtReg;
 }
 
-SclrLoadInsn::SclrLoadInsn(regNo_t _rdReg, regNo_t _addrReg, reg_t _offset) :
-    RdReg(_rdReg), AddrReg(_addrReg), Offset(_offset)
-{}
-
 void SclrLoadInsn::Dump(ostream &os) const
 {
     os << "Load.S $" << RdReg << ", ($" << AddrReg << " + " << Offset << ")";
-}
-
-SclrStoreInsn::SclrStoreInsn(regNo_t _rsReg, regNo_t _addrReg, reg_t _offset) :
-   RsReg(_rsReg),  AddrReg(_addrReg), Offset(_offset)
-{
 }
 
 void SclrStoreInsn::Dump(ostream &os) const
 {
     os << "Store.S $" << RsReg << ", ($" << AddrReg << " + " << Offset << ")";
 }
-
-ALURegImmInsn::ALURegImmInsn(regNo_t _rdReg, regNo_t _rsReg, reg_t _imm, ALURegImmOp _op) :
-    RdReg(_rdReg), RsReg(_rsReg), Imm(_imm), Op(_op)
-{}
 
 void ALURegImmInsn::Dump(ostream &os) const
 {
@@ -310,6 +296,8 @@ const char* ToString(ALUBinaryOp op)
         return "ModU";
     case ALUBinaryOp::SLTU:
         return "SLTU";
+    case ALUBinaryOp::SLT:
+        return "SLT";
     case ALUBinaryOp::SEQ:
         return "SEQ";
     case ALUBinaryOp::XOR:
@@ -340,6 +328,8 @@ const char * ToString(ALURegImmOp op)
         return "ModIU";
     case ALURegImmOp::SLTIU:
         return "SLTIU";
+    case ALURegImmOp::SLTI:
+        return "SLTI";
     case ALURegImmOp::SEQI:
         return "SEQI";
     case ALURegImmOp::XORI:
@@ -348,6 +338,8 @@ const char * ToString(ALURegImmOp op)
         return "AndI";
     case ALURegImmOp::OrI:
         return "OrI";
+    case ALURegImmOp::SHLI:
+        return "SHLI";
 
     default:
         return "UnkownRegImm";
@@ -638,6 +630,15 @@ KVList_t GemmInsn::GetRegMap() const
     res[In2AddrReg] = 0;
     res[In2RowStrideReg] = 0;
 
+    return res;
+}
+
+KVList_t VReduceKeyInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[Out1AddrReg] = 0;
+    res[Out2AddrReg] = 0;
+    res[InAddrReg] = 0;
     return res;
 }
 

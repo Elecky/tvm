@@ -25,7 +25,7 @@ def mean_pooling(inshape,outshape,cell_shape,innp,outdetype):
 # reduce max
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     nnpu.set_dump(False)
     in_shape = (16,16,32)
     cell_shape = 4

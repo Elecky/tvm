@@ -7,7 +7,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env)
+    nnpu.set_device(env, type='S0')
     shape = (16,)
     bigshape =(128,)
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']

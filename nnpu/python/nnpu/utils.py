@@ -124,7 +124,7 @@ def create_schedule(*args, **kwargs):
     return s
 
 def isEqual(expr1, expr2):
-    """ Verifies both expr1 and expr2 are immediate value andare equal.
+    """ Verifies both expr1 and expr2 are immediate value and are equal.
 
     Parameters
     ----------

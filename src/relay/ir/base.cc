@@ -20,8 +20,8 @@ NodePtr<SourceNameNode> GetSourceNameNode(const std::string& name) {
   auto sn = source_map.find(name);
   if (sn == source_map.end()) {
     NodePtr<SourceNameNode> n = make_node<SourceNameNode>();
-    n->name = std::move(name);
     source_map[name] = n;
+    n->name = std::move(name);
     return n;
   } else {
     return sn->second;
@@ -32,8 +32,13 @@ SourceName SourceName::Get(const std::string& name) {
   return SourceName(GetSourceNameNode(name));
 }
 
+TVM_REGISTER_API("relay._make.SourceName")
+.set_body([](TVMArgs args, TVMRetValue* ret) {
+    *ret = SourceName::Get(args[0]);
+  });
+
 TVM_STATIC_IR_FUNCTOR_REGISTER(IRPrinter, vtable)
-.set_dispatch<SourceNameNode>([](const SourceNameNode *node, tvm::IRPrinter *p) {
+.set_dispatch<SourceNameNode>([](const SourceNameNode* node, tvm::IRPrinter* p) {
     p->stream << "SourceName(" << node->name << ", " << node << ")";
   });
 
@@ -54,15 +59,26 @@ Span SpanNode::make(SourceName source, int lineno, int col_offset) {
 TVM_REGISTER_NODE_TYPE(SpanNode);
 
 TVM_REGISTER_API("relay._make.Span")
-.set_body([](TVMArgs args, TVMRetValue *ret) {
+.set_body([](TVMArgs args, TVMRetValue* ret) {
     *ret = SpanNode::make(args[0], args[1], args[2]);
   });
 
 TVM_STATIC_IR_FUNCTOR_REGISTER(IRPrinter, vtable)
-.set_dispatch<SpanNode>([](const SpanNode *node, tvm::IRPrinter *p) {
+.set_dispatch<SpanNode>([](const SpanNode* node, tvm::IRPrinter* p) {
     p->stream << "SpanNode(" << node->source << ", " << node->lineno << ", "
               << node->col_offset << ")";
   });
+
+TVM_REGISTER_NODE_TYPE(IdNode);
+
+TVM_REGISTER_API("relay._base.set_span")
+.set_body([](TVMArgs args, TVMRetValue* ret) {
+    NodeRef node_ref = args[0];
+    auto rn = node_ref.as_derived<RelayNode>();
+    CHECK(rn);
+    Span sp = args[1];
+    rn->span = sp;
+});
 
 }  // namespace relay
 }  // namespace tvm

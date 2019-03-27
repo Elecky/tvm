@@ -49,7 +49,7 @@ class Environment(object):
     def __init__(self, cfg_path):
         self.cfg = {}
 
-        cfg = yaml.load(open(cfg_path))
+        cfg = yaml.load(open(cfg_path), Loader=yaml.SafeLoader)
         self.cfg_path = cfg_path
         self.cfg.update(cfg)
 
@@ -164,7 +164,6 @@ def init_default_env():
 @tvm.register_func("tvm.intrin.rule.default.nnpu.coproc_sync")
 def coproc_sync(op):
     _ = op
-    return tvm.call_extern(
-        "int32", "NNPUSynchronize", 1<<31)
+    return tvm.const(0, 'int32')
 
 Environment.current = init_default_env()

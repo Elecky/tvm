@@ -1,298 +1,321 @@
+import math
 import tvm
 import numpy as np
 from tvm import relay
-from tvm.relay.ir_pass import infer_type
-from tvm.relay.ir_builder import IRBuilder, func_type
-from tvm.relay.ir_builder import scalar_type, convert, tensor_type
-from tvm.relay.env import Environment
+from tvm.relay.testing import ctx_list
+import topi.testing
 
-def assert_has_type(expr, typ, env=Environment({})):
-    checked_expr = infer_type(env, expr)
-    checked_type = checked_expr.checked_type
-    if checked_type != typ:
-        raise RuntimeError("Type mismatch %s vs %s" % (
-            checked_type, typ))
+def sigmoid(x):
+    one = np.ones_like(x)
+    return one / (one + np.exp(-x))
 
-def test_single_op():
-    def check_single_op(opfunc):
-        "Program: fn (x : float32) { let t1 = f(x); t1 }"
-        b = IRBuilder()
-        with b.function(('x', 'float32')) as func:
-            x, = func.param_ids()
-            t1 = b.let('t1', opfunc(x))
-            b.ret(t1)
-        assert_has_type(func.to_func(), func_type(['float32'], 'float32'))
-
-    for opfunc in [tvm.relay.log, tvm.relay.exp, tvm.relay.sqrt,
-                   tvm.relay.sigmoid, tvm.relay.tanh]:
-        check_single_op(opfunc)
-
-
-
-def test_expand_dims_infer_type():
-    ib = relay.ir_builder.IRBuilder()
-    n, t, d = tvm.var("n"), tvm.var("t"), 100
-    # let's mimic a batch of sequences
-    x = ib.param("x", relay.ty.TensorType((n, t, d), "float32"))
-    with ib.function(x) as func:
-        ib.ret(relay.expand_dims(x, axis=2))
-    ib.ret(func)
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TensorType(
-        (n, t, 1, 100), "float32")
-
-
-def test_softmax():
-    ib = relay.ir_builder.IRBuilder()
-    n, d = tvm.var("n"), tvm.var("d")
-    x = ib.param("x", relay.ty.TensorType((n, d), "float32"))
-    with ib.function(x) as func:
-        ib.ret(relay.nn.softmax(x, axis=1))
-    ib.ret(func)
-
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TensorType((n, d), "float32")
-
-
-def test_log_softmax():
-    ib = relay.ir_builder.IRBuilder()
-    n, d = tvm.var("n"), tvm.var("d")
-    x = ib.param("x", relay.ty.TensorType((n, d), "float32"))
-    with ib.function(x) as func:
-        ib.ret(relay.nn.log_softmax(x, axis=1))
-    ib.ret(func)
-
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TensorType((n, d), "float32")
+def relu(x):
+    x_copy = np.copy(x)
+    np.maximum(x_copy, 0, x_copy)
+    return x_copy
 
 def test_unary_op():
-    for op in [relay.exp,
-               relay.log,
-               relay.sqrt,
-               relay.sigmoid,
-               relay.nn.relu]:
-        ib = relay.ir_builder.IRBuilder()
-        x = ib.param("x", relay.TensorType((10, 4), "int32"))
-        with ib.function(x) as func:
-            ib.ret(op(x))
-        ib.ret(func)
-        func = relay.ir_pass.infer_type(ib.env, func.to_func())
-        ftype = func.checked_type
-        assert ftype.ret_type == relay.TensorType((10, 4), "int32")
+    def check_single_op(opfunc, ref):
+        shape = (10, 4)
+        dtype = 'float32'
+        tp = relay.TensorType(shape, dtype)
+        x = relay.var("x", tp)
+        y = opfunc(x)
+        # test printer
+        assert ("%0 = {}(%x)".format(y.op.name)) in y.astext()
+        # test type inference
+        assert relay.ir_pass.infer_type(y).checked_type == tp
+
+        if ref is not None:
+            data = np.random.rand(*shape).astype(dtype)
+            ref_res = ref(data)
+            func = relay.Function([x], y)
+            for target, ctx in ctx_list():
+                # use graph by execuor default for testing, as we need
+                # create function explicitly to avoid constant-folding.
+                intrp = relay.create_executor("graph", ctx=ctx, target=target)
+                op_res = intrp.evaluate(func)(data)
+                np.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=0.01)
+
+
+    for opfunc, ref in [(tvm.relay.log, np.log),
+                   (tvm.relay.exp, np.exp),
+                   (tvm.relay.sqrt, np.sqrt),
+                   (tvm.relay.sigmoid, sigmoid),
+                   (tvm.relay.tanh, np.tanh),
+                   (relay.nn.relu, relu)]:
+        check_single_op(opfunc, ref)
 
 
 def test_binary_op():
-    def check_binary_op(opfunc):
-        """
-        Program:
-            fn (x, y) {
-                return x <op> y;
-            }
-        """
-        b = IRBuilder()
+    def inst(vars, sh):
+        return [vars.get(s, s) for s in sh]
 
-        x = b.param('x', tensor_type(5, 5, 5))
-        y = b.param('y', tensor_type(5, 5, 5))
-        with b.function(x, y) as func:
-            b.ret(opfunc(x, y))
-        b.ret(func)
-        prog, env = b.get()
-        ttype = tensor_type(5, 5, 5)
-        expected_ty = func_type([ttype, ttype], ttype)
-        assert_has_type(func.to_func(), expected_ty)
+    def check_binary_op(opfunc, ref):
+        # TODO(@jroesch): this piece of code improperly uses type variables.
+        n = tvm.var("n")
+        s1 = (5, n, 5)
+        s2 = (n, 1)
+        t1 = relay.TensorType(s1)
+        t2 = relay.TensorType(s2)
+        x = relay.var("x", t1)
+        y = relay.var("y", t2)
+        z = opfunc(x, y)
+        # test printer
+        assert ("%0 = {}(%x, %y)".format(z.op.name)) in z.astext()
+        assert relay.ir_pass.infer_type(z).checked_type == t1
 
-    for opfunc in [relay.add, relay.subtract, relay.mod,
-                   relay.multiply, relay.divide]:
-        check_binary_op(opfunc)
+        if ref is not None:
+            t1 = relay.TensorType((5, 10, 5))
+            t2 = relay.TensorType((5, 10, 5))
+            x = relay.var("x", t1)
+            y = relay.var("y", t2)
+            z = opfunc(x, y)
+            x_data = np.random.rand(5, 10, 5).astype(t1.dtype)
+            y_data = np.random.rand(5, 10, 5).astype(t2.dtype)
+            ref_res = ref(x_data, y_data)
+            func = relay.Function([x, y], z)
 
+            for target, ctx in ctx_list():
+                # use graph by execuor default for testing, as we need
+                # create function explicitly to avoid constant-folding.
+                intrp = relay.create_executor("graph", ctx=ctx, target=target)
+                op_res = intrp.evaluate(func)(x_data, y_data)
+                np.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=0.01)
 
-def test_binary_broadcast_op():
-    def check_binary_broadcast_op(opfunc):
-        """
-        Program:
-            fn (x: Tensor[(10, 4), f32], y: Tensor[(5, 10, 1), f32]) -> Tensor[(5, 10, 4), f32] {
-                return x <op> y;
-            }
-        """
-        b = IRBuilder()
-        x = b.param('x', tensor_type(10, 4))
-        y = b.param('y', tensor_type(5, 10, 1))
-        with b.function(x, y) as func:
-            b.ret(opfunc(x, y))
-        b.ret(func)
-        prog, env = b.get()
-
-        expected_ty = func_type([tensor_type(10, 4), tensor_type(5, 10, 1)],
-                                tensor_type(5, 10, 4))
-        assert_has_type(func.to_func(), expected_ty)
-
-    for opfunc in [relay.add, relay.subtract, relay.mod,
-                   relay.multiply, relay.divide]:
-        check_binary_broadcast_op(opfunc)
+    for opfunc, ref in [(relay.add, np.add),
+                   (relay.subtract, np.subtract),
+                   (relay.multiply, np.multiply),
+                   (relay.divide, np.divide)]:
+        check_binary_op(opfunc, ref)
 
 
-def test_concatenate_infer_type():
-    ib = relay.ir_builder.IRBuilder()
+def test_expand_dims():
+    # based on topi test
+    def verify_expand_dims(dshape, dtype, oshape, axis, num_newaxis):
+        x = relay.Var("x", relay.TensorType(dshape, dtype))
+        func = relay.Function([x], relay.expand_dims(x, axis, num_newaxis))
+        for target, ctx in ctx_list():
+            data = np.random.uniform(size=dshape).astype(dtype)
+            ref_res = data.reshape(oshape)
+            intrp = relay.create_executor("graph", ctx=ctx, target=target)
+            op_res = intrp.evaluate(func)(data)
+            np.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=0.01)
+
+    verify_expand_dims((3, 10), 'float32', (3, 10, 1, 1), 2, 2)
+    verify_expand_dims((3, 10), 'float32', (1, 3, 10), -3, 1)
+
+
+def test_bias_add():
+    xshape=(10, 2, 3, 4)
+    bshape=(2,)
+    dtype="float32"
+    x = relay.var("x", shape=xshape)
+    bias = relay.var("bias")
+    z = relay.nn.bias_add(x, bias)
+    zz = relay.ir_pass.infer_type(z)
+    assert "axis=" not in zz.astext()
+    assert zz.args[1].checked_type == relay.TensorType(bshape)
+
+    func = relay.Function([x, bias], z)
+    x_data = np.random.uniform(size=xshape).astype(dtype)
+    y_data = np.random.uniform(size=bshape).astype(dtype)
+    ref_res = x_data + y_data.reshape((2, 1, 1))
+    for target, ctx in ctx_list():
+        intrp = relay.create_executor("graph", ctx=ctx, target=target)
+        op_res = intrp.evaluate(func)(x_data, y_data)
+        np.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
+
+
+def test_expand_dims_infer_type():
     n, t, d = tvm.var("n"), tvm.var("t"), 100
-    x = ib.param("x", relay.ty.TensorType((n, t, d), "float32"))
-    y = ib.param("y", relay.ty.TensorType((n, t, d), "float32"))
-    with ib.function(x, y) as func:
-        ib.ret(relay.concatenate((x, y), axis=-1))
-    ib.ret(func)
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TensorType(
-        (n, t, 200), "float32")
+    x = relay.var("x", shape=(n, t, d))
+    y = relay.expand_dims(x, axis=2)
+    assert "axis=2" in y.astext()
+    checked = relay.ir_pass.infer_type(y)
+    assert checked.checked_type == relay.TensorType((n, t, 1, 100))
 
-    ib = relay.ir_builder.IRBuilder()
+
+def test_softmax():
+    shape = (10, 4)
+    x = relay.var("x", shape=shape)
+    y = relay.nn.softmax(x, axis=1)
+    assert "nn.softmax" in y.astext()
+    yy = relay.ir_pass.infer_type(y)
+    assert yy.checked_type == relay.TensorType(shape)
+    func = relay.Function([x], y)
+    x_data = np.random.uniform(size=shape).astype("float32")
+    ref_res = topi.testing.softmax_python(x_data)
+    for target, ctx in ctx_list():
+        intrp = relay.create_executor("graph", ctx=ctx, target=target)
+        op_res = intrp.evaluate(func)(x_data)
+        np.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
+
+
+def test_log_softmax():
+    shape = (10, 4)
+    x = relay.var("x", shape=shape)
+    y = relay.nn.log_softmax(x, axis=1)
+    assert "nn.log_softmax" in y.astext()
+    yy = relay.ir_pass.infer_type(y)
+    assert yy.checked_type == relay.TensorType(shape)
+    func = relay.Function([x], y)
+    x_data = np.random.uniform(size=shape).astype("float32")
+    ref_res = topi.testing.log_softmax_python(x_data)
+    for target, ctx in ctx_list():
+        intrp = relay.create_executor("graph", ctx=ctx, target=target)
+        op_res = intrp.evaluate(func)(x_data)
+        np.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
+
+
+def test_concatenate():
     n, t, d = tvm.var("n"), tvm.var("t"), 100
-    x = ib.param("x", relay.ty.TensorType((n, t, d), "float32"))
-    y = ib.param("y", relay.ty.TensorType((n, t, d), "float32"))
-    with ib.function(x, y) as func:
-        ib.ret(relay.concatenate((x, y), axis=2))
-    ib.ret(func)
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TensorType(
-        (n, t, 200), "float32")
+    x = relay.var("x", shape=(n, t, d))
+    y = relay.var("y", shape=(n, t, d))
+    z = relay.concatenate((x, y), axis=-1)
+    assert "axis=" in z.astext()
+    zz = relay.ir_pass.infer_type(z)
+    assert zz.checked_type == relay.TensorType((n, t, 200))
 
-    ib = relay.ir_builder.IRBuilder()
-    n, t, d = tvm.var("n"), tvm.var("t"), 100
-    x = ib.param("x", relay.ty.TensorType((n, t, d), "float32"))
-    y = ib.param("y", relay.ty.TensorType((n, t, d), "float32"))
-    with ib.function(x, y) as func:
-        ib.ret(relay.concatenate((x, y), axis=1))
-    ib.ret(func)
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TensorType(
-        (n, t + t, 100), "float32")
+    x = relay.exp(x)
+    z = relay.concatenate((x, y), axis=2)
+    zz = relay.ir_pass.infer_type(z)
+    assert zz.checked_type == relay.TensorType((n, t, 200))
 
-def test_lrn():
-    ib = relay.ir_builder.IRBuilder()
-    n, c , h, w = tvm.var("n"), tvm.var("c"), tvm.var("h"), tvm.var("w")
-    x = ib.param("x", relay.ty.TensorType((n, c , h, w), "float32"))
-    with ib.function(x) as func:
-        ib.ret(relay.nn.lrn(x, size=10, axis=2, bias=0.5, alpha=.00001, beta=0.75))
-    ib.ret(func)
+    z = relay.concatenate((x, y), axis=1)
+    zz = relay.ir_pass.infer_type(z)
+    assert zz.checked_type == relay.TensorType((n, t + t, 100))
 
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TensorType((n, c , h, w), "float32")
+    x = relay.var("x", shape=(10, 5))
+    y = relay.var("y", shape=(10, 5))
+    t = relay.var("z", shape=())
+    z = relay.concatenate((x, y), axis=1)
+    z = relay.add(z, t)
+    # Check result.
+    func = relay.Function([x, y, t], z)
+    x_data = np.random.rand(10, 5).astype('float32')
+    y_data = np.random.rand(10, 5).astype('float32')
+    t_data = np.random.uniform(size=()).astype('float32')
+    ref_res = np.concatenate((x_data, y_data), axis=1) + t_data
 
-
-def test_l2_normalize():
-    ib = relay.ir_builder.IRBuilder()
-    n, c , h, w = tvm.var("n"), tvm.var("c"), tvm.var("h"), tvm.var("w")
-    x = ib.param("x", relay.ty.TensorType((n, c , h, w), "float32"))
-    with ib.function(x) as func:
-        ib.ret(relay.nn.l2_normalize(x, eps=0.001, axis=[1]))
-    ib.ret(func)
-
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TensorType((n, c , h, w), "float32")
+    for target, ctx in ctx_list():
+        intrp1 = relay.create_executor("graph", ctx=ctx, target=target)
+        intrp2 = relay.create_executor("debug", ctx=ctx, target=target)
+        op_res1 = intrp1.evaluate(func)(x_data, y_data, t_data)
+        tvm.testing.assert_allclose(op_res1.asnumpy(), ref_res, rtol=0.01)
+        op_res2 = intrp2.evaluate(func)(x_data, y_data, t_data)
+        tvm.testing.assert_allclose(op_res2.asnumpy(), ref_res, rtol=0.01)
 
 def test_dropout():
-    ib = relay.ir_builder.IRBuilder()
-    input_ty = relay.ty.TensorType((3, 4, 5), "int8")
-    x = ib.param("x", input_ty)
-    with ib.function(x) as func:
-        ib.ret(relay.nn.dropout(x))
-    ib.ret(func)
-
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TupleType([input_ty, input_ty])
-
-    ib = relay.ir_builder.IRBuilder()
     n, t, d = tvm.var("n"), tvm.var("t"), tvm.var("d")
-    input_ty = relay.ty.TensorType((n, t, d), "float32")
-    x = ib.param("x", input_ty)
-    with ib.function(x) as func:
-        ib.ret(relay.nn.dropout(x, rate=0.75))
-    ib.ret(func)
-
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TupleType([input_ty, input_ty])
+    input_ty = relay.TensorType((n, t, d), "float32")
+    x = relay.var("x", input_ty)
+    y = relay.nn.dropout(x, rate=0.75)
+    assert "rate=" in y.astext()
+    yy = relay.ir_pass.infer_type(y)
+    assert yy.checked_type == input_ty
 
 
 def test_batch_norm():
     # beta and gamma ignored
-    ib = relay.ir_builder.IRBuilder()
-    data = ib.param("data", relay.ty.TensorType((3, 2, 1), "float32"))
-    gamma = ib.param("gamma", relay.ty.TensorType((5,), "int8"))
-    beta = ib.param("beta", relay.ty.TensorType((12, 16), "int64"))
-    moving_mean = ib.param("moving_mean", relay.ty.TensorType((2,), "float32"))
-    moving_var = ib.param("moving_var", relay.ty.TensorType((2,), "float32"))
-    with ib.function(data, gamma, beta, moving_mean, moving_var) as func:
-        ib.ret(relay.nn.batch_norm(data, gamma, beta, moving_mean, moving_var,
-                                   center=False, scale=False))
-    ib.ret(func)
-
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TupleType(tvm.convert([
-        relay.ty.TensorType((3, 2, 1), "float32"),
-        relay.ty.TensorType((2,), "float32"),
-        relay.ty.TensorType((2,), "float32")
+    data = relay.var("data", relay.TensorType((3, 2, 1)))
+    beta = relay.var("beta", relay.TensorType((2,)))
+    gamma = relay.var("gamma", relay.TensorType((2,)))
+    moving_mean = relay.var("moving_mean", relay.TensorType((2,)))
+    moving_var = relay.var("moving_var", relay.TensorType((2,)))
+    y = relay.nn.batch_norm(data, gamma, beta, moving_mean, moving_var,
+                            center=False, scale=False)
+    yy = relay.ir_pass.infer_type(y.astuple())
+    assert "center=" in yy.astext()
+    assert yy.checked_type == relay.ty.TupleType(tvm.convert([
+        relay.TensorType((3, 2, 1), "float32"),
+        relay.TensorType((2,), "float32"),
+        relay.TensorType((2,), "float32")
     ]))
 
-    # with beta and gamma, different axis
-    ib = relay.ir_builder.IRBuilder()
-    data = ib.param("data", relay.ty.TensorType((3, 2, 1), "float32"))
-    gamma = ib.param("gamma", relay.ty.TensorType((3,), "float32"))
-    beta = ib.param("beta", relay.ty.TensorType((3,), "float32"))
-    moving_mean = ib.param("moving_mean", relay.ty.TensorType((3,), "float32"))
-    moving_var = ib.param("moving_var", relay.ty.TensorType((3,), "float32"))
-    with ib.function(data, gamma, beta, moving_mean, moving_var) as func:
-        ib.ret(relay.nn.batch_norm(data, gamma, beta, moving_mean, moving_var,
-                                   axis=0, center=False, scale=False))
-    ib.ret(func)
+    beta = relay.var("beta", relay.TensorType((3,)))
+    gamma = relay.var("gamma", relay.TensorType((3,)))
+    moving_mean = relay.var("moving_mean", relay.TensorType((3,)))
+    moving_var = relay.var("moving_var", relay.TensorType((3,)))
 
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TupleType(tvm.convert([
+    y = relay.nn.batch_norm(data, gamma, beta, moving_mean, moving_var,
+                            axis=0, center=False, scale=False)
+    yy = relay.ir_pass.infer_type(y.astuple())
+    assert yy.checked_type == relay.ty.TupleType(tvm.convert([
         relay.ty.TensorType((3, 2, 1), "float32"),
         relay.ty.TensorType((3,), "float32"),
         relay.ty.TensorType((3,), "float32")
     ]))
 
     # axis=-1
-    ib = relay.ir_builder.IRBuilder()
-    data = ib.param("data", relay.ty.TensorType((1, 2, 3), "float32"))
-    gamma = ib.param("gamma", relay.ty.TensorType((3,), "float32"))
-    beta = ib.param("beta", relay.ty.TensorType((3,), "float32"))
-    moving_mean = ib.param("moving_mean", relay.ty.TensorType((3,), "float32"))
-    moving_var = ib.param("moving_var", relay.ty.TensorType((3,), "float32"))
-    with ib.function(data, gamma, beta, moving_mean, moving_var) as func:
-        ib.ret(relay.nn.batch_norm(data, gamma, beta, moving_mean, moving_var,
-                                   axis=-1, center=False, scale=False))
-    ib.ret(func)
-
-    func = relay.ir_pass.infer_type(ib.env, func.to_func())
-    ftype = func.checked_type
-    assert ftype.ret_type == relay.ty.TupleType(tvm.convert([
+    data = relay.var("data", relay.TensorType((1, 2, 3)))
+    beta = relay.var("beta", relay.TensorType((3,)))
+    gamma = relay.var("gamma", relay.TensorType((3,)))
+    moving_mean = relay.var("moving_mean", relay.TensorType((3,)))
+    moving_var = relay.var("moving_var", relay.TensorType((3,)))
+    y = relay.nn.batch_norm(data, gamma, beta, moving_mean, moving_var,
+                            axis=-1, center=False, scale=False)
+    yy = relay.ir_pass.infer_type(y.astuple())
+    assert yy.checked_type == relay.ty.TupleType(tvm.convert([
         relay.ty.TensorType((1, 2, 3), "float32"),
         relay.ty.TensorType((3,), "float32"),
         relay.ty.TensorType((3,), "float32")
     ]))
 
 
+def test_dense():
+    n, c , h, w = tvm.var("n"), tvm.var("c"), tvm.var("h"), tvm.var("w")
+    x = relay.var("x", relay.TensorType((n, c, h, w), "float32"))
+    w = relay.var("w", relay.TensorType((2, w), "float32"))
+    y = relay.nn.dense(x, w, units=2)
+    "units=2" in y.astext()
+    yy = relay.ir_pass.infer_type(y)
+    assert yy.checked_type == relay.TensorType((n, c, h, 2), "float32")
+
+    n, c , h, w = tvm.var("n"), tvm.var("c"), tvm.var("h"), 2
+    x = relay.var("x", relay.TensorType((n, c, h, w), "float32"))
+    wh, ww = tvm.var("wh"), tvm.var("ww")
+    w = relay.var("w", relay.TensorType((ww, wh), "float32"))
+    y = relay.nn.dense(x, w)
+    yy = relay.ir_pass.infer_type(y)
+    assert yy.checked_type == relay.TensorType((n, c, h, ww), "float32")
+
+    n, c , h, w = tvm.var("n"), tvm.var("c"), tvm.var("h"), 2
+    x = relay.var("x", relay.TensorType((n, c, h, w), "float32"))
+    w = relay.var("w", relay.IncompleteType())
+    y = relay.nn.dense(x, w, units=2)
+    yy = relay.ir_pass.infer_type(y)
+    assert yy.checked_type == relay.TensorType((n, c, h, 2), "float32")
+
+    x = relay.var("x", shape=(10, 5))
+    w = relay.var("w", shape=(2, 5))
+    z = relay.nn.dense(x, w)
+
+    # Check result.
+    func = relay.Function([x, w], z)
+    x_data = np.random.rand(10, 5).astype('float32')
+    w_data = np.random.rand(2, 5).astype('float32')
+    ref_res = np.dot(x_data, w_data.T)
+
+    for target, ctx in ctx_list():
+        intrp1 = relay.create_executor("graph", ctx=ctx, target=target)
+        intrp2 = relay.create_executor("debug", ctx=ctx, target=target)
+        op_res1 = intrp1.evaluate(func)(x_data, w_data)
+        tvm.testing.assert_allclose(op_res1.asnumpy(), ref_res, rtol=1e-5)
+        op_res2 = intrp2.evaluate(func)(x_data, w_data)
+        tvm.testing.assert_allclose(op_res2.asnumpy(), ref_res, rtol=1e-5)
+
+
+
 if __name__ == "__main__":
+    test_concatenate()
+    test_bias_add()
     test_unary_op()
-    test_single_op()
+    test_binary_op()
     test_expand_dims_infer_type()
-    test_concatenate_infer_type()
+    test_expand_dims()
     test_softmax()
     test_log_softmax()
-    test_binary_op()
-    test_binary_broadcast_op()
-    test_lrn()
-    test_l2_normalize()
     test_dropout()
     test_batch_norm()
+    test_dense()

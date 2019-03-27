@@ -27,6 +27,7 @@ def dense_cuda(data, weight, bias=None):
     output : tvm.Tensor
         2-D with shape [batch, out_dim]
     """
+    print("in cuda dense_data")
     assert len(data.shape) == 2 and len(weight.shape) == 2, \
         "only support 2-dim dense"
     if bias is not None:
@@ -59,6 +60,7 @@ def schedule_dense(outs):
     s: Schedule
         The computation schedule for dense.
     """
+    print('in cuda scuedule_dense')
     target = tvm.target.current_target()
     if target.target_name == "cuda" and "cublas" in target.libs:
         return generic.schedule_extern(outs)

@@ -84,6 +84,25 @@ bool IntSet::can_prove_negative() const {
   return (s_int && is_negative_const(ir::Simplify(s_int->i.max)));
 }
 
+bool IntSet::can_prove_non_positive() const {
+  if (const IntervalSet* s_int = (*this).as<IntervalSet>()) {
+    auto max = ir::Simplify(s_int->i.max);
+    return is_zero(max) || is_negative_const(max);
+  }
+  return false;
+}
+
+bool IntSet::can_prove_non_negative() const {
+  if (const IntervalSet* s_int = (*this).as<IntervalSet>()) {
+    // Any reason why we should or should not use can_prove() to implement
+    // these functions?
+    auto min = ir::Simplify(s_int->i.min);
+    return is_zero(min) || is_positive_const(min);
+  }
+  return false;
+}
+
+
 SignType IntSet::sign_type() const {
   if (can_prove_positive()) {
     return kPositive;
@@ -249,8 +268,9 @@ inline IntSet CombineInterval<Mul>(Interval a, Interval b) {
     } else if (is_negative_const(b.min)) {
       return IntervalSet::make(e2, e1);
     } else if (a.is_bounded()) {
+      using ir::Select;
       Expr cmp = b.min >= make_zero(b.min.type().element_of());
-      return IntervalSet::make(select(cmp, e1, e2), select(cmp, e2, e1));
+      return IntervalSet::make(Select::make(cmp, e1, e2), Select::make(cmp, e2, e1));
     }
   }
   LOG(WARNING) << "Return Everything in CombineInterval Mul";
@@ -275,8 +295,9 @@ inline IntSet CombineInterval<Div>(Interval a, Interval b) {
     } else if (is_negative_const(b.min)) {
       return IntervalSet::make(e2, e1);
     } else if (a.is_bounded()) {
+      using ir::Select;
       Expr cmp = b.min >= make_zero(b.min.type().element_of());
-      return IntervalSet::make(select(cmp, e1, e2), select(cmp, e2, e1));
+      return IntervalSet::make(Select::make(cmp, e1, e2), Select::make(cmp, e2, e1));
     }
   }
   LOG(WARNING) << "Return Everything in CombineInterval Div";
@@ -552,12 +573,15 @@ IntSet EvalSet(Expr e,
 IntSet EvalSet(Range r,
                const std::unordered_map<const Variable*, IntSet>& dom_map) {
   IntSetEvaluator m(dom_map);
-  IntSet min_set = m.Eval(r->min);
-  IntSet ext_set = m.Eval(r->extent).cover_interval();
-  const Interval& ei = ext_set.as<IntervalSet>()->i;
-  if (!ei.has_upper_bound()) return IntSet::everything();
-  ext_set = IntervalSet::make(make_zero(ei.max.type()), ComputeExpr<Sub>(ei.max, 1));
-  return Combine<Add>(min_set, ext_set);
+  IntSet min_set = m.Eval(r->min).cover_interval();
+  // Simplifying first can give tighter bounds if r->min and r->extent share variables
+  Expr sum = ComputeExpr<Sub>(ComputeExpr<Add>(r->min, r->extent), 1);
+  IntSet max_set = m.Eval(Simplify(sum)).cover_interval();
+  const Interval& ni = min_set.as<IntervalSet>()->i;
+  const Interval& xi = max_set.as<IntervalSet>()->i;
+  if (!ni.has_lower_bound()) return IntSet::everything();
+  if (!xi.has_upper_bound()) return IntSet::everything();
+  return IntervalSet::make(ni.min, xi.max);
 }
 
 IntSet EvalSet(IntSet s,

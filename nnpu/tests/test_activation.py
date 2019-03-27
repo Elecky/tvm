@@ -7,7 +7,7 @@ import math
     
 with (ScheduleProcHelper()):
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
     assert dtype_w == 'float32', 'when testing activation function, float dtype is needed'
@@ -19,7 +19,7 @@ with (ScheduleProcHelper()):
     exp = tvm.compute(shape, lambda i: tvm.exp(a_buf[i]), 'exp')
     nnpu.utils.MarkScope(exp)
 
-    one = tvm.const(1).astype(dtype_w)
+    one = tvm.const(1, dtype_w)
     exp_p1 = tvm.compute(shape, lambda i: exp[i] + one, 'exp_p1')
     nnpu.utils.MarkScope(exp_p1)
 

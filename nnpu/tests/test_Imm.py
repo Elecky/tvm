@@ -6,7 +6,7 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
+    nnpu.set_device(env, type='S0')
     a = tvm.placeholder((16, ), env.cfg['dtype_w'], 'a')
     sph = ScheduleProcHelper()
     Imm = tvm.const(5, env.cfg['dtype_w'])
@@ -28,7 +28,7 @@ def test():
     sph.MarkScope(div_buf)
     div_host, div_dram = nnpu.utils.CopyBufToH(div_buf, 'rdiv', sph)
 
-    gtm_buf = tvm.compute((16, ), lambda i: tvm.select(a_buf[i] > Imm, a_buf[i], Imm), 'gtm_buf')
+    gtm_buf = tvm.compute((16, ), lambda i: tvm.max(a_buf[i], Imm), 'gtm_buf')
     sph.MarkScope(gtm_buf)
     gtm_host, gtm_dram = nnpu.utils.CopyBufToH(gtm_buf, 'gtm', sph)
 
@@ -48,7 +48,12 @@ def test():
     print(nnpu.lower(s, [a,c_host,sub_host,mul_host,div_host,gtm_host,rsub_host], simple_mode=True))
     func = nnpu.build(s, [a,c_host,sub_host,mul_host,div_host,gtm_host,rsub_host], 'nnpu', 'llvm', name='nnpu_vmuli')
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
 
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
+    
     ctx = tvm.nd.TVMContext(13, 0)
 
     a_np = np.random.randint(size=(16, ), dtype=a.dtype, low = 3, high = 122)
@@ -89,5 +94,7 @@ def test():
     print('{0} - a = '.format(Imm.value))
     print(rsub_nd.asnumpy())
     np.testing.assert_allclose(rsub_nd.asnumpy(), Imm.value-a_np)
+    print('test passed')
+
 if __name__ == '__main__':
     test()

@@ -1,5 +1,5 @@
 import tvm
-
+import numpy as np
 
 def test_schedule0():
     m = tvm.var('m')
@@ -11,6 +11,7 @@ def test_schedule0():
     bounds = tvm.schedule.InferBound(s)
     assert isinstance(bounds, tvm.container.Map)
     stmt = tvm.schedule.ScheduleOps(s, bounds)
+
 
 def test_schedule1():
     m = tvm.var('m')
@@ -53,14 +54,17 @@ def test_schedule_scan():
     assert tuple(res.shape) == (m, n)
     s = tvm.create_schedule(res.op)
     s = s.normalize()
+    ir = tvm.lower(s, [s_state], simple_mode=True)
+    assert not hasattr(ir.body.body.body.body.rest.body.body.rest.body, "condition")
     bounds = tvm.schedule.InferBound(s)
     assert(bounds[res.op.scan_axis].min.value == 1)
     stmt = tvm.schedule.ScheduleOps(s, bounds)
 
+
 def test_inline_multi_reduce():
     def argmax_comp(x, y):
-        idx = tvm.select((x[1] >= y[1]), x[0], y[0])
-        val = tvm.select((x[1] >= y[1]), x[1], y[1])
+        idx = tvm.expr.Select((x[1] >= y[1]), x[0], y[0])
+        val = tvm.expr.Select((x[1] >= y[1]), x[1], y[1])
         return idx, val
     def argmax_init(idx_typ, val_typ):
         return tvm.const(-1, idx_typ), tvm.min_value(val_typ)
@@ -80,7 +84,6 @@ def test_inline_multi_reduce():
     stmt = tvm.schedule.ScheduleOps(s, bounds)
 
 
-
 def test_auto_inline():
     m = tvm.var('m')
     n = tvm.var('n')
@@ -95,6 +98,7 @@ def test_auto_inline():
     s = s.normalize()
     bounds = tvm.schedule.InferBound(s)
     stmt = tvm.schedule.ScheduleOps(s, bounds)
+
 
 def test_schedule_const_bound():
     n = 128
@@ -146,6 +150,7 @@ def test_scan_inline1():
     s[s_x1].compute_inline()
     stmt = tvm.lower(s, [x, res1, res2])
 
+
 def test_scan_inline2():
     m = tvm.var("m")
     n = tvm.var("n")
@@ -183,6 +188,7 @@ def test_schedule_cache():
     bounds = tvm.schedule.InferBound(s)
     stmt = tvm.schedule.ScheduleOps(s, bounds)
 
+
 def test_schedule_middle_cache():
     m = tvm.var('m')
     n = tvm.var('n')
@@ -200,7 +206,6 @@ def test_schedule_middle_cache():
     #s[AA].compute_at(s[CC], CC.op.axis[0])
     bounds = tvm.schedule.InferBound(s)
     stmt = tvm.schedule.ScheduleOps(s, bounds)
-
 
 
 def test_schedule_cache_relayout1():
@@ -249,6 +254,7 @@ def test_schedule_cache_relayout3():
     bounds = tvm.schedule.InferBound(s)
     stmt = tvm.schedule.ScheduleOps(s, bounds)
 
+
 def test_schedule_cache_relayout4():
     def _compute(*indice):
         return A(*indice) + 1, B(*indice) / 2
@@ -266,7 +272,8 @@ def test_schedule_cache_relayout4():
 
 def test_schedule_bound_condition():
    A = tvm.placeholder((64,), name='A', dtype="float32")
-   Apad = tvm.compute((66,), lambda i: tvm.select(tvm.all(i>0, i < 65), A[i-1], tvm.const(0.)), name='Apad')
+   Apad = tvm.compute((66,), lambda i: tvm.if_then_else(
+       tvm.all(i>0, i < 65), A[i-1], tvm.const(0., "float32")), name='Apad')
    Apad2 = tvm.compute((66,), lambda i: Apad[i]*2, name='Apad2')
    s = tvm.create_schedule(Apad2.op)
    AL1 = s.cache_read(A,"local",[Apad])
@@ -403,7 +410,58 @@ def test_schedule_tensor_compute3():
     stmt = tvm.schedule.ScheduleOps(s, bounds)
 
 
+def test_loop_dep_reduce():
+    X = tvm.placeholder(shape=(10,), name="x")
+    def f(n):
+        rv = tvm.reduce_axis((0, n))
+        return tvm.sum(X[rv], axis=rv)
+    Y = tvm.compute(X.shape, f, name="y")
+    s = tvm.create_schedule([Y.op])
+    f = tvm.build(s, [X, Y])
+
+
+def test_loop_dep_reduce_cache_write():
+    X = tvm.placeholder(shape=(10,), name="x")
+    def f(n):
+        rv = tvm.reduce_axis((0, n))
+        init = lambda dtype: tvm.expr.Select(n > 1, tvm.const(0, dtype), n.astype(dtype))
+        sum = tvm.comm_reducer(lambda x, y: tvm.max(x + y, n.astype('float32')), init, name='sum')
+        return sum(X[rv], axis=rv)
+    Y = tvm.compute(X.shape, f, name="y")
+    s = tvm.create_schedule([Y.op])
+    s.cache_write(Y, 'local')
+    f = tvm.build(s, [X, Y])
+
+def test_reduction_and_dummy_fuse_split():
+    n = 10
+    X = tvm.placeholder(shape=(n,), dtype='int32', name="X")
+    k = tvm.reduce_axis((0, n))
+    Y = tvm.compute((), lambda: tvm.sum(X[k], k), name="Y")
+    s = tvm.create_schedule([Y.op])
+    ax = s[Y.op].fuse(*Y.op.axis)
+    axo, axi = s[Y.op].split(ax, nparts=20)
+    f = tvm.build(s, [Y, X])
+
+    args = [tvm.nd.empty((), 'int32')] + [tvm.ndarray.array(np.ones((n,), dtype='int32'))]
+    f(*args)
+    assert args[0].asnumpy() == n
+
+    n = 10
+    X = tvm.placeholder(shape=(n,), dtype='int32', name="X")
+    k = tvm.reduce_axis((0, n))
+    Y = tvm.compute((n,), lambda i: tvm.sum(X[k], k), name="Y")
+    s = tvm.create_schedule([Y.op])
+    ax = s[Y.op].fuse(*(list(Y.op.axis) + list(Y.op.reduce_axis)))
+    f = tvm.build(s, [Y, X])
+
+    args = [tvm.ndarray.array(np.ones((n,), dtype='int32'))] + \
+        [tvm.ndarray.array(np.ones((n,), dtype='int32'))]
+    f(*args)
+    assert np.all(args[0].asnumpy() == n)
+
 if __name__ == "__main__":
+    test_loop_dep_reduce()
+    test_loop_dep_reduce_cache_write()
     test_schedule_middle_cache()
     test_inline_multi_reduce()
     test_schedule_cache_relayout4()
@@ -424,3 +482,4 @@ if __name__ == "__main__":
     test_schedule_tensor_compute1()
     test_schedule_tensor_compute2()
     test_schedule_tensor_compute3()
+    test_reduction_and_dummy_fuse_split()

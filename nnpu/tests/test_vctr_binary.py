@@ -6,7 +6,8 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type="S1")
+    nnpu.set_device(env, type="SC")
+    # exit(0)
 
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     shape = (48, )
@@ -31,7 +32,7 @@ def test():
     mul_host, mul_dram = nnpu.utils.CopyBufToH(mul_buf, 'mul', sph)
 
     gtm_buf = tvm.compute(shape, 
-                lambda i: tvm.select(a_buf[i] > b_buf[i], a_buf[i], b_buf[i]), 'gtm_buf')
+                lambda i: tvm.max(a_buf[i], b_buf[i]), 'gtm_buf')
     sph.MarkScope(gtm_buf)
     gtm_host, gtm_dram = nnpu.utils.CopyBufToH(gtm_buf, 'gtm', sph)
 
@@ -49,9 +50,9 @@ def test():
 
 
     print(nnpu.lower(s, [a, b, c_host, mul_host, gtm_host], simple_mode=True))
-    exit()
+    # exit()
     func = nnpu.build(s, [a, b, c_host, mul_host, gtm_host], 'nnpu', 'llvm', name='nnpu_exp')
-
+    # exit()
 
     ctx = tvm.nd.TVMContext(13, 0)
 
@@ -66,7 +67,14 @@ def test():
     mul_nd = tvm.nd.array(np.zeros(shape).astype(mul_host.dtype), ctx)
     gtm_nd = tvm.nd.array(np.zeros(shape).astype(gtm_host.dtype), ctx)
 
+    print('------------------- device module 1 llvm IR: ')
+    print(func.imported_modules[0].get_source('ll'))
+
+    print('------------------- device module 1 asm code: ')
+    print(func.imported_modules[0].get_source('asm'))
+
     func(a_nd, b_nd, c_nd, mul_nd, gtm_nd)
+    # exit()
     print('a = ')
     print(a_np)
     print('b = ')

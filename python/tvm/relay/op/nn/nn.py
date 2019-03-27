@@ -13,7 +13,7 @@ def conv2d(data,
            channels=None,
            kernel_size=None,
            data_layout="NCHW",
-           weight_layout="OIHW",
+           kernel_layout="OIHW",
            out_layout="",
            out_dtype=""):
     r"""2D convolution.
@@ -23,7 +23,7 @@ def conv2d(data,
 
 
     In the default case, where the data_layout is `NCHW`
-    and weight_layout is `OIHW`, conv2d takes in
+    and kernel_layout is `OIHW`, conv2d takes in
     a data Tensor with shape `(batch_size, in_channels, height, width)`,
     and a weight Tensor with shape `(channels, in_channels, kernel_size[0], kernel_size[1])`
     to produce an output Tensor with the following rule:
@@ -43,10 +43,10 @@ def conv2d(data,
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
-    weight : relay.Expr
+    weight : tvm.relay.Expr
         The weight expressions.
 
     strides : tuple of int, optional
@@ -70,7 +70,7 @@ def conv2d(data,
     data_layout : str, optional
         Layout of the input.
 
-    weight_layout : str, optional
+    kernel_layout : str, optional
         Layout of the weight.
 
     out_layout : str, optional
@@ -81,12 +81,12 @@ def conv2d(data,
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.conv2d(data, weight, strides, padding, dilation,
                         groups, channels, kernel_size, data_layout,
-                        weight_layout, out_layout, out_dtype)
+                        kernel_layout, out_layout, out_dtype)
 
 
 def conv2d_transpose(data,
@@ -98,17 +98,17 @@ def conv2d_transpose(data,
                      channels=None,
                      kernel_size=None,
                      data_layout="NCHW",
-                     weight_layout="OIHW",
+                     kernel_layout="OIHW",
                      output_padding=(0, 0),
                      out_dtype=""):
-    """Two dimensional trnasposed convolution operator.
+    """Two dimensional transposed convolution operator.
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
-    weight : relay.Expr
+    weight : tvm.relay.Expr
         The weight expressions.
 
     strides : Tuple[int], optional
@@ -126,7 +126,7 @@ def conv2d_transpose(data,
     data_layout : str, optional
         Layout of the input.
 
-    weight_layout : str, optional
+    kernel_layout : str, optional
         Layout of the weight.
 
     output_padding : Tuple[int], optional
@@ -137,15 +137,15 @@ def conv2d_transpose(data,
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.conv2d_transpose(data, weight, strides, padding, dilation,
                                   groups, channels, kernel_size, data_layout,
-                                  weight_layout, output_padding, out_dtype)
+                                  kernel_layout, output_padding, out_dtype)
 
 
-def softmax(data, axis=1):
+def softmax(data, axis=-1):
     r"""Computes softmax.
 
     .. math:: \text{softmax}(x)_i = \frac{exp(x_i)}{\sum_j exp(x_j)}
@@ -155,7 +155,7 @@ def softmax(data, axis=1):
 
     Parameters
     ----------
-    data: relay.Expr
+    data: tvm.relay.Expr
         The input data to the operator.
 
     axis: int, optional
@@ -163,13 +163,13 @@ def softmax(data, axis=1):
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.softmax(data, axis)
 
 
-def log_softmax(data, axis):
+def log_softmax(data, axis=-1):
     r"""Computes log softmax.
 
     .. math::
@@ -181,7 +181,7 @@ def log_softmax(data, axis):
 
     Parameters
     ----------
-    data: relay.Expr
+    data: tvm.relay.Expr
         The input data to the operator.
 
     axis: int
@@ -189,7 +189,7 @@ def log_softmax(data, axis):
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.log_softmax(data, axis)
@@ -224,7 +224,7 @@ def max_pool2d(data,
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     strides : tuple of int, optional
@@ -241,7 +241,7 @@ def max_pool2d(data,
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.max_pool2d(data, pool_size, strides, padding,
@@ -278,7 +278,7 @@ def avg_pool2d(data,
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     strides : tuple of int, optional
@@ -298,7 +298,7 @@ def avg_pool2d(data,
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.avg_pool2d(data, pool_size, strides, padding,
@@ -325,7 +325,7 @@ def global_max_pool2d(data,
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     layout : str, optional
@@ -333,7 +333,7 @@ def global_max_pool2d(data,
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.global_max_pool2d(data, layout)
@@ -359,7 +359,7 @@ def global_avg_pool2d(data,
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     layout : str, optional
@@ -367,7 +367,7 @@ def global_avg_pool2d(data,
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.global_avg_pool2d(data, layout)
@@ -389,10 +389,10 @@ def upsampling(data,
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
-    scale : relay.Expr
+    scale : tvm.relay.Expr
         The scale factor for upsampling.
 
     layout : str, optional
@@ -403,10 +403,11 @@ def upsampling(data,
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.upsampling(data, scale, layout, method)
+
 
 def batch_flatten(data):
     """BatchFlatten.
@@ -420,15 +421,41 @@ def batch_flatten(data):
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     Returns
     -------
-    result: relay.Expr
+    result : tvm.relay.Expr
         The Flattened result.
     """
     return _make.batch_flatten(data)
+
+
+def bias_add(data, bias, axis=1):
+    """add_bias operator.
+
+    Add 1D bias to the axis of data.
+    This function is a special case of add which allows
+    inference of shape of the bias from data.
+
+    Parameters
+    ----------
+    data : tvm.relay.Expr
+        The input data to the operator.
+
+    bias : tvm.relay.Expr
+        The bias to be added.
+
+    axis : int, optional
+        The axis to add the bias.
+
+    Returns
+    -------
+    result : tvm.relay.Expr
+        The final result.
+    """
+    return _make.bias_add(data, bias, axis)
 
 
 def dense(data, weight, units=None):
@@ -441,10 +468,10 @@ def dense(data, weight, units=None):
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
-    weight : relay.Expr
+    weight : tvm.relay.Expr
         The weight expressions.
 
     units : int, optional
@@ -452,7 +479,7 @@ def dense(data, weight, units=None):
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.dense(data, weight, units)
@@ -466,12 +493,12 @@ def relu(data):
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.relu(data)
@@ -487,7 +514,7 @@ def leaky_relu(data, alpha):
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     alpha : float
@@ -495,10 +522,37 @@ def leaky_relu(data, alpha):
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.leaky_relu(data, alpha)
+
+
+def prelu(data, alpha, axis=1):
+    """This operator takes data as input and does Leaky version
+    of a Rectified Linear Unit.
+
+    .. math::
+
+        `y = x > 0 ? x : alpha * x`
+
+    Parameters
+    ----------
+    data : tvm.relay.Expr
+        The input data to the operator.
+
+    alpha : tvm.relay.Expr
+        Slope coefficient for the negative half axis.
+
+    axis : int, optional
+        Specify which shape axis the channel is specified.
+
+    Returns
+    -------
+    result : tvm.relay.Expr
+        The computed result.
+    """
+    return _make.prelu(data, alpha, axis)
 
 
 def pad(data,
@@ -511,7 +565,7 @@ def pad(data,
 
     Parameters
     ----------
-    data: relay.Expr
+    data: tvm.relay.Expr
         The input data to the operator
     pad_width: tuple of <tuple of <int>>, required
         Number of values padded to the edges of each axis, in the format
@@ -521,7 +575,7 @@ def pad(data,
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.pad(data, pad_width, pad_value)
@@ -540,7 +594,7 @@ def lrn(data, size=5, axis=1, bias=2, alpha=.00001, beta=0.75):
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     size : int, optional
@@ -560,7 +614,7 @@ def lrn(data, size=5, axis=1, bias=2, alpha=.00001, beta=0.75):
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.lrn(data, size, axis, alpha, beta, bias)
@@ -574,7 +628,7 @@ def l2_normalize(data, eps, axis=None):
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     eps : float
@@ -585,10 +639,11 @@ def l2_normalize(data, eps, axis=None):
 
     Returns
     -------
-    result : relay.Expr
+    result : tvm.relay.Expr
         The computed result.
     """
     return _make.l2_normalize(data, eps, axis)
+
 
 def dropout(data, rate=0.5):
     """Applies the dropout operation to the input array.
@@ -599,7 +654,7 @@ def dropout(data, rate=0.5):
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         The input data to the operator.
 
     rate : float, optional (default=0.5)
@@ -607,17 +662,22 @@ def dropout(data, rate=0.5):
 
     Returns
     -------
-    result : relay.Tuple([relay.Expr, relay.Expr])
-        The first member of the tuple is the result of dropping elements from ``data``
-        and rescaling. The second member is a "mask" tensor, which is of the same
-        shape and data type as ``data`` and, for each element in ``data``, is 1.0
-        if the element was not dropped and 0.0 if it was.
+    result : tvm.relay.Expr
+        The result of dropout
     """
     result = _make.dropout(data, rate)
-    return TupleWrapper(result, 2)
+    return TupleWrapper(result, 2)[0]
 
-def batch_norm(data, gamma, beta, moving_mean, moving_var,
-               axis=1, epsilon=1e-5, center=True, scale=True):
+
+def batch_norm(data,
+               gamma,
+               beta,
+               moving_mean,
+               moving_var,
+               axis=1,
+               epsilon=1e-5,
+               center=True,
+               scale=True):
     r"""
     Batch normalization layer (Ioffe and Szegedy, 2014).
     Normalizes the input at each batch, i.e. applies a transformation
@@ -658,34 +718,143 @@ def batch_norm(data, gamma, beta, moving_mean, moving_var,
 
     Parameters
     ----------
-    data : relay.Expr
+    data : tvm.relay.Expr
         Input to which batch_norm will be applied.
-    gamma : relay.Expr
+
+    gamma : tvm.relay.Expr
         The gamma scale factor.
-    beta : relay.Expr
+
+    beta : tvm.relay.Expr
         The beta offset factor.
-    moving_mean : relay.Expr
+
+    moving_mean : tvm.relay.Expr
         Running mean of input,
-    moving_var : relay.Expr
+
+    moving_var : tvm.relay.Expr
         Running variance of input.
+
     axis : int, optional, default=1
         Specify along which shape axis the channel is specified.
+
     epsilon : double, optional, default=1e-5
         Small float added to variance to avoid diving by zero.
+
     center : boolean, optional, default=True
         If True, add offset of beta to normalized tensor, If False,
         beta is ignored.
+
     scale : boolean, optional, default=True
         If true, multiply by gamma. If False, gamma is not used.
         When the next layer is piecewise linear (also e.g. nn.relu),
-        this can be disabled since the scalingwill be done by the next layer.
+        this can be disabled since the scaling will be done by the next layer.
 
     Returns
     -------
-    result : relay.Tuple([relay.Expr, relay.Expr, relay.Expr])
-        Tuple of normed data (same shape as input), new running mean (k-length vector),
+    result : relay.Tuple([tvm.relay.Expr, tvm.relay.Expr, tvm.relay.Expr])
+        Tuple of normed data (same shape as input),
+        new running mean (k-length vector),
         and new running variance (k-length vector)
     """
-    result = _make.batch_norm(data, gamma, beta, moving_mean, moving_var,
-                              axis, epsilon, center, scale)
+    result = _make.batch_norm(data,
+                              gamma,
+                              beta,
+                              moving_mean,
+                              moving_var,
+                              axis,
+                              epsilon,
+                              center,
+                              scale)
     return TupleWrapper(result, 3)
+
+
+def contrib_conv2d_winograd_without_weight_transform(data,
+                                                     weight,
+                                                     tile_size,
+                                                     strides=(1, 1),
+                                                     padding=(0, 0),
+                                                     dilation=(1, 1),
+                                                     groups=1,
+                                                     channels=None,
+                                                     kernel_size=None,
+                                                     data_layout="NCHW",
+                                                     kernel_layout="OIHW",
+                                                     out_layout="",
+                                                     out_dtype=""):
+    r"""2D convolution with winograd algorithm.
+
+    The basic parameters are the same as the ones in vanilla conv2d.
+    It assumes the weight is pre-transformed by nn.contrib_conv2d_winograd_weight_transform
+
+    Parameters
+    ----------
+    data : tvm.relay.Expr
+        The input data to the operator.
+
+    weight : tvm.relay.Expr
+        The weight expressions.
+
+    tile_size : int
+        The Tile size of winograd. E.g. 2 for F(2x2, 3x3) and 4 for F(4x4, 3x3)
+
+    strides : tuple of int, optional
+        The strides of convoltution.
+
+    padding : tuple of int, optional
+        The padding of convolution on both sides of inputs before convolution.
+
+    dilation : tuple of int, optional
+        Specifies the dilation rate to be used for dilated convolution.
+
+    groups : int, optional
+        Number of groups for grouped convolution.
+
+    channels : int, optional
+        Number of output channels of this convolution.
+
+    kernel_size : tuple of int, optional
+        The spatial of the convolution kernel.
+
+    data_layout : str, optional
+        Layout of the input.
+
+    kernel_layout : str, optional
+        Layout of the weight.
+
+    out_layout : str, optional
+        Layout of the output, by default, out_layout is the same as data_layout
+
+    out_dtype : str, optional
+        Specifies the output data type for mixed precision conv2d.
+
+    Returns
+    -------
+    result : tvm.relay.Expr
+        The computed result.
+    """
+    return _make.contrib_conv2d_winograd_without_weight_transform(
+        data, weight, tile_size, strides, padding, dilation,
+        groups, channels, kernel_size, data_layout,
+        kernel_layout, out_layout, out_dtype)
+
+
+def contrib_conv2d_winograd_weight_transform(weight,
+                                             tile_size):
+    r"""Weight Transformation part for 2D convolution with winograd algorithm.
+
+    We separate this as a single op to enable pre-compute for inference.
+    Use this together with nn.contrib_conv2d_winograd_without_weight_transform
+
+    Parameters
+    ----------
+    weight : tvm.relay.Expr
+        The weight expressions.
+
+    tile_size : int
+        The Tile size of winograd. E.g. 2 for F(2x2, 3x3) and 4 for F(4x4, 3x3)
+
+    Returns
+    -------
+    result : tvm.relay.Expr
+        The computed result.
+    """
+    return _make.contrib_conv2d_winograd_weight_transform(weight, tile_size)

@@ -11,9 +11,8 @@ also declares the base simulator interface.
 #include <unordered_map>
 #include <map>
 #include <yaml-cpp/yaml.h>
-#include <nnpusim/S0Simulator.h>
 #include <tvm/runtime/registry.h>
-#include <nnpusim/s1_simulator.h>
+#include <nnpu/insn.h>
 
 using std::shared_ptr;
 
@@ -110,9 +109,14 @@ std::unordered_map<int, std::shared_ptr<Simulator>> Simulator::devices;
 /*!
 * use dmlc Thread Local to achieve thread local instance.
 */
-shared_ptr<Simulator>& Simulator::ThreadLocal()
+shared_ptr<Simulator> Simulator::ThreadLocal()
 {
     return *(dmlc::ThreadLocalStore<shared_ptr<Simulator>>::Get());
+}
+
+void Simulator::SetThreadLocal(std::shared_ptr<Simulator> sim)
+{
+    *(dmlc::ThreadLocalStore<shared_ptr<Simulator>>::Get()) = std::move(sim);
 }
 
 std::shared_ptr<Simulator> Simulator::GetDevice(int id)
@@ -133,7 +137,7 @@ void Simulator::SetDevice(int id, shared_ptr<Simulator> device)
     devices[id] = std::move(device);
 }
 
-} // namespace nnpu
+} // end namespace nnpu
 
 void NNPUInvalidateCache(uint32_t ptr, size_t size)
 {
@@ -166,7 +170,17 @@ void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns)
 
 void NNPUSetDevice(int id)
 {
-    nnpu::Simulator::ThreadLocal() = nnpu::Simulator::GetDevice(id);
+    nnpu::Simulator::SetThreadLocal(nnpu::Simulator::GetDevice(id));
+}
+
+namespace nnpu
+{
+// simulator creaters
+std::shared_ptr<nnpu::Simulator> createS0Simulator(YAML::Node cfg);
+
+std::shared_ptr<nnpu::Simulator> createS1Simulator(YAML::Node cfg);
+
+std::shared_ptr<nnpu::Simulator> createSCSimulator(YAML::Node cfg);
 }
 
 /*!
@@ -181,10 +195,13 @@ std::shared_ptr<nnpu::Simulator> NNPUDevAlloc(nnpu::DevType type, YAML::Node cfg
     switch (type)
     {
     case Type::S0:
-        return std::make_shared<nnpu::S0Simulator>(cfg);
+        return nnpu::createS0Simulator(cfg);
 
     case Type::S1:
-        return std::make_shared<nnpu::S1Simulator>(cfg);
+        return nnpu::createS1Simulator(cfg);
+
+    case Type::SC:
+        return nnpu::createSCSimulator(cfg);
 
     default:
         return nullptr;
@@ -205,7 +222,7 @@ TVM_REGISTER_GLOBAL("nnpu.set_dev")
         Type devType;
         std::string t_str = args[1];
 
-        static const std::string s0("S0"), s1("S1");
+        static const std::string s0("S0"), s1("S1"), sc("SC");
 
         if (t_str == s0)
         {
@@ -214,6 +231,10 @@ TVM_REGISTER_GLOBAL("nnpu.set_dev")
         else if (t_str == s1)
         {
             devType = Type::S1;
+        }
+        else if (t_str == sc)
+        {
+            devType = Type::SC;
         }
         else
         {
