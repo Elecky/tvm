@@ -44,7 +44,7 @@ scratchpad_design: unified
 
 # unified scratchpad configs
 scratchpad:
-  nchannel: 2
+  nchannel: 4
   # width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
@@ -56,11 +56,11 @@ scratchpad:
   map_policy: interleaved
 
 acc_buffer:
-  nchannel: 2
+  nchannel: 4
   # width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
-  log_size_per_channel: 12
+  log_size_per_channel: 11
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
