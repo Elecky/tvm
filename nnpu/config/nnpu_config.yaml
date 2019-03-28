@@ -17,7 +17,7 @@ predictBranchTaken: false
 
 issue_queue:
   size: 8  # number of issue queue slots
-  issue_depth: 2  # how many insns can be fetched and issued on every cycle.
+  issue_depth: 1  # how many insns can be fetched and issued on every cycle.
 
 rob:
   size: 16  # number of reorder buffer slots
@@ -77,3 +77,7 @@ mat_scratchpad: {}
 
 vector_unit:
   size: 16
+
+matrix_unit:
+  set_up_cycle: false  # need one cycle to calculate and set up read/write access.
+                      # this simply adds one cycle on every instruction's read/write phase.
