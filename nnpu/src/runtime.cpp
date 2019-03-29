@@ -854,13 +854,14 @@ void NNPUAssembler::assembleCopyAccToBuffer(const vector<string> &functs,
                                  const vector<string> &tokens,
                                  const string &instr)
 {
-    CHECK_EQ(tokens.size(), 6) << ", ilegal syntax: " << instr;
+    CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
     CHECK_EQ(functs.size(), 2) << ", ilegal syntax: " << instr;
 
     insns.emplace_back(
-        CopyAcc2BufInsn(parseReg(tokens[1]) /*dst addr*/, parseReg(tokens[2]),
-                        parseReg(tokens[3]) /*src addr*/, parseReg(tokens[4]),
-                        parseReg(tokens[5]), parseInt(functs[1]))
+        CopyAcc2BufInsn(parseReg(tokens[1]) /*dst addr*/,
+                        parseReg(tokens[2]) /*src addr*/,
+                        parseReg(tokens[3]) /*size*/,
+                        ModeFromInt(parseInt(functs[1])) /*mode*/)
     );
 }
 

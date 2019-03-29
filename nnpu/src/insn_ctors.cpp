@@ -191,12 +191,13 @@ VctrSclrInsn::VctrSclrInsn(
 {}
 
 CopyAcc2BufInsn::CopyAcc2BufInsn(
-        regNo_t _dstAddrReg, regNo_t _dstStrideReg, 
-        regNo_t _srcAddrReg, regNo_t _srcStrideReg,
-        regNo_t _nUnitReg, uint32_t _unitBytes) :
-    DstAddrReg(_dstAddrReg), DstStrideReg(_dstStrideReg),
-    SrcAddrReg(_srcAddrReg), SrcStrideReg(_srcStrideReg),
-    NUnitReg(_nUnitReg), UnitBytes(_unitBytes)
+        regNo_t _dstAddrReg,
+        regNo_t _srcAddrReg,
+        regNo_t _nUnitReg, 
+        ModeCode _mode) :
+    DstAddrReg(_dstAddrReg),
+    SrcAddrReg(_srcAddrReg),
+    SizeReg(_nUnitReg), Mode(_mode)
 {}
 
 }  // end namespace nnpu

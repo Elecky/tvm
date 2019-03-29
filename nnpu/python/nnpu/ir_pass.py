@@ -19,11 +19,17 @@ def mark_coproc_scope(stmt):
     body = irb.get()
     return body
 
-def get_mode_code(dtype):
+def get_mode_code(dtype, dtype_out = None):
     mode2code = {'n': 0, 'inc': 1, 'dec': 2, 'w': 3}
-    env = get_env
-    assert dtype in [env.cfg['dtype_n'], env.cfg['dtype_n']], 'invalid dtype'
-    mode = 'n' if dtype == env.cfg['dtype_n'] else 'w'
+    env = get_env()
+    assert dtype in [env.cfg['dtype_n'], env.cfg['dtype_w']], 'invalid dtype'
+
+    dtype_out = dtype if dtype_out is None else dtype_out
+    if (dtype == env.cfg['dtype_n']):
+        mode = 'n' if dtype_out == env.cfg['dtype_w'] else 'inc'
+    else:
+        mode = 'w' if dtype_out == env.cfg['dtype_w'] else 'dec'
+
     return mode2code[mode]
 
 def _fold(src_shape, src_strides, dst_shape, dst_strides, pad_before = None, pad_after = None):
@@ -400,8 +406,13 @@ def inject_accTobuffer(stmt_in):
             (pad_after and not util.equal_const_int(pad_after[-1], 0))):
             raise ValueError('can not pad last dimension')
         
-        assert src.dtype == dst.dtype, 'dtype of copying source and destination does not match, \
-            {0} vs {1}'.format(src.dtype, dst.dtype)
+        assert util.equal_const_int(src.strides[-1], 1) \
+               and util.equal_const_int(dst.strides[-1], 1), \
+                'when copying from acc-buffer to scratchpad, last dimension must be compact'
+        
+        assert src.dtype == dst.dtype or src.dtype == env.cfg['dtype_w'] and dst.dtype == env.cfg['dtype_n'], \
+            'copy from acc-buffer to scratchpad can only keep dtype or decrease from dtype_w to dtype_n, \
+given = {0} vs {1}'.format(src.dtype, dst.dtype)
         
         # check memory scope
         scopes = [env.uni_scratchpad_scope, env.vctr_scratch_scope, env.mat_scratch_scope]
@@ -419,11 +430,9 @@ def inject_accTobuffer(stmt_in):
                         tvm.call_llvm_intrin_with_side_effect(
                             'void', "llvm.NNPU.CopyAccToBuffer", tvm_zero,
                             dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
-                            dst_stride * dtype_bytes,
                             src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
-                            src_stride * dtype_bytes,
-                            dtype_bytes, 
-                            nUnit),
+                            nUnit,
+                            get_mode_code(src.dtype, dst.dtype)),
                     _error
                 )
         body = mark_coproc_scope(body)

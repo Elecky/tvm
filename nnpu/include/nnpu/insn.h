@@ -819,17 +819,14 @@ struct CopyAcc2BufInsn
 public:
     CopyAcc2BufInsn() = default;
 
-    CopyAcc2BufInsn(regNo_t _dstAddrReg, regNo_t _dstStrideReg, 
-                   regNo_t _srcAddrReg, regNo_t _srcStrideReg,
-                   regNo_t _nUnitReg, uint32_t _unitBytes);
+    CopyAcc2BufInsn(regNo_t _dstAddrReg, regNo_t _srcAddrReg,
+                    regNo_t sizeReg, ModeCode Mode);
 
     regNo_t DstAddrReg;
-    regNo_t DstStrideReg;
     regNo_t SrcAddrReg;
-    regNo_t SrcStrideReg;
-    regNo_t NUnitReg;
+    regNo_t SizeReg;
 
-    uint32_t UnitBytes;
+    ModeCode Mode;
 
     /*!
     * \brief dump the string representation of this instruction into ostream

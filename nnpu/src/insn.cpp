@@ -222,8 +222,8 @@ void BufferCopyInsn::Dump(ostream &os) const
 
 void CopyAcc2BufInsn::Dump(ostream &os) const
 {
-    os << "Copy.acc2buf_" << UnitBytes << " $" << DstAddrReg << ", $" << DstStrideReg
-       << ", $" << SrcAddrReg << ", $" << SrcStrideReg << ", $" << NUnitReg;
+    os << "Copy.acc2buf_" << mode2str(Mode) << " $" << DstAddrReg
+       << ", $" << SrcAddrReg << ", $" << SizeReg;
 }
 
 void MemsetInsn::Dump(ostream &os) const
@@ -755,10 +755,8 @@ KVList_t CopyAcc2BufInsn::GetRegMap() const
 {
     KVList_t res;
     res[DstAddrReg] = 0;
-    res[DstStrideReg] = 0;
     res[SrcAddrReg] = 0;
-    res[SrcStrideReg] = 0;
-    res[NUnitReg] = 0;
+    res[SizeReg] = 0;
 
     return res;
 }
