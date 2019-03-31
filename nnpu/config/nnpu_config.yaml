@@ -37,6 +37,7 @@ dram:
   # memory address map policy
   map_policy: interleaved
   # timing related parameters
+  speed: 32
 
 
 # scratchpad design, choices are [unified, seperated]
@@ -45,7 +46,7 @@ scratchpad_design: unified
 # unified scratchpad configs
 scratchpad:
   nchannel: 4
-  # width in bits of every channel, has to be the power of 2
+  # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
   log_size_per_channel: 20
@@ -57,7 +58,7 @@ scratchpad:
 
 acc_buffer:
   nchannel: 4
-  # width in bits of every channel, has to be the power of 2
+  # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
   log_size_per_channel: 11
@@ -81,3 +82,11 @@ vector_unit:
 matrix_unit:
   set_up_cycle: false  # need one cycle to calculate and set up read/write access.
                       # this simply adds one cycle on every instruction's read/write phase.
+
+DMA:
+  start_up_time: 5  # the time in cycles needed to start a DMA.
+  speed: 16  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
+
+delay_modeling_switch:
+  DMA: true
+  scratchpad_ls: true
