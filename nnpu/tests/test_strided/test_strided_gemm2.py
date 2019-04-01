@@ -4,11 +4,20 @@ import topi
 from nnpu.utils import ScheduleProcHelper
 import numpy as np
 
+import argparse
+
+parser = argparse.ArgumentParser(description='test of NNPU Op')
+parser.add_argument('--sim', type=str, help='the simulator to use', 
+                    default='S0', choices=['S0', 'S1', 'SC'])
+args = parser.parse_args()
+
+env = nnpu.get_env()
+nnpu.set_device(env, type=args.sim)
+
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S1')
-    shape1 = (16, 32)  # (32, 32) reshaped to (32, 2, 16)
-    shape2 = (32, 32)
+    shape1 = (8, 32)  # (32, 32) reshaped to (32, 2, 16)
+    shape2 = (8, 32)
     gemm_shape = (8, 16, 8)
     factor = gemm_shape[1]
     assert shape1[1] == shape2[1], \

@@ -4,10 +4,17 @@ import topi
 from nnpu.utils import ScheduleProcHelper
 import numpy as np
 import math
-    
+import argparse
+
+parser = argparse.ArgumentParser(description='test gemm with tiled/non-tiled data')
+parser.add_argument('--sim', type=str, help='the simulator to use', 
+                        default='S0', choices=['S0', 'S1', 'SC'])
+args = parser.parse_args()
+
+env = nnpu.get_env()
+nnpu.set_device(env, type=args.sim)
+
 with (ScheduleProcHelper()):
-    env = nnpu.get_env()
-    nnpu.set_device(env, type='S0')
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
     assert dtype_w == 'float32', 'when testing activation function, float dtype is needed'

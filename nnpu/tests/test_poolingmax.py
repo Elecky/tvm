@@ -19,7 +19,6 @@ def max_pooling(inshape,outshape,cell_shape,innp,outdetype):
 # reduce max
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type="S0")
     nnpu.set_dump(False)
     in_shape = (20,20,32)
     cell_shape = 5
@@ -84,4 +83,13 @@ def test():
     
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='test of NNPU Op')
+    parser.add_argument('--sim', type=str, help='the simulator to use', 
+                        default='S0', choices=['S0', 'S1', 'SC'])
+    args = parser.parse_args()
+
+    env = nnpu.get_env()
+    nnpu.set_device(env, type=args.sim)
     test()

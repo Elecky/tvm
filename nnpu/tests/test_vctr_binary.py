@@ -6,8 +6,6 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type="SC")
-    # exit(0)
 
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     shape = (48, )
@@ -96,4 +94,13 @@ def test():
 
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='test of NNPU Op')
+    parser.add_argument('--sim', type=str, help='the simulator to use', 
+                        default='S0', choices=['S0', 'S1', 'SC'])
+    args = parser.parse_args()
+
+    env = nnpu.get_env()
+    nnpu.set_device(env, type=args.sim)
     test()

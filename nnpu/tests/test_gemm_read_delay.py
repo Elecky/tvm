@@ -171,10 +171,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='test gemm with tiled/non-tiled data')
     parser.add_argument('--tiled', dest='tiled', action='store_const',
                         const=True, default=False)
+    parser.add_argument('--sim', type=str, help='the simulator to use', 
+                        default='S0', choices=['S0', 'S1', 'SC'])
+    
     args = parser.parse_args()
     
     env = nnpu.get_env()
-    nnpu.set_device(env, type='SC')
+    nnpu.set_device(env, type=args.sim)
 
     if (args.tiled):
         test2()

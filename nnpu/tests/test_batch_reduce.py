@@ -6,7 +6,6 @@ import numpy as np
 #add new func
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='SC')
     shape = (4, 16)
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     a = tvm.placeholder(shape, dtype_w, 'a')
@@ -59,9 +58,9 @@ def test():
 
     gtm_nd = tvm.nd.array(np.zeros((16,)).astype(gtm_host.dtype), ctx)
     
-    func(a_nd, add_nd,gtm_nd)
     print('------------------- device module 1 asm code: ')
     print(func.imported_modules[0].get_source('asm'))
+    func(a_nd, add_nd,gtm_nd)
 
     print('a = ')
     print(a_np)
@@ -85,4 +84,14 @@ def test():
     np.testing.assert_allclose(gtm_nd.asnumpy(), gt)
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='test gemm with tiled/non-tiled data')
+    parser.add_argument('--sim', type=str, help='the simulator to use', 
+                            default='S0', choices=['S0', 'S1', 'SC'])
+    args = parser.parse_args()
+
+    env = nnpu.get_env()
+    nnpu.set_device(env, type=args.sim)
+
     test()

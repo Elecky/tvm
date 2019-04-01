@@ -6,7 +6,6 @@ import numpy as np
 
 def test():
     env = nnpu.get_env()
-    nnpu.set_device(env, type='S0')
 
     a = tvm.placeholder((4, 16), env.cfg['dtype_w'], 'a')
     
@@ -73,4 +72,13 @@ def test():
     np.testing.assert_allclose(min_nd.asnumpy(), np.min(a_np, axis=(1,), keepdims=True))
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='test of NNPU Op')
+    parser.add_argument('--sim', type=str, help='the simulator to use', 
+                        default='S0', choices=['S0', 'S1', 'SC'])
+    args = parser.parse_args()
+
+    env = nnpu.get_env()
+    nnpu.set_device(env, type=args.sim)
     test()
