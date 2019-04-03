@@ -35,7 +35,7 @@ enum class InsnType
     VctrUnary, DMACopy, BufferLS, Li, Stall, Gemm, VctrBinary, VctrDotProd, VctrReduce, VctrImm,
     MatBinary, MatImm, MatReduceRow, MatReduceCol, MatVctr, MatRowDot, VctrSclr, BufferCopy,
     Memset, AccMemset, CopyAcc2Buf, NOP, Jump, BEZ, ALUBinary, SclrLoad, SclrStore, BNEZ,
-    ALURegImm,VReduceKey
+    ALURegImm,VReduceKey, DMA2Buffer
 };
 
 ModeCode ModeFromInt(uint32_t mode);
@@ -129,6 +129,39 @@ public:
     * \brief dump the string representation of this instruction into ostream
     * \param os: the stream to which to dump.
     */
+    void Dump(std::ostream& os) const;
+
+    KVList_t GetRegMap() const;
+
+    inline dst_pair_t GetDstReg() const
+    {
+        return {false, 0};
+    }
+
+    inline branch_off_t GetBranchOffset() const
+    {
+        return {false, 0};
+    }
+};
+
+/**!
+ * \brief DMA copy between host and scratchpad buffer memory.
+*/
+struct DMA2BufferInsn
+{
+    DMADIR Dir;
+    regNo_t HostPhyAddrReg;
+    regNo_t HostOffsetReg;
+    regNo_t BufAddrReg;
+    regNo_t SizeReg;  /* copy size in byte */
+
+    DMA2BufferInsn() = default;
+
+    DMA2BufferInsn(DMADIR _dir, 
+                regNo_t _hostPhyAddrReg, regNo_t _hostOffsetReg, 
+                regNo_t _bufAddrReg, 
+                regNo_t _sizeReg);
+    
     void Dump(std::ostream& os) const;
 
     KVList_t GetRegMap() const;
@@ -1088,6 +1121,8 @@ public:
 
         BufferLSInsn BufferLS;
 
+        DMA2BufferInsn DMA2Buffer;
+
         VctrUnaryInsn VctrUnary;
 
         VctrBinaryInsn VctrBinary;
@@ -1264,6 +1299,9 @@ public:
 
         case InsnType::ALURegImm:
             return functor(this->ALURegImm, std::forward<TArgs>(args)...);
+        
+        case InsnType::DMA2Buffer:
+            return functor(this->DMA2Buffer, std::forward<TArgs>(args)...);
 
         default:
             LOG(ERROR) << "undispatched call to NNPUInsn, type code = " << static_cast<int>(Type) 
@@ -1279,6 +1317,9 @@ public:
     {}
 
     NNPUInsn(const BufferLSInsn& _insn) : Type(InsnType::BufferLS), BufferLS(_insn)
+    {}
+
+    NNPUInsn(const DMA2BufferInsn& _insn) : Type(InsnType::DMA2Buffer), DMA2Buffer(_insn)
     {}
 
     NNPUInsn(const VctrUnaryInsn& _insn) : Type(InsnType::VctrUnary), VctrUnary(_insn)

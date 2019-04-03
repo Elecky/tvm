@@ -45,6 +45,7 @@ def build_config(debug_flag=0, **kwargs):
                  (1, ir_pass.inject_scratchpad_ls),
                  (1, ir_pass.inject_scratchpad_copy),
                  (1, ir_pass.inject_accTobuffer),
+                 (1, ir_pass.inject_dmacopy2buf_intrin),
                  (1, tvm.ir_pass.CoProcSync),
                 #  (2, ir_pass.lift_coproc_scope)
                  (1, ir_pass.lift_alloc_to_scope_begin),

@@ -278,6 +278,12 @@ void ALURegImmInsn::Dump(ostream &os) const
     os << ToString(Op) << " $" << RdReg << ", $" << RsReg << ", #" << Imm;
 }
 
+void DMA2BufferInsn::Dump(ostream& os) const
+{
+    os << "DMA2Buffer" << ToString(this->Dir) << " $" << this->HostPhyAddrReg << ", $"
+       << this->HostOffsetReg << ", $" << this->BufAddrReg << ", $" << this->SizeReg;
+}
+
 // ToString functions starts from here
 
 const char* ToString(ALUBinaryOp op)
@@ -814,6 +820,16 @@ KVList_t ALURegImmInsn::GetRegMap() const
     KVList_t res;
     res[RsReg] = 0;
 
+    return res;
+}
+
+KVList_t DMA2BufferInsn::GetRegMap() const
+{
+    KVList_t res;
+    res[HostPhyAddrReg] = 0;
+    res[HostOffsetReg] = 0;
+    res[BufAddrReg] = 0;
+    res[SizeReg] = 0;
     return res;
 }
 

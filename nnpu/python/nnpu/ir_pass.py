@@ -267,6 +267,69 @@ def inject_dma_intrin(stmt_in):
 
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.dma_copy_pragma, _inject_copy)
 
+def inject_dmacopy2buf_intrin(stmt_in):
+    env = get_env()
+
+    def _error(*args):
+        raise NotImplementedError('DMA copy dont support padding')
+
+    def _inject_copy(src, dst, pad_before, pad_after, pad_value):
+        assert src.dtype == dst.dtype, 'dtype of copying source and destination does not match, \
+            {0} vs {1}'.format(src.dtype, dst.dtype)
+        
+        dtype_bytes = get_dtype_bytes(src.dtype)
+        
+        ndim = len(src.shape)
+        
+        assert util.equal_const_int(src.strides[ndim - 1], 1) and \
+                util.equal_const_int(dst.strides[ndim - 1], 1), \
+            'stride of last dimension must be 1, ie, data must be compact'
+
+        if (src.scope == 'global' and dst.scope == env.uni_scratchpad_scope):
+            src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
+                _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
+
+            body = _build_copy(
+                        dst, src,
+                        src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                        # lambda to create DMALoad IR:
+                        lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
+                            tvm.call_llvm_intrin_with_side_effect(
+                                'void', "llvm.NNPU.DMABufLoad", tvm_zero,
+                                src.data, src_idx * dtype_bytes,
+                                dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
+                                nUnit * dtype_bytes),
+                        _error
+                        )
+            body = mark_coproc_scope(body)
+            return body
+        elif (src.scope == env.uni_scratchpad_scope and dst.scope == 'global'):
+            assert not (pad_after or pad_before), \
+                'padding is not supported when copying to global'
+            src_shape, src_strides, dst_shape, dst_strides, _, _ = \
+                _fold(src.shape, src.strides, dst.shape, dst.strides)
+            
+            body = _build_copy(
+                        dst, src,
+                        src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
+                        lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
+                            tvm.call_llvm_intrin_with_side_effect(
+                                'void', "llvm.NNPU.DMABufStore", tvm_zero,
+                                dst.data, dst_idx * dtype_bytes,
+                                src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
+                                nUnit * dtype_bytes),
+                        _error
+                        )
+            body = mark_coproc_scope(body)
+            return body
+        else:
+            raise ValueError('donnot support copy from {0} to {1}'.format(
+                src.scope, dst.scope
+            ))
+        pass
+
+    return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.dma_copy_to_buf, _inject_copy)
+
 def inject_scratchpad_ls(stmt_in):
     env = get_env()
 

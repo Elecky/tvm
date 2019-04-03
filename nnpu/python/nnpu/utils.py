@@ -54,18 +54,24 @@ def DMACopyHtoDram(tensor, name_prefix, sph=None):
     
     return tensor_dram
 
-def CopyHtoBuf(tensor, name_prefix, sph=None, dst_scope='uni'):
+def CopyHtoBuf(tensor, name_prefix, sph=None, dst_scope='uni', via_edram=False):
     sph = ScheduleProcHelper.current if sph is None else sph
-
     env = get_env()
-    tensor_dram = DMACopyHtoDram(tensor, name_prefix, sph)
-    tensor_buf = tvm.compute(tensor.shape, lambda *i: tensor_dram(*i), name_prefix + "_buf")
-    
-    scope = convert_scope(env, dst_scope)
-    sph.Add(lambda sc: sc[tensor_buf].set_scope(scope))
-    sph.Add(lambda sc: sc[tensor_buf].pragma(sc[tensor_buf].op.axis[0], env.scratchpad_ls))
+    if (via_edram):
+        tensor_dram = DMACopyHtoDram(tensor, name_prefix, sph)
+        tensor_buf = tvm.compute(tensor.shape, lambda *i: tensor_dram(*i), name_prefix + "_buf")
+        
+        scope = convert_scope(env, dst_scope)
+        sph.Add(lambda sc: sc[tensor_buf].set_scope(scope))
+        sph.Add(lambda sc: sc[tensor_buf].pragma(sc[tensor_buf].op.axis[0], env.scratchpad_ls))
 
-    return tensor_buf, tensor_dram
+        return tensor_buf, tensor_dram
+    else:
+        tensor_buf = tvm.compute(tensor.shape, lambda *i: tensor(*i), name_prefix + "_buf")
+        scope = convert_scope(env, dst_scope)
+        sph.Add(lambda sc: sc[tensor_buf].set_scope(scope))
+        sph.Add(lambda sc: sc[tensor_buf].pragma(sc[tensor_buf].op.axis[0], env.dma_copy_to_buf))
+        return tensor_buf, None
 
 def CopyBufToDram(tensor, name_prefix, sph=None):
     sph = ScheduleProcHelper.current if sph is None else sph
@@ -78,16 +84,20 @@ def CopyBufToDram(tensor, name_prefix, sph=None):
     
     return tensor_dram
 
-def CopyBufToH(tensor, name_prefix, sph=None):
+def CopyBufToH(tensor, name_prefix, sph=None, via_edram=False):
     sph = ScheduleProcHelper.current if sph is None else sph
-
     env = get_env()
-    tensor_dram = CopyBufToDram(tensor, name_prefix, sph)
-    tensor_host = tvm.compute(tensor_dram.shape, lambda *i: tensor_dram(*i), name_prefix + '_host')
-    
-    sph.Add(lambda sc: sc[tensor_host].pragma(sc[tensor_host].op.axis[0], env.dma_copy_pragma))
+    if (via_edram):
+        tensor_dram = CopyBufToDram(tensor, name_prefix, sph)
+        tensor_host = tvm.compute(tensor_dram.shape, lambda *i: tensor_dram(*i), name_prefix + '_host')
+        
+        sph.Add(lambda sc: sc[tensor_host].pragma(sc[tensor_host].op.axis[0], env.dma_copy_pragma))
 
-    return tensor_host, tensor_dram
+        return tensor_host, tensor_dram
+    else:
+        tensor_host = tvm.compute(tensor.shape, lambda *i: tensor(*i), name_prefix + '_host')
+        sph.Add(lambda sc: sc[tensor_host].pragma(sc[tensor_host].op.axis[0], env.dma_copy_from_buf))
+        return tensor_host, None
 
 def PragmaCopy(tensor, sph=None):
     env = get_env()

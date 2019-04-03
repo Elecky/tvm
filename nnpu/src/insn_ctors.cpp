@@ -200,4 +200,16 @@ CopyAcc2BufInsn::CopyAcc2BufInsn(
     SizeReg(_nUnitReg), Mode(_mode)
 {}
 
+DMA2BufferInsn::DMA2BufferInsn(
+        DMADIR _dir, 
+        regNo_t _hostPhyAddrReg, regNo_t _hostOffsetReg, 
+        regNo_t _bufAddrReg, 
+        regNo_t _sizeReg) :
+    Dir(_dir),
+    HostPhyAddrReg(_hostPhyAddrReg),
+    HostOffsetReg(_hostOffsetReg),
+    BufAddrReg(_bufAddrReg),
+    SizeReg(_sizeReg)
+{}
+
 }  // end namespace nnpu

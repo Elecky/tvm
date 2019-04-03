@@ -278,6 +278,7 @@ private:
     DeclareAssembleFunc(assembleJump);
     DeclareAssembleFunc(assembleBZ);
     DeclareAssembleFunc(assembleDMA);
+    DeclareAssembleFunc(assembleDMA2Buffer);
     DeclareAssembleFunc(assembleBufferLS);
     DeclareAssembleFunc(assembleVctrBinary);
     DeclareAssembleFunc(assembleRet);
@@ -328,10 +329,15 @@ NNPUAssembler::NNPUAssembler()
     instrHandler.insert({"Jump", &NNPUAssembler::assembleJump});
     instrHandler.insert({"BNEZ", &NNPUAssembler::assembleBZ});
     instrHandler.insert({"BEZ", &NNPUAssembler::assembleBZ});
+
     instrHandler.insert({"DMALoad", &NNPUAssembler::assembleDMA});
     instrHandler.insert({"DMAStore", &NNPUAssembler::assembleDMA});
+
     instrHandler.insert({"ScratchpadLoad", &NNPUAssembler::assembleBufferLS});
     instrHandler.insert({"ScratchpadStore", &NNPUAssembler::assembleBufferLS});
+
+    instrHandler.insert({"DMABufLoad", &NNPUAssembler::assembleDMA2Buffer});
+    instrHandler.insert({"DMABufStore", &NNPUAssembler::assembleDMA2Buffer});
 
     static const vector<string> vctrBinaryOps
         { "VAddV", "VSubV", "VMulV", "VDivV", "VGTMV" };
@@ -742,6 +748,23 @@ void NNPUAssembler::assembleDMA(
     
     insns.emplace_back(
             DMACopyInsn(dir, parseReg(tokens[1]), parseReg(tokens[2]),
+                        parseReg(tokens[3]), parseReg(tokens[4])));
+}
+
+void NNPUAssembler::assembleDMA2Buffer(
+        const vector<string> &functs, 
+        const vector<string> &tokens, 
+        const string &instr)
+{
+    CHECK_EQ(tokens.size(), 5) << ", ilegal syntax: " << instr;
+    DMADIR dir;
+    if (tokens[0] == "DMABufLoad")
+        dir = DMADIR::HtoD;
+    else
+        dir = DMADIR::DtoH;
+    
+    insns.emplace_back(
+            DMA2BufferInsn(dir, parseReg(tokens[1]), parseReg(tokens[2]),
                         parseReg(tokens[3]), parseReg(tokens[4])));
 }
 

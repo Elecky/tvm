@@ -42,6 +42,8 @@ class Environment(object):
     acc_scope = 'local.nnpu_acc_buffer'
     # compiler pragmas
     dma_copy_pragma = 'nnpu_dma_copy'
+    dma_copy_to_buf = 'nnpu_dma_to_scratchpad'
+    dma_copy_from_buf = dma_copy_to_buf
     scratchpad_ls = 'nnpu_scratchpad_ls'
     scratchpad_copy = 'nnpu_scratchpad_copy'
     copy_acc2buf = 'nnpu_copy_acc2buf'
