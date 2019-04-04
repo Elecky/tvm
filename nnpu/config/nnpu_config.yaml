@@ -19,40 +19,44 @@ issue_queue:
   size: 8  # number of issue queue slots
   issue_depth: 1  # how many insns can be fetched and issued on every cycle.
 
-rob:
-  size: 16  # number of reorder buffer slots
-
-ReservationStations:
+ReservationStations:  # the number of slot of each reservation station.
   ALU: 8
+  load_store_unit: 4
+  tensor_pipeline: 4
 
+memory_queues: 
+  vector_unit: 4
+  matrix_unit: 4
+  edram_dma_unit: 4
+  buffer_copy_set_unit: 2
+
+#-------- configs follows are related to storage structure. --------#
 # dram configs
 dram:
   nchannel: 2
-  #unit_bits: 32  # the addressable bits
-  # width in bits of every channel, has to be the power of 2
+  # width in bits of every channel, has to be the power of 2. NOT USED AT PRESENT.
   width_per_channel: 64
   # log size in byte of every channel
   # due to the limit of tvm, the size is represented by int.
   log_size_per_channel: 26
-  # memory address map policy
+  # memory address map policy. NOT USED AT PRESENT
   map_policy: interleaved
   # timing related parameters
-  speed: 32
-
+  speed: 32  # equivalent transfer rate, bytes per cycle.
 
 # scratchpad design, choices are [unified, seperated]
 scratchpad_design: unified
 
 # unified scratchpad configs
 scratchpad:
-  nchannel: 4
+  nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
   log_size_per_channel: 20
   # read and write delays in cycle
-  r_delay: 2
-  w_delay: 2
+  r_delay: 1
+  w_delay: 1
   # memory address map policy
   map_policy: interleaved
 
@@ -69,19 +73,36 @@ acc_buffer:
   map_policy: interleaved
 
 sclr_buffer:
-  r_delay: 2
-  w_delay: 2
+  r_delay: 1
+  w_delay: 1
   log_size: 12  # 4KB scalar buffer.
 
 vctr_scratchpad: {}
 mat_scratchpad: {}
 
+#-------- configs follows are delays of execution units. --------#
+ALU:
+  default_delay: 1
+  delays: { MulU: 2, DivU: 4, ModU: 4, MulIU: 2, DivIU: 4, ModIU: 4 }
+
 vector_unit:
+  default_delay: 1
+  delays: { VExp: 2, VLog: 2, VDivV: 3, IDivV: 3, VReduceSum: 2, VReduceMax: 2, VReduceMin: 2,
+            VDivS: 3, SDivV: 3, VDotV: 2 }
   size: 16
 
 matrix_unit:
   set_up_cycle: false  # need one cycle to calculate and set up read/write access.
                       # this simply adds one cycle on every instruction's read/write phase.
+  multiplier_delay: 3  # 
+  adder_tree_delay: 3
+  adder_delay: 1
+  opcodes_need_multiply: ['GEMM', 'MMulM', 'MMulI', 'MMulV', 'MRowDot']
+  opcodes_nned_adder_tree: ['GEMM', 'MRowDot', 'MReduceSumRow']
+  opcodes_need_adder: ['MAddM', 'MSubM', 'MAddI', 'ISubM', 'MMulI', 'MAddV', 'MSubV']
+
+misc_delays:
+  address_generation: 1  # number of cycles needed to calculate memory dependency, ie, the delay in AGU.
 
 DMA:
   start_up_time: 5  # the time in cycles needed to start a DMA.
