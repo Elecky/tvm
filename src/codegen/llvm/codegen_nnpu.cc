@@ -239,3 +239,46 @@ TVM_REGISTER_API("codegen.build_nnpu")
 } // namespace codegen
 } // namespace tvm
 #endif // TVM_LLVM_VERSION
+
+// NOTE: hack to patch IRPrinter, specially process llvm_intrin_with_side_effct call, for readability
+using tvm::runtime::TVMArgs;
+using tvm::runtime::TVMRetValue;
+static TVM_ATTRIBUTE_UNUSED auto &__register_patch_irprinter_ =
+    ::tvm::runtime::Registry::Register("nnpu.patch_irprinter", true)
+        .set_body([](TVMArgs args, TVMRetValue *rv) {
+            using namespace HalideIR::Internal;
+            IRPrinter::vtable().clear_dispatch<Call>();
+            IRPrinter::vtable().set_dispatch<Call>(
+                [](const Call *op, IRPrinter* p) {
+                    // Special-case some intrinsics for readability
+                    // TODO: Print indication of C vs C++?
+                    if (op->name == "llvm_intrin_with_side_effct")
+                    {
+                      auto id_node = op->args[0].as<UIntImm>();
+                      // std::cerr << op->args[0]->type_key() << "\n";
+                      CHECK(id_node != nullptr) 
+                        << "the first argument of llvm_intrin_with_side_effct is not intrin id, \
+ie, an unsigned int";
+                      auto id = static_cast<llvm::Intrinsic::ID>(id_node->value);
+                      auto real_name = llvm::Intrinsic::getName(id);
+                      p->stream << real_name.str() << "(";
+                      for (size_t i = 3; i < op->args.size(); i++) {
+                          p->print(op->args[i]);
+                          if (i < op->args.size() - 1) {
+                              p->stream << ", ";
+                          }
+                      }
+                      p->stream << ")";
+                      return;
+                    }
+                    // normal case.
+                    p->stream << op->name << "(";
+                    for (size_t i = 0; i < op->args.size(); i++) {
+                        p->print(op->args[i]);
+                        if (i < op->args.size() - 1) {
+                            p->stream << ", ";
+                        }
+                    }
+                    p->stream << ")";
+                });
+        });

@@ -7,3 +7,6 @@ from .utils import create_schedule
 from . import top
 # load nnpu library
 _load_lib()
+
+func = tvm.get_global_func('nnpu.patch_irprinter', False)
+func()
