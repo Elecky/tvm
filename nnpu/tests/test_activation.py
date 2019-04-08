@@ -17,7 +17,7 @@ nnpu.set_device(env, type=args.sim)
 with (ScheduleProcHelper()):
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
-    assert dtype_w == 'float32', 'when testing activation function, float dtype is needed'
+    assert dtype_w in ['float32', 'float16'], 'when testing activation function, float dtype is needed'
 
     shape = (16, )
     a = tvm.placeholder(shape, dtype_w, 'a')
@@ -63,16 +63,21 @@ with (ScheduleProcHelper()):
 
     func(a_nd, sigmoid_nd, softmax_nd)
 
+    if (dtype_n == 'float16'):
+        rtol = 5e-2
+    else:
+        rtol = 1e-6
+
     print('a = ')
     print(a_np)
     print('sigmoid = ')
     print(sigmoid_nd.asnumpy())
     gt = np.exp(a_np) / (1 + np.exp(a_np))
-    np.testing.assert_allclose(sigmoid_nd.asnumpy(), gt)
+    np.testing.assert_allclose(sigmoid_nd.asnumpy(), gt, rtol=rtol)
 
     print('softmax = ')
     res = softmax_nd.asnumpy()
     print(res)
     gt = gt / np.sum(gt)
-    np.testing.assert_allclose(res, gt, rtol=1e-6)
+    np.testing.assert_allclose(res, gt, rtol=rtol)
     print('test passed')

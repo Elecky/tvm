@@ -75,11 +75,16 @@ with ScheduleProcHelper():
     print(func.imported_modules[0].get_source('asm'))
 
     ctx = tvm.nd.TVMContext(13, 0)
-    a_np = np.random.randint(size=weight_shape, dtype=weight.dtype, low = -32, high = 32)
+    if (dtype_n == 'float16'):
+        a_np = np.random.random(weight_shape).astype(weight.dtype)
+        d_np = np.random.random(data_shape).astype(data.dtype)
+        b_np = np.random.random(bias_shape).astype(bias.dtype)
+    else:
+        a_np = np.random.randint(size=weight_shape, dtype=weight.dtype, low = -32, high = 32)
+        d_np = np.random.randint(size=data_shape, dtype=data.dtype, low = -32, high = 32)
+        b_np = np.random.randint(size=bias_shape, low=-32, high=32, dtype=bias.dtype)
     a_nd = tvm.nd.array(a_np, ctx)
-    d_np = np.random.randint(size=data_shape, dtype=data.dtype, low = -32, high = 32)
     d_nd = tvm.nd.array(d_np, ctx)
-    b_np = np.random.randint(size=bias_shape, low=-32, high=32, dtype=bias.dtype)
     b_nd = tvm.nd.array(b_np, ctx)
 
     out_nd = tvm.nd.array(np.zeros((out_channel, ), dtype=res_host.dtype), ctx)
