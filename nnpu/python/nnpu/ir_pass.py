@@ -233,7 +233,7 @@ def inject_dma_intrin(stmt_in):
                         lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMALoad", tvm_zero,
-                                src.data, src_idx * dtype_bytes,
+                                src.data, (src_idx + src.elem_offset) * dtype_bytes,
                                 dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
@@ -252,7 +252,7 @@ def inject_dma_intrin(stmt_in):
                         lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMAStore", tvm_zero,
-                                dst.data, dst_idx * dtype_bytes,
+                                dst.data, (dst_idx + dst.elem_offset) * dtype_bytes,
                                 src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
@@ -296,7 +296,7 @@ def inject_dmacopy2buf_intrin(stmt_in):
                         lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMABufLoad", tvm_zero,
-                                src.data, src_idx * dtype_bytes,
+                                src.data, (src_idx + src.elem_offset) * dtype_bytes,
                                 dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
@@ -315,7 +315,7 @@ def inject_dmacopy2buf_intrin(stmt_in):
                         lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMABufStore", tvm_zero,
-                                dst.data, dst_idx * dtype_bytes,
+                                dst.data, (dst_idx + dst.elem_offset) * dtype_bytes,
                                 src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
