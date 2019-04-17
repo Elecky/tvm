@@ -56,9 +56,6 @@ def compute_relu_default(data):
              n-D dimension
     """
 
-    print("nnpu : compute_relu")
-    print("=======================================")
-    print(data.shape)
     Imm = tvm.const(0, data.dtype)
     if not topi.util.equal_const_int(data.shape[len(data.shape) - 1] % 16, 0) :
         nums = topi.util.get_const_int(data.shape[len(data.shape) - 1] % 16)
@@ -69,7 +66,7 @@ def compute_relu_default(data):
         pad_data = topi.nn.pad(data, before, after)
     else:
         pad_data = data
-    res = tvm.compute(pad_data.shape, lambda *i: tvm.max(pad_data(*i), Imm), name = "res")
+    res = tvm.compute(pad_data.shape, lambda *i: tvm.max(pad_data(*i), Imm), name = "res", tag = "elemwise_relu")
     return res
 
 @reg.register_compute("relu", level = levels)
@@ -78,7 +75,6 @@ def compute_relu(attrs, inputs, out):
 
 
 def schedule_relu_default(outs):
-    print("nnpu : schedule_relu")
     assert len(outs) == 1
     env = nnpu.get_env()
     output = outs[0]
@@ -96,7 +92,7 @@ def schedule_relu_default(outs):
                 else:
                     _traverse(tensor.op)
         else:
-            assert op.tag == "relu"
+            assert op.tag == "packed_relu"
             relu_res.append(op)
 
     _traverse(output.op)
@@ -116,6 +112,8 @@ def schedule_relu_default(outs):
         modes = 'n'
     elif data.dtype == env.cfg['dtype_w']:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%data.dtype)
 
     factors = 16
     Imm = tvm.const(0, data.dtype)
@@ -189,7 +187,6 @@ def compute_dense_default(data, weight, bias = None):
     output : tvm.Tensor
     [batch_size, out_dim]
     """
-    print("nnpu : compute_dense")
     env = nnpu.get_env()
     assert len(data.shape) == 2 and len(weight.shape) == 2
     dtype_n, dtype_w = env.cfg["dtype_n"], env.cfg["dtype_w"]
@@ -216,12 +213,13 @@ def compute_dense(attrs, inputs, out):
 		return compute_dense_default(inputs[0], inputs[1], inputs[2])
 
 def schedule_dense_default(attrs, outs):
-    print("nnpu : schedule_dense ")
     assert len(outs) == 1
     output = outs[0]
     ewise_ops = []
     ewise_inputs = []
     dense_res = []
+    env = nnpu.get_env()
+    dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     """
     def _traverse(op):
         print(op.tag)
@@ -242,12 +240,17 @@ def schedule_dense_default(attrs, outs):
     """
     dense_res.append(output.op)
     assert len(dense_res) == 1
-    env = nnpu.get_env()
     gemm_shape = (1, 16, 16)
     factors = 16
     if attrs['use_bias'] == '0':
         dense_stage = dense_res[0].output(0)
         data, weight = dense_stage.op.input_tensors
+        if data.dtype == dtype_n:
+            modes = 'n'
+        elif data.dtype == dtype_w:
+            modes = 'w'
+        else:
+            raise RuntimeError("NPU not support dtype %s"%data.dtype)
         s = nnpu.create_schedule(output.op)
         
         cout = s.cache_write(output, env.dram_scope)
@@ -272,11 +275,20 @@ def schedule_dense_default(attrs, outs):
         xo, xi = s[dense_stage].split(s[dense_stage].op.axis[1], factor = gemm_shape[2])
         ko, ki = s[dense_stage].split(s[dense_stage].op.reduce_axis[0], factor = gemm_shape[1])
         s[dense_stage].reorder(xo, ko, s[dense_stage].op.axis[0], xi, ki)
-        s[dense_stage].tensorize(s[dense_stage].op.axis[0], env.intrins.get('GEMM', shape = gemm_shape, mode='inc', scope_out='acc'))
+        if modes == 'n':
+            s[dense_stage].tensorize(s[dense_stage].op.axis[0], env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out='acc'))
+        elif modes == 'w':
+            s[dense_stage].tensorize(s[dense_stage].op.axis[0], env.intrins.get('GEMM', shape = gemm_shape, mode = 'modes', scope_out='acc'))
     else:
         dense_stage1 = dense_res[0].output(0)
         dense_stage, bias = dense_stage1.op.input_tensors
         data, weight = dense_stage.op.input_tensors
+        if data.dtype == dtype_n:
+            modes = 'n'
+        elif data.dtype == dtype_w:
+            modes = 'w'
+        else:
+            raise RuntimeError("NPU not support dtype %s"%data.dtype)
         s = nnpu.create_schedule(output.op)
         cout = s.cache_write(output, env.dram_scope)
         dense_stage1 = s.cache_write(cout, env.uni_scratchpad_scope)
@@ -307,12 +319,23 @@ def schedule_dense_default(attrs, outs):
         xo, xi = s[dense_stage].split(s[dense_stage].op.axis[1], factor = gemm_shape[2])
         ko, ki = s[dense_stage].split(s[dense_stage].op.reduce_axis[0], factor = gemm_shape[1])
         s[dense_stage].reorder(xo, ko, s[dense_stage].op.axis[0], xi, ki)
-        s[dense_stage].tensorize(s[dense_stage].op.axis[0], env.intrins.get('GEMM', shape = gemm_shape, mode='inc', scope_out='acc'))
-        
+        if modes == 'n':
+            s[dense_stage].tensorize(s[dense_stage].op.axis[0], env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out='acc'))
+        elif modes == 'w':
+            s[dense_stage].tensorize(s[dense_stage].op.axis[0], env.intrins.get('GEMM', shape = gemm_shape, mode = modes, scope_out='acc'))
+        s[cdata].compute_at(s[dense_stage], ko)
+        s[cweight].compute_at(s[dense_stage], ko)
+        s[c2data].compute_at(s[dense_stage], ko)
+        s[c2weight].compute_at(s[dense_stage], ko)
+
         
         xo, xi = s[dense_stage1].split(s[dense_stage1].op.axis[1], factor = factors)
         s[dense_stage1].tensorize(xi, env.intrins.get('VAddV', mode = 'w'))
-        
+        s[dense_stage_buf].compute_at(s[dense_stage1], xo)
+        s[dense_stage].compute_at(s[dense_stage1], xo)
+        s[cbias].compute_at(s[dense_stage1], xo)
+        s[c2bias].compute_at(s[dense_stage1], xo)
+        print(nnpu.lower(s, [data, weight, bias, output], simple_mode = True))
     return s
 	
 @reg.register_schedule("dense", level = levels)
@@ -357,16 +380,7 @@ def compute_elemwise_add_default(lhs, rhs):
     output : tvm.Tensor
           n-D dimension
     """
-    print("nnpu : elemwise_add")
     assert len(lhs.shape) == len(rhs.shape) 
-    env = nnpu.get_env()
-    factor = 16
-    if lhs.dtype == rhs.dtype == env.cfg['dtype_n']:
-        modes = 'n'
-    elif lhs.dtype == rhs.dtype == env.cfg['dtype_w']:
-        modes = 'w'
-    if not topi.util.equal_const_int(lhs.shape[0] % 16, 0) :
-        print("bad================shape")
     res = tvm.compute(lhs.shape, lambda *i : lhs(*i) + rhs(*i), name = "res", tag = "elemwise_add")
     return res
 
@@ -387,6 +401,8 @@ def schedule_elemwise_add_default(outs):
         modes = 'n'
     elif output.op.input_tensors[0].dtype == output.op.input_tensors[1].dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%output.op.input_tensors[0].dtype)
         """
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
@@ -482,12 +498,6 @@ def compute_elemwise_sub_default(lhs, rhs):
     """
     print("nnpu : compute_elemwise_sub")
     assert len(lhs.shape) == len(rhs.shape) 
-    env = nnpu.get_env()
-    factor = 16
-    if lhs.dtype == rhs.dtype == env.cfg['dtype_n']:
-        modes = 'n'
-    elif lhs.dtype == rhs.dtype == env.cfg['dtype_w']:
-        modes = 'w'
     res = tvm.compute(lhs.shape, lambda *i : lhs(*i) - rhs(*i), name = "res", tag = "elemwise_add")
     return res
 
@@ -496,7 +506,6 @@ def compute_elemwise_sub(attrs, inputs, out):
     return compute_elemwise_sub_default(inputs[0], inputs[1])
 
 def schedule_elemwise_sub_default(outs):
-    print("nnpu : schedule_elemwise_sub")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     assert len(outs) == 1
@@ -508,6 +517,8 @@ def schedule_elemwise_sub_default(outs):
         modes = 'n'
     elif output.op.input_tensors[0].dtype == output.op.input_tensors[1].dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%output.op.input_tensors[0].dtype)
         """
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
@@ -605,11 +616,6 @@ def compute_elemwise_mul_default(lhs, rhs):
     assert len(lhs.shape) == len(rhs.shape) 
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    factor = 16
-    if lhs.dtype == rhs.dtype == dtype_n:
-        modes = 'n'
-    elif lhs.dtype == rhs.dtype == dtype_w:
-        modes = 'w'
     res = tvm.compute(lhs.shape, lambda *i : lhs(*i).astype(dtype_w) * rhs(*i).astype(dtype_w), name = "res", tag = "elemwise_add")
     return res
 
@@ -630,6 +636,8 @@ def schedule_elemwise_mul_default(outs):
         modes = 'n'
     elif output.op.input_tensors[0].dtype == output.op.input_tensors[1].dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%output.op.input_tensors[0].dtype)
         """
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
@@ -728,7 +736,7 @@ def compute_exp_default(input):
     print("nnpu : compute_exp")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    res = tvm.compute(input.shape, lambda *i : tvm.exp(input(*i).astype(dtype_w)), name = "res", tag = "exp")
+    res = tvm.compute(input.shape, lambda *i : tvm.exp(input(*i).astype(dtype_w)), name = "res", tag = "elemwise_exp")
     return res
 
 
@@ -745,18 +753,23 @@ def schedule_exp_default(outs):
     factors = 16
     """
     def _traverse(op):
+        print("op.tag : %s"%op.tag)
         if topi.tag.is_broadcast(op.tag):
             if not op.same_as(output.op):
                 ewise_ops.append(op)
+            
             for tensor in op.input_tensors:
                 if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
                     ewise_inputs.append((op, tensor))
                 else:
+                    print("========")
                     _traverse(tensor.op)
+                    
         else:
-            assert op.tag == "exp"
+            assert op.tag == "elemwise"
             exp_res.append(op)
-
+    
+    print("output.op : %s"%output.op)
     _traverse(output.op)
     """
     exp_res.append(output.op)
@@ -767,6 +780,8 @@ def schedule_exp_default(outs):
         modes = 'n'
     elif data.dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%data.dtype)
 
     s = nnpu.create_schedule(output.op)
     cout = s.cache_write(output, env.dram_scope)
@@ -820,7 +835,6 @@ def schedule_exp(attrs, outs, target):
     raise RuntimeError("not support target %s"%target)
     
 # nnpu : log
-
 def compute_log_default(data):
     """
     log compute
@@ -838,10 +852,6 @@ def compute_log_default(data):
     print("nnpu : compute_log")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    if data.dtype == dtype_n:
-        modes = 'n'
-    elif data.dtype == dtype_w:
-        modes = 'w'
     res = tvm.compute(data.shape, lambda *i : tvm.log(data(*i).astype(dtype_w)), name = 'res', tag = 'log')
     return res
 
@@ -862,7 +872,9 @@ def schedule_log_default(outs):
         modes = 'n'
     elif output.op.input_tensors[0].dtype == dtype_w:
         modes = 'w'
-    """
+    else:
+        raise RuntimeError("NPU not support dtype %s"%output.op.input_tensors[0].dtype)
+    
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
             if not op.same_as(output.op):
@@ -876,13 +888,12 @@ def schedule_log_default(outs):
             assert op.tag == "log"
             log_res.append(op)
         
+    print("output.op : "%output.op)
     _traverse(output.op)
-    """
-    log_res.append(output.op)
+    
     assert len(log_res) == 1
     log_stage = log_res[0].output(0)
     data = log_stage.op.input_tensors[0]
-
     s = nnpu.create_schedule(output.op)
 
     cout = s.cache_write(output, env.dram_scope)
@@ -907,7 +918,9 @@ def schedule_log_default(outs):
         s[log_stage].tensorize(xi, env.intrins.get('VLog', mode = 'inc'))
     elif modes == 'w':
         s[log_stage].tensorize(xi, env.intrins.get('VLog', mode = modes))
-
+    s[cdata].compute_at(s[log_stage], xo)
+    s[c2data].compute_at(s[log_stage], xo)
+    print(nnpu.lower(s, [data, output], simple_mode = True))
     return s
 
 
@@ -952,16 +965,14 @@ def compute_softmax_default(data, axis):
 	output : tvm.tensor
 	         can be any dimension, same with data
     """
-    print("nnpu : compute_softmax")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    if data.dtype == dtype_n:
-        modes = 'n'
-    elif data.dtype == dtype_w:
-        modes = 'w'
     lens = len(data.shape)
     assert lens == 2
-    first = tvm.compute(data.shape, lambda i, j : tvm.exp(data[i, j]), name = "first")
+    if data.dtype == dtype_n:
+        first = tvm.compute(data.shape, lambda i, j : tvm.exp(data[i, j].astype(dtype_w)), name = "first")
+    else:
+        first = tvm.compute(data.shape, lambda i, j : tvm.exp(data[i, j]), name = "first")
     k = tvm.reduce_axis((0, data.shape[1]))
     second = tvm.compute((data.shape[0], 1), lambda i : tvm.sum(first[i, k], axis = k), name = 'second')
     res = tvm.compute(data.shape, lambda i, j : first[i, j] / second[i, ], name = 'res', tag = 'softmax')
@@ -982,6 +993,8 @@ def schedule_softmax_default(outs):
         modes = 'n'
     elif output.op.input_tensors[0].dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%output.op.input_tensors[0].dtype)
     
     softmax_res.append(output.op)
     assert len(softmax_res) == 1
@@ -1009,10 +1022,14 @@ def schedule_softmax_default(outs):
         s[softmax_stage1].tensorize(ki, env.intrins.get('VExp', mode = 'inc'))
     elif modes == 'w':
         s[softmax_stage1].tensorize(ki, env.intrins.get('VExp', mode = modes))
+
     s[softmax_stage2].reorder(s[softmax_stage2].op.axis[0], s[softmax_stage2].op.reduce_axis[0])
+
     s[softmax_stage2].tensorize(s[softmax_stage2].op.reduce_axis[0], env.intrins.get('VReduceSum', mode = 'w'))
+
     ko, ki = s[softmax_stage3].split(s[softmax_stage3].op.axis[1], factor = factors)
     s[softmax_stage3].tensorize(ki, env.intrins.get('VDivS', mode = 'w'))
+    print(nnpu.lower(s, [data, output], simple_mode = True))
     return s
 
 
@@ -1046,9 +1063,7 @@ def schedule_softmax(attrs, outs, target):
 
 def packed_conv2d(data, kernel, strides, padding, out_dtype):
     print("nnpu : compute_conv2d")
-
-    print(data.shape)
-    print(padding)
+    
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     assert isinstance(strides, int) or len(strides) == 2
@@ -1074,33 +1089,37 @@ def packed_conv2d(data, kernel, strides, padding, out_dtype):
     k_in = tvm.reduce_axis((0, in_channel))
     k_f_w = tvm.reduce_axis((0, filter_width))
     k_f_h = tvm.reduce_axis((0, filter_height))
-    
-    first = tvm.compute((batch_size, out_height, out_width, filter_height, filter_width, out_channel), lambda b_c, x, y, i, j, oc : tvm.sum(pad_data[b_c, x * stride_height + i, y * stride_width + j, k_in].astype(dtype_w) * 
+    if data.dtype == dtype_w:
+        first = tvm.compute((batch_size, out_height, out_width, filter_height, filter_width, out_channel), lambda b_c, x, y, i, j, oc : tvm.sum(pad_data[b_c, x * stride_height + i, y * stride_width + j, k_in] * 
+                                                            kernel[i, j, oc, k_in], axis = k_in), name = "first")
+    else:
+        first = tvm.compute((batch_size, out_height, out_width, filter_height, filter_width, out_channel), lambda b_c, x, y, i, j, oc : tvm.sum(pad_data[b_c, x * stride_height + i, y * stride_width + j, k_in].astype(dtype_w) * 
                                                             kernel[i, j, oc, k_in].astype(dtype_w), axis = k_in), name = "first")
     second = tvm.compute((batch_size, out_height, out_width, filter_height, out_channel), lambda b_c, x, y, i, oc : tvm.sum(first[b_c, x, y, i, k_f_w, oc], axis = k_f_w),
                                                             name = "second")
     res = tvm.compute((batch_size, out_height, out_width, out_channel), lambda b_c, x, y, oc : tvm.sum(second[b_c, x, y, k_f_h, oc], axis = k_f_h), name = "res", tag = "packed_conv2d")
-    
-    print(res.shape)
+
     return res
 
 def schedule_conv2d_default(outs):
     print("nnpu : schedule_conv2d")
     env = nnpu.get_env()
+    outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
+    s = tvm.create_schedule([x.op for x in outs])
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     output = outs[0]
     ewise_inputs = []
     ewise_ops = []
     conv2d_res = []
     assert output.dtype == dtype_w
-    if output.op.input_tensors[0].dtype == dtype_n:
-        modes = 'n'
-    elif output.op.input_tensors[0].dtype == dtype_w:
+    if output.op.input_tensors[0].dtype == dtype_w:
         modes = 'w'
-        """
+    elif output.op.input_tensors[0].dtype == dtype_n:
+        modes = 'n'
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
-            if not op.same_as(output.op):
+            print(op.tag)
+            if op not in s.outputs:
                 ewise_ops.append(op)
             for tensor in op.input_tensors:
                 if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
@@ -1111,17 +1130,18 @@ def schedule_conv2d_default(outs):
             assert op.tag == "packed_conv2d"
             conv2d_res.append(op)
 
-    _traverse(output.op)
-    """
-    conv2d_res.append(output.op)
-    assert len(conv2d_res) == 1
     
+    _traverse(output.op)
+    print("===================================")
+    for i in ewise_ops:
+        print("ewise")
+        print(i.tag)
+    assert len(conv2d_res) == 1
     conv2d_stage3 = conv2d_res[0].output(0)
     
     conv2d_stage2 = conv2d_stage3.op.input_tensors[0]
     
     conv2d_stage1 = conv2d_stage2.op.input_tensors[0]
-    
 
     data, kernel = conv2d_stage1.op.input_tensors
     if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
@@ -1131,14 +1151,30 @@ def schedule_conv2d_default(outs):
     else:
         pad_data = None
     gemm_shape = (1, 16, 16)
-    s = nnpu.create_schedule(output.op)
-    cout = s.cache_write(output, env.dram_scope)
-    conv2d_stage3 = s.cache_write(cout, env.uni_scratchpad_scope)
+    
+    if (conv2d_stage3 == output):
+        cout = s.cache_write(output, env.dram_scope)
+        s[cout].pragma(s[cout].op.axis[3], env.scratchpad_ls)
+        conv2d_stage3 = s.cache_write(cout, env.uni_scratchpad_scope)
+    else:
+        cout = conv2d_stage3
+        s[cout].set_scope(env.dram_scope)
+        conv2d_stage3 = s.cache_write(cout, env.uni_scratchpad_scope)
+    for op in ewise_ops:
+        s[op].set_scope(env.uni_scratchpad_scope)
+        s[op].pragma(s[op].op.axis[0], env.scratchpad_ls)
 
+    for consumer, tensor in ewise_inputs:
+        ctensor = s.cache_read(tensor, env.dram_scope, [consumer])
+        c2tensor = s.cache_read(ctensor, env.uni_scratchpad_scope, [consumer])
+        s[ctensor].compute_at(s[cout], s[cout].op.axis[2])
+        s[ctensor].pragma(s[ctensor].op.axis[0], env.dma_copy_pragma)
+        s[c2tensor].compute_at(s[cout], s[cout].op.axis[2])
+        s[c2tensor].pragma(s[c2tensor].op.axis[0], env.scratchpad_ls)
 
+    for op in ewise_ops:
+        s[op].compute_at(s[cout], s[cout].op.axis[2])
     conv2d_stage1_buf = conv2d_stage1
-    print("=======================")
-    print(conv2d_stage1)
     conv2d_stage1 = s.cache_write(conv2d_stage1, env.acc_scope)
     if pad_data is not None:
         cdata = pad_data
@@ -1159,38 +1195,37 @@ def schedule_conv2d_default(outs):
     s[conv2d_stage1_buf].pragma(s[conv2d_stage1_buf].op.axis[0], env.copy_acc2buf)
 
 
-    s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
-    s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
+    s[output].pragma(s[output].op.axis[3], env.dma_copy_pragma)
 
     s[conv2d_stage2].set_scope(env.uni_scratchpad_scope)
     s[conv2d_stage3].set_scope(env.uni_scratchpad_scope)
     
     oco, oci = s[conv2d_stage1].split(s[conv2d_stage1].op.axis[5], gemm_shape[2])
-    print("reduce====================")
-    print(s[conv2d_stage1].op.reduce_axis[0])
     ko, ki = s[conv2d_stage1].split(s[conv2d_stage1].op.reduce_axis[0], gemm_shape[1])
     x, y, m, l, n = s[conv2d_stage1].op.axis[0: 5]
     
     s[conv2d_stage1].reorder(x, y, m, l, n, oco, ko, oci, ki)
-    print(ko)
-    
-    s[conv2d_stage1].tensorize(oci, env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out = 'acc'))
-    print(conv2d_stage2)
-    print(s[conv2d_stage2].op.axis[4])
+    if modes == 'w':
+        s[conv2d_stage1].tensorize(oci, env.intrins.get('GEMM', shape = gemm_shape, mode = modes, scope_out = 'acc'))    
+    elif modes == 'n':
+        s[conv2d_stage1].tensorize(oci, env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out = 'acc'))
     oco, oci = s[conv2d_stage2].split(s[conv2d_stage2].op.axis[4], factor = 16)
     
     ko, ki = s[conv2d_stage2].split(s[conv2d_stage2].op.reduce_axis[0], factor = 1)
     x, y, m, l = s[conv2d_stage2].op.axis[0 : 4]
     s[conv2d_stage2].reorder(x, y, m, l, ko, oco, ki, oci)
     s[conv2d_stage2].tensorize(ki, env.intrins.get('VAddMerge', mode = 'w'))
-    s[conv2d_stage1_buf].compute_at(s[conv2d_stage2], ko)
-    s[conv2d_stage1].compute_at(s[conv2d_stage2], ko)
+
+    s[conv2d_stage1_buf].compute_at(s[conv2d_stage2], oco)
+    s[conv2d_stage1].compute_at(s[conv2d_stage2], oco)
+
     oco, oci = s[conv2d_stage3].split(s[conv2d_stage3].op.axis[3], factor = 16)
     ko, ki = s[conv2d_stage3].split(s[conv2d_stage3].op.reduce_axis[0], factor = 1)
     x, y, m = s[conv2d_stage3].op.axis[0 : 3]
     s[conv2d_stage3].reorder(x, y, m, oco, ko, ki, oci)
     s[conv2d_stage3].tensorize(ki, env.intrins.get('VAddMerge', mode = 'w'))
-
+    s[conv2d_stage2].compute_at(s[conv2d_stage3], ko)
+    s[conv2d_stage3].compute_at(s[cout], s[cout].op.axis[2])
     return s
     
 
@@ -1289,6 +1324,8 @@ def schedule_tanh_default(outs):
         modes = 'n'
     elif output.op.input_tensors[0].dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%output.op.input_tensors[0].dtype)
     """
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
@@ -1307,28 +1344,32 @@ def schedule_tanh_default(outs):
     tanh_res.append(output.op)
     assert len(tanh_res) == 1
     tanh_stage5 = tanh_res[0].output(0)
+
     tanh_stage3, tanh_stage4 = tanh_stage5.op.input_tensors
     tanh_stage0, tanh_stage2 = tanh_stage3.op.input_tensors
     tanh_stage1 = tanh_stage2.op.input_tensors[0]
+
     data = tanh_stage0.op.input_tensors[0]
-    
+
     s = nnpu.create_schedule(output.op)
 
     cout = s.cache_write(output, env.dram_scope)
 
     tanh_stage5 = s.cache_write(cout, env.uni_scratchpad_scope)
-
-    s[tanh_stage5].set_scope(env.uni_scratchpad_scope)
-    s[tanh_stage4].set_scope(env.uni_scratchpad_scope)
-    s[tanh_stage3].set_scope(env.uni_scratchpad_scope)
-    s[tanh_stage2].set_scope(env.uni_scratchpad_scope)
-    s[tanh_stage1].set_scope(env.uni_scratchpad_scope)
-    s[tanh_stage0].set_scope(env.uni_scratchpad_scope)
-
+    
+     
     cdata = s.cache_read(data, env.dram_scope, [tanh_stage0])
     c2data = s.cache_read(cdata, env.uni_scratchpad_scope, [tanh_stage0])
+    s[tanh_stage0].set_scope(env.uni_scratchpad_scope)
+    s[tanh_stage1].set_scope(env.uni_scratchpad_scope)
+    s[tanh_stage2].set_scope(env.uni_scratchpad_scope)
+    s[tanh_stage3].set_scope(env.uni_scratchpad_scope)
+    s[tanh_stage4].set_scope(env.uni_scratchpad_scope)
+    s[tanh_stage5].set_scope(env.uni_scratchpad_scope) 
     s[cdata].pragma(s[cdata].op.axis[0], env.dma_copy_pragma)
-    s[c2data].pragma(s[c2data].op.axis[0], env.scratchpad_ls)    
+    s[c2data].pragma(s[c2data].op.axis[0], env.scratchpad_ls) 
+    
+     
 
     s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
     s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
@@ -1341,8 +1382,10 @@ def schedule_tanh_default(outs):
     elif modes == 'n':
         s[tanh_stage0].tensorize(xi, env.intrins.get('VExp', mode = 'inc'))
     Imm = tvm.const(0, data.dtype)
+
     xo, xi = s[tanh_stage1].split(s[tanh_stage1].op.axis[lens], factor = factors)
     s[tanh_stage1].tensorize(xi, env.intrins.get('ISubV', imm_value = Imm.value, mode = modes))
+    # s[tanh_stage0].compute_at(s[tanh_stage1], xo)
 
     xo, xi = s[tanh_stage2].split(s[tanh_stage2].op.axis[lens], factor = factors)
     if modes == 'w':
@@ -1350,12 +1393,14 @@ def schedule_tanh_default(outs):
     elif modes == 'n':
         s[tanh_stage2].tensorize(xi, env.intrins.get('VExp', mode = 'inc'))
 
+    # s[tanh_stage1].compute_at(s[tanh_stage2], xo)
     if lens == 0:
         xo, xi = s[tanh_stage3].split(s[tanh_stage3].op.axis[lens], factor = factors)
         s[tanh_stage3].tensorize(xi, env.intrins.get('VSubV', mode = 'w'))
-
+        # s[tanh_stage2].compute_at(s[tanh_stage3], xo)
         xo, xi = s[tanh_stage4].split(s[tanh_stage4].op.axis[lens], factor = factors)
         s[tanh_stage4].tensorize(xi, env.intrins.get('VAddV', mode = 'w'))
+        # s[tanh_stage3].compute_at(s[tanh_stage4], xo)
     else:
         xo, xi = s[tanh_stage3].split(s[tanh_stage3].op.axis[lens], factor = factors)
         yo, yi = s[tanh_stage3].split(s[tanh_stage3].op.axis[lens - 1], factor = factors)
@@ -1363,6 +1408,7 @@ def schedule_tanh_default(outs):
         args.extend([xo, yo, xi, yi])
         s[tanh_stage3].reorder(*args)
         s[tanh_stage3].tensorize(xi, env.intrins.get('MSubM', mode = 'w'))
+        # s[tanh_stage2].compute_at(s[tanh_stage3], yo)
 
         xo, xi = s[tanh_stage4].split(s[tanh_stage4].op.axis[lens], factor = factors)
         yo, yi = s[tanh_stage4].split(s[tanh_stage4].op.axis[lens - 1], factor = factors)
@@ -1370,8 +1416,10 @@ def schedule_tanh_default(outs):
         args.extend([xo, yo, xi, yi])
         s[tanh_stage4].reorder(*args)
         s[tanh_stage4].tensorize(xi, env.intrins.get('MAddM', mode = 'w'))
+        # s[tanh_stage3].compute_at(s[tanh_stage4], yo)
     xo, xi = s[tanh_stage5].split(s[tanh_stage5].op.axis[lens], factor = factors)
     s[tanh_stage5].tensorize(xi, env.intrins.get('VDivV', mode = 'w'))
+    # s[tanh_stage4].compute_at(s[tanh_stage5], xo)
     return s
     
 
@@ -1460,7 +1508,8 @@ def schedule_sigmoid_default(outs):
         modes = 'n'
     elif data.dtype == dtype_w:
         modes = 'w'
-
+    else:
+        raise RuntimeError("NPU not support dtype %s"%data.dtype)
     s = nnpu.create_schedule(output.op)
     cout = s.cache_write(output, env.dram_scope)
 
@@ -1483,25 +1532,30 @@ def schedule_sigmoid_default(outs):
     lens = len(data.shape) - 1
     xo, xi = s[sigmoid_stage].split(s[sigmoid_stage].op.axis[lens], factor = factors)
     s[sigmoid_stage].tensorize(xi, env.intrins.get('ISubV', imm_value = Imm.value, mode = modes))
-
+    s[cdata].compute_at(s[sigmoid_stage], xo)
+    s[c2data].compute_at(s[sigmoid_stage], xo)
     xo, xi = s[sigmoid_stage1].split(s[sigmoid_stage1].op.axis[lens], factor = factors)
     if modes == 'n':
         s[sigmoid_stage1].tensorize(xi, env.intrins.get('VExp', mode = 'inc'))
     elif modes == 'w':
         s[sigmoid_stage1].tensorize(xi, env.intrins.get('VExp', mode = modes))
+    s[sigmoid_stage].compute_at(s[sigmoid_stage1], xo)
     Imm_1 = tvm.const(1, dtype_w)
 
     xo, xi = s[sigmoid_stage2].split(s[sigmoid_stage2].op.axis[lens], factor = factors)
     s[sigmoid_stage2].tensorize(xi, env.intrins.get('VAddI', imm_value = Imm_1.value, mode = 'w'))
+    s[sigmoid_stage1].compute_at(s[sigmoid_stage2], xo)
 
     xo, xi = s[sigmoid_stage3].split(s[sigmoid_stage3].op.axis[lens], factor = factors)
     s[sigmoid_stage3].tensorize(xi, env.intrins.get('IDivV', imm_value = Imm_1.value, mode = 'w'))
+    s[sigmoid_stage2].compute_at(s[sigmoid_stage3], xo)
+    # s[sigmoid_stage3].compute_at(s[cout], s[cout].op.axis[1])
+    print(nnpu.lower(s, [data], simple_mode = True))
     return s
 
 
 @reg.register_compute("sigmoid", level = levels)
 def compute_sigmoid(attrs, inputs, out):
-	print("nnpu : compute_sigmoid")
 	return compute_sigmoid_default(inputs[0])
     
     
@@ -1531,6 +1585,7 @@ def schedule_sigmoid(attrs, outs, target):
 def compute_max_pool2d_default(data, pool_size, strides, padding):
     print("nnpu : max_pool2 compute")
     env = nnpu.get_env()
+    print(strides)
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     assert isinstance(strides, int) or len(strides) == 2
     assert len(pool_size) == 2
@@ -1567,7 +1622,6 @@ def compute_max_pool2d(attrs, inputs, out):
     strides = attrs.get_int_tuple("strides")
     if is_packed_layout(layout):
         return compute_max_pool2d_default(data, pool_size, strides, padding)
-    return _nn.compute_max_pool2d(attrs, inputs, out)
 
 def schedule_max_pool2d_default(outs):
     env = nnpu.get_env()
@@ -1588,6 +1642,8 @@ def schedule_max_pool2d_default(outs):
         modes = 'n'
     elif data.dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%data.dtype)
     if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
         temp = data.op.input_tensors[0]
         pad_data = data
@@ -1609,20 +1665,26 @@ def schedule_max_pool2d_default(outs):
 
     s[max_pool2d_stage].set_scope(env.uni_scratchpad_scope)
     s[max_pool2d_stage1].set_scope(env.uni_scratchpad_scope)
-    s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
-    s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
+    s[cout].pragma(s[cout].op.axis[3], env.scratchpad_ls)
+    s[output].pragma(s[output].op.axis[3], env.dma_copy_pragma)
 
     ko, ki = s[max_pool2d_stage].split(s[max_pool2d_stage].op.reduce_axis[0], factor = 1)
     xo, xi = s[max_pool2d_stage].split(s[max_pool2d_stage].op.axis[3], factor = factors)
     m, l, n = s[max_pool2d_stage].op.axis[0:3]
     s[max_pool2d_stage].reorder(m, l, n, xo, ko, ki, xi)
+    
     s[max_pool2d_stage].tensorize(ki, env.intrins.get('VGTMMerge', mode = modes))
+    s[cdata].compute_at(s[max_pool2d_stage], ko)
+    s[c2data].compute_at(s[max_pool2d_stage], ko)
 
     ko, ki = s[max_pool2d_stage1].split(s[max_pool2d_stage1].op.reduce_axis[0], factor=1)
     xo, xi = s[max_pool2d_stage1].split(s[max_pool2d_stage1].op.axis[3], factor=16)
     m, l, n = s[max_pool2d_stage1].op.axis[0:3]
     s[max_pool2d_stage1].reorder(m, l, n, xo, ko, ki, xi)
     s[max_pool2d_stage1].tensorize(ki, env.intrins.get('VGTMMerge', mode = modes, nDim = 3))
+    s[max_pool2d_stage].compute_at(s[max_pool2d_stage1], ko)
+    s[max_pool2d_stage1].compute_at(s[cout], s[cout].op.axis[2])
+    print(nnpu.lower(s, [data], simple_mode = True))
     return s
 
     
@@ -1683,6 +1745,8 @@ def schedule_global_max_pool2d_default(outs):
         modes = 'n'
     elif data.dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%data.dtype)
     s = nnpu.create_schedule(output.op)
     cout = s.cache_write(output, env.dram_scope)
     max_pool2d_stage1 = s.cache_write(cout, env.uni_scratchpad_scope)
@@ -1693,20 +1757,25 @@ def schedule_global_max_pool2d_default(outs):
 
     s[max_pool2d_stage].set_scope(env.uni_scratchpad_scope)
     s[max_pool2d_stage1].set_scope(env.uni_scratchpad_scope)
-    s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
-    s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
+    s[cout].pragma(s[cout].op.axis[3], env.scratchpad_ls)
+    s[output].pragma(s[output].op.axis[3], env.dma_copy_pragma)
 
     ko, ki = s[max_pool2d_stage].split(s[max_pool2d_stage].op.reduce_axis[0], factor = 1)
     xo, xi = s[max_pool2d_stage].split(s[max_pool2d_stage].op.axis[3], factor = factors)
     m, l, n = s[max_pool2d_stage].op.axis[0:3]
     s[max_pool2d_stage].reorder(m, l, n, xo, ko, ki, xi)
     s[max_pool2d_stage].tensorize(ki, env.intrins.get('VGTMMerge', mode = modes))
+    s[cdata].compute_at(s[max_pool2d_stage], ko)
+    s[c2data].compute_at(s[max_pool2d_stage], ko)
 
     ko, ki = s[max_pool2d_stage1].split(s[max_pool2d_stage1].op.reduce_axis[0], factor=1)
     xo, xi = s[max_pool2d_stage1].split(s[max_pool2d_stage1].op.axis[3], factor=16)
     m, l, n = s[max_pool2d_stage1].op.axis[0:3]
     s[max_pool2d_stage1].reorder(m, l, n, xo, ko, ki, xi)
     s[max_pool2d_stage1].tensorize(ki, env.intrins.get('VGTMMerge', mode = modes, nDim = 3))
+    s[max_pool2d_stage].compute_at(s[max_pool2d_stage1], ko)
+    s[max_pool2d_stage1].compute_at(s[cout], s[cout].op.axis[2])
+    print(nnpu.lower(s, [data], simple_mode = True))
     return s
 
     
@@ -1724,7 +1793,7 @@ def schedule_global_max_pool2d(attrs, outs, target):
     
 # nnpu : avg_pool2d
 def compute_avg_pool2d_default(data, pool_size, strides, padding):
-    print("nnpu : avg_pool2 compute")
+    print("nnpu : avg_pool2d compute")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     assert isinstance(strides, int) or len(strides) == 2
@@ -1792,6 +1861,8 @@ def schedule_avg_pool2d_default(attrs, outs):
         modes = 'n'
     elif data.dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%data.dtype)
     if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
         temp = data.op.input_tensors[0]
         pad_data = data
@@ -1813,8 +1884,9 @@ def schedule_avg_pool2d_default(attrs, outs):
     s[avg_pool2d_stage].set_scope(env.uni_scratchpad_scope)
     s[avg_pool2d_stage1].set_scope(env.uni_scratchpad_scope)
     s[avg_pool2d_stage2].set_scope(env.uni_scratchpad_scope)
-    s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
-    s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
+    s[cout].pragma(s[cout].op.axis[3], env.scratchpad_ls)
+    s[output].pragma(s[output].op.axis[3], env.dma_copy_pragma)
+
 
     ko, ki = s[avg_pool2d_stage].split(s[avg_pool2d_stage].op.reduce_axis[0], factor = 1)
     xo, xi = s[avg_pool2d_stage].split(s[avg_pool2d_stage].op.axis[3], factor = factors)
@@ -1822,12 +1894,15 @@ def schedule_avg_pool2d_default(attrs, outs):
     s[avg_pool2d_stage].reorder(m, l, n, xo, ko, ki, xi)
     s[avg_pool2d_stage].tensorize(ki, env.intrins.get('VAddMerge', mode = modes))
 
+    s[cdata].compute_at(s[avg_pool2d_stage], ko)
+    s[c2data].compute_at(s[avg_pool2d_stage], ko)
     ko, ki = s[avg_pool2d_stage1].split(s[avg_pool2d_stage1].op.reduce_axis[0], factor=1)
     xo, xi = s[avg_pool2d_stage1].split(s[avg_pool2d_stage1].op.axis[3], factor = factors)
     m, l, n = s[avg_pool2d_stage1].op.axis[0:3]
     s[avg_pool2d_stage1].reorder(m, l, n, xo, ko, ki, xi)
     s[avg_pool2d_stage1].tensorize(ki, env.intrins.get('VAddMerge', mode = modes, nDim = 3))
 
+    s[avg_pool2d_stage].compute_at(s[avg_pool2d_stage1], ko)
     xo, xi = s[avg_pool2d_stage2].split(s[avg_pool2d_stage2].op.axis[3], factor = factors)
     m, l, n = s[avg_pool2d_stage2].op.axis[0:3]
     s[avg_pool2d_stage2].reorder(m, l, n, xo, xi)
@@ -1835,7 +1910,9 @@ def schedule_avg_pool2d_default(attrs, outs):
         s[avg_pool2d_stage2].tensorize(xi, env.intrins.get('VDivI', imm_value = Imm.value, mode = modes))
     elif modes == 'n':
         s[avg_pool2d_stage2].tensorize(xi, env.intrins.get('VDivI', imm_value = Imm.value, mode = 'inc'))
-
+    s[avg_pool2d_stage1].compute_at(s[avg_pool2d_stage2], xo)
+    s[avg_pool2d_stage2].compute_at(s[cout], s[cout].op.axis[2])
+    print(nnpu.lower(s, [data, output], simple_mode = True))
     return s
     
 @reg.register_schedule("avg_pool2d", level = levels)
@@ -1852,7 +1929,7 @@ def schedule_avg_pool2d(attrs, outs, target):
     
 # nnpu : global_avg_pool2d
 def compute_global_avg_pool2d_default(data):
-    print("nnpu : avg_pool2 compute")
+    print("nnpu : compute_global_avg_pool2d")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
@@ -1881,6 +1958,7 @@ def compute_global_avg_pool2d(attrs, inputs, out):
     return _nn.compute_avg_pool2d(attrs, inputs, out)
 
 def schedule_global_avg_pool2d_default(attrs, outs):
+    print("nnpu : schedule_global_avg_pool2d")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     
@@ -1898,11 +1976,12 @@ def schedule_global_avg_pool2d_default(attrs, outs):
     data = avg_pool2d_stage.op.input_tensors[0]
     pool_size = data.shape
     Imm = tvm.const(topi.util.get_const_int(pool_size[1] * pool_size[2]), dtype_w)
-    print(Imm)
     if data.dtype == dtype_n:
         modes = 'n'
     elif data.dtype == dtype_w:
         modes = 'w'
+    else:
+        raise RuntimeError("NPU not support dtype %s"%data.dtype)
     s = nnpu.create_schedule(output.op)
     cout = s.cache_write(output, env.dram_scope)
     avg_pool2d_stage2 = s.cache_write(cout, env.uni_scratchpad_scope)
@@ -1914,20 +1993,23 @@ def schedule_global_avg_pool2d_default(attrs, outs):
     s[avg_pool2d_stage].set_scope(env.uni_scratchpad_scope)
     s[avg_pool2d_stage1].set_scope(env.uni_scratchpad_scope)
     s[avg_pool2d_stage2].set_scope(env.uni_scratchpad_scope)
-    s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
-    s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
+    s[cout].pragma(s[cout].op.axis[3], env.scratchpad_ls)
+    s[output].pragma(s[output].op.axis[3], env.dma_copy_pragma)
 
     ko, ki = s[avg_pool2d_stage].split(s[avg_pool2d_stage].op.reduce_axis[0], factor = 1)
     xo, xi = s[avg_pool2d_stage].split(s[avg_pool2d_stage].op.axis[3], factor = factors)
     m, l, n = s[avg_pool2d_stage].op.axis[0:3]
     s[avg_pool2d_stage].reorder(m, l, n, xo, ko, ki, xi)
     s[avg_pool2d_stage].tensorize(ki, env.intrins.get('VAddMerge', mode = modes))
-
+    s[cdata].compute_at(s[avg_pool2d_stage], ko)
+    s[c2data].compute_at(s[avg_pool2d_stage], ko)
     ko, ki = s[avg_pool2d_stage1].split(s[avg_pool2d_stage1].op.reduce_axis[0], factor=1)
     xo, xi = s[avg_pool2d_stage1].split(s[avg_pool2d_stage1].op.axis[3], factor = factors)
     m, l, n = s[avg_pool2d_stage1].op.axis[0:3]
     s[avg_pool2d_stage1].reorder(m, l, n, xo, ko, ki, xi)
     s[avg_pool2d_stage1].tensorize(ki, env.intrins.get('VAddMerge', mode = modes, nDim = 3))
+
+    s[avg_pool2d_stage].compute_at(s[avg_pool2d_stage1], ko)
 
     xo, xi = s[avg_pool2d_stage2].split(s[avg_pool2d_stage2].op.axis[3], factor = factors)
     m, l, n = s[avg_pool2d_stage2].op.axis[0:3]
@@ -1936,7 +2018,9 @@ def schedule_global_avg_pool2d_default(attrs, outs):
         s[avg_pool2d_stage2].tensorize(xi, env.intrins.get('VDivI', imm_value = Imm.value, mode = modes))
     elif modes == 'n':
         s[avg_pool2d_stage2].tensorize(xi, env.intrins.get('VDivI', imm_value = Imm.value, mode = 'inc'))
-
+    s[avg_pool2d_stage1].compute_at(s[avg_pool2d_stage2], xo)
+    s[avg_pool2d_stage2].compute_at(s[cout], s[cout].op.axis[2])
+    print(nnpu.lower(s, [data, output], simple_mode = True))
     return s
     
 @reg.register_schedule("global_avg_pool2d", level = levels)
@@ -1996,12 +2080,8 @@ def schedule_flatten_default(outs):
     s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
     s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
     ko, k1 = s[flatten_stage].split(s[flatten_stage].op.axis[1], factor = data_shape[3])
-
     k3, k2 = s[flatten_stage].split(ko, factor = data_shape[2])
-
     s[flatten_stage].pragma(s[flatten_stage].op.axis[0], env.scratchpad_copy)
-    
-
     return s
 
 @reg.register_compute("flatten", level = levels)
@@ -2016,4 +2096,3 @@ def schedule_flatten(attrs, outs, target):
     if str(target).startswith("llvm"):
         return tvm.create_schedule([x.op for x in outs])
     raise RuntimeError("not support target %s"%target)
-
