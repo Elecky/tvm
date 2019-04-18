@@ -454,18 +454,16 @@ def test_log():
         print(deploy_graph.ir())
         
 def test_conv2d():
-    input_shape = (1, 58, 58, 64)
+    input_shape = (1, 16, 9, 64)
     target_host = "llvm"
     device = "nnpu"
     target = tvm.target.create("llvm -device={}".format(device))
     inputs = nnvm.symbol.Variable("inputs")
-    z = nnvm.symbol.relu(inputs)
-    z1 = nnvm.symbol.conv2d(data = z, channels = 64, kernel_size=(3, 3), padding = (0, 0), use_bias=False,
+    z1 = nnvm.symbol.conv2d(data = inputs, channels = 64, kernel_size=(3, 3), padding = (0, 0), use_bias=False,
                                 layout='NHWC', kernel_layout='HWOI')
+    z = nnvm.symbol.relu(z1)
 
-    
-
-    compute_graph = nnvm.graph.create(z1)
+    compute_graph = nnvm.graph.create(z)
         
     with nnvm.compiler.build_config(opt_level = 1):
         if target.device_name != "nnpu":
@@ -475,18 +473,18 @@ def test_conv2d():
         else:
             with ScheduleProcHelper():
                 with nnpu.build_config():
-                    nnpu.set_device(nnpu.get_env(), type = 'S0')
+                    nnpu.set_device(nnpu.get_env(), type = 'SC')
                     deploy_graph, lib, params = nnvm.compiler.build(compute_graph, target, shape = 
                                         {"inputs" : input_shape}, dtype = "float32", target_host = target_host)
 
         ctx = tvm.context(str("nnpu"), 0) if device == "nnpu" else tvm.context(str("llvm"), 0)
         module = runtime.create(deploy_graph, lib, ctx)
-        a_np = np.random.uniform(size  = (1, 58, 58, 64), low = -32, high = 32).astype(np.float32)
+        a_np = np.random.uniform(size  = input_shape, low = -32, high = 32).astype(np.float32)
  
         module.set_input(inputs = a_np)
         module.run()
         print(deploy_graph.ir())
-        out = module.get_output(0, out = tvm.nd.empty((1, 56, 56, 64)))
+        out = module.get_output(0, out = tvm.nd.empty((1, 14, 7, 64)))
         
 """
 

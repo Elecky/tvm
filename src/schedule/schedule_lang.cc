@@ -824,3 +824,15 @@ TVM_STATIC_IR_FUNCTOR(IRPrinter, vtable)
     p->stream << "schedule(" << op << ")";
   });
 }  // namespace tvm
+
+
+using tvm::runtime::TVMArgs;
+using tvm::runtime::TVMRetValue;
+
+static TVM_ATTRIBUTE_UNUSED auto &__register_get_iter_type_str_ =
+    ::tvm::runtime::Registry::Register("get_iter_type_str", true)
+        .set_body([](TVMArgs args, TVMRetValue *rv) {
+          CHECK_EQ(args.size(), 1) << ", exactly one argument needed";
+          auto type = static_cast<tvm::IterVarType>(static_cast<int>(args[0]));
+          *rv = std::string(tvm::IterVarType2String(type));
+        });

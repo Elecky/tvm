@@ -50,6 +50,7 @@ def test():
     print(nnpu.lower(s, [a, b, c_host, mul_host, gtm_host], simple_mode=True))
     # exit()
     func = nnpu.build(s, [a, b, c_host, mul_host, gtm_host], 'nnpu', 'llvm', name='nnpu_exp')
+    print(nnpu.top.get_iter_type_str(s[c_buf].iter_var_attrs[ s[c_buf].leaf_iter_vars[1] ].iter_type))
     # exit()
 
     ctx = tvm.nd.TVMContext(13, 0)
