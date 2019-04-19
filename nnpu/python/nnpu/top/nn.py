@@ -1090,14 +1090,14 @@ def packed_conv2d(data, kernel, strides, padding, out_dtype):
     k_f_w = tvm.reduce_axis((0, filter_width))
     k_f_h = tvm.reduce_axis((0, filter_height))
     if data.dtype == dtype_w:
-        first = tvm.compute((batch_size, out_height, out_width, filter_height, filter_width, out_channel), lambda b_c, x, y, i, j, oc : tvm.sum(pad_data[b_c, x * stride_height + i, y * stride_width + j, k_in] * 
-                                                            kernel[i, j, oc, k_in], axis = k_in), name = "first")
+        res = tvm.compute((batch_size, out_height, out_width, out_channel),
+                          lambda n, h, w, oc: 
+                            tvm.sum(pad_data[n, h + k_f_h, w + k_f_w, k_in]
+                                    * kernel[k_f_h, k_f_w, oc, k_in],
+                                    axis=[k_f_h, k_f_w, k_in] ),
+                          name='conv2d_res', tag='packed_conv2d')
     else:
-        first = tvm.compute((batch_size, out_height, out_width, filter_height, filter_width, out_channel), lambda b_c, x, y, i, j, oc : tvm.sum(pad_data[b_c, x * stride_height + i, y * stride_width + j, k_in].astype(dtype_w) * 
-                                                            kernel[i, j, oc, k_in].astype(dtype_w), axis = k_in), name = "first")
-    second = tvm.compute((batch_size, out_height, out_width, filter_height, out_channel), lambda b_c, x, y, i, oc : tvm.sum(first[b_c, x, y, i, k_f_w, oc], axis = k_f_w),
-                                                            name = "second")
-    res = tvm.compute((batch_size, out_height, out_width, out_channel), lambda b_c, x, y, oc : tvm.sum(second[b_c, x, y, k_f_h, oc], axis = k_f_h), name = "res", tag = "packed_conv2d")
+        raise NotImplementedError
 
     return res
 
@@ -1139,14 +1139,10 @@ def schedule_conv2d_default(outs):
         print(i.tag)
     assert len(conv2d_res) == 1
     # get every stage's tensor of conv2d
-    conv2d_stage3 = conv2d_res[0].output(0)
-    
-    conv2d_stage2 = conv2d_stage3.op.input_tensors[0]
-    
-    conv2d_stage1 = conv2d_stage2.op.input_tensors[0]
+    conv2d_stage = conv2d_res[0].output(0)
 
     # cache read data/kernel to scratchpad buffer, do pragma.
-    data, kernel = conv2d_stage1.op.input_tensors
+    data, kernel = conv2d_stage.op.input_tensors
     if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
         temp = data.op.input_tensors[0]
         pad_data = data
@@ -1158,9 +1154,9 @@ def schedule_conv2d_default(outs):
         cdata = pad_data
         s[pad_data].set_scope(env.dram_scope)
     else:
-        cdata = s.cache_read(data, env.uni_scratchpad_scope, [conv2d_stage1])
+        cdata = s.cache_read(data, env.uni_scratchpad_scope, [conv2d_stage])
 
-    ckernel = s.cache_read(kernel, env.uni_scratchpad_scope, [conv2d_stage1])
+    ckernel = s.cache_read(kernel, env.uni_scratchpad_scope, [conv2d_stage])
 
     s[cdata].pragma(s[cdata].op.axis[3], env.dma_copy_to_buf)
     s[ckernel].pragma(s[ckernel].op.axis[2], env.dma_copy_to_buf)
@@ -1170,11 +1166,11 @@ def schedule_conv2d_default(outs):
     s[output].pragma(s[output].op.axis[3], env.dma_copy_from_buf)
     cout = s.cache_write(output, env.uni_scratchpad_scope)
     
-    if (conv2d_stage3 == output):
-        conv2d_stage3 = cout
+    if (conv2d_stage == output):
+        conv2d_stage = cout
     else:
         # otherwise, set_scope the conv2d_stage3 tensor to scratchpad
-        s[conv2d_stage3].set_scope(env.uni_scratchpad_scope)
+        s[conv2d_stage].set_scope(env.uni_scratchpad_scope)
     
     for idx, op in enumerate(ewise_ops):
         tensor = op.output(0)
@@ -1204,48 +1200,40 @@ def schedule_conv2d_default(outs):
         # s[c2tensor].compute_at(s[cout], s[cout].op.axis[2])   ????
 
     # cache write GEMM output, and set_scope.
-    conv2d_stage1_buf = conv2d_stage1
-    conv2d_stage1 = s.cache_write(conv2d_stage1, env.acc_scope)
+    conv2d_stage_acc = s.cache_write(conv2d_stage, env.acc_scope)
 
-    s[conv2d_stage1_buf].set_scope(env.uni_scratchpad_scope)
-    s[conv2d_stage1_buf].pragma(s[conv2d_stage1_buf].op.axis[0], env.copy_acc2buf)
+    s[conv2d_stage].set_scope(env.uni_scratchpad_scope)
 
-    s[conv2d_stage2].set_scope(env.uni_scratchpad_scope)
-    s[conv2d_stage3].set_scope(env.uni_scratchpad_scope)
     # schedule and tensorize conv2d, this may be modified in future.
-    oco, oci = s[conv2d_stage1].split(s[conv2d_stage1].op.axis[5], gemm_shape[2])
-    ko, ki = s[conv2d_stage1].split(s[conv2d_stage1].op.reduce_axis[0], gemm_shape[1])
-    x, y, m, l, n = s[conv2d_stage1].op.axis[0: 5]
+    oco, oci = s[conv2d_stage_acc].split(s[conv2d_stage_acc].op.axis[3], gemm_shape[2])
+    no, ni = s[conv2d_stage_acc].split(s[conv2d_stage_acc].op.axis[0], gemm_shape[0])
+    ico, ici = s[conv2d_stage_acc].split(s[conv2d_stage_acc].op.reduce_axis[2], gemm_shape[1])
+    h, w = s[conv2d_stage_acc].op.axis[1:3]
+    kh_r, kw_r = s[conv2d_stage_acc].op.reduce_axis[0:2]
     
-    s[conv2d_stage1].reorder(x, y, m, l, n, oco, ko, oci, ki)
+    s[conv2d_stage_acc].reorder(no, h, w, oco, kh_r, kw_r, ico, ni, oci, ici)
     if modes == 'w':
-        s[conv2d_stage1].tensorize(oci, env.intrins.get('GEMM', shape = gemm_shape, mode = modes, scope_out = 'acc'))    
+        s[conv2d_stage_acc].tensorize(ni, env.intrins.get('GEMM', shape = gemm_shape, mode = modes, scope_out = 'acc'))    
     elif modes == 'n':
-        s[conv2d_stage1].tensorize(oci, env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out = 'acc'))
-    oco, oci = s[conv2d_stage2].split(s[conv2d_stage2].op.axis[4], factor = 16)
+        s[conv2d_stage_acc].tensorize(ni, env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out = 'acc'))
+        pass
     
-    ko, ki = s[conv2d_stage2].split(s[conv2d_stage2].op.reduce_axis[0], factor = 1)
-    x, y, m, l = s[conv2d_stage2].op.axis[0 : 4]
-    s[conv2d_stage2].reorder(x, y, m, l, ko, oco, ki, oci)
-    s[conv2d_stage2].tensorize(ki, env.intrins.get('VAddMerge', mode = 'w'))
+    no, ni = s[conv2d_stage].split(s[conv2d_stage].op.axis[0], gemm_shape[0])
+    oco, oci = s[conv2d_stage].split(s[conv2d_stage].op.axis[3], gemm_shape[2])
+    h, w = s[conv2d_stage].op.axis[1:3]
+    s[conv2d_stage].reorder(no, h, w, oco, ni, oci)
+    s[conv2d_stage_acc].compute_at(s[conv2d_stage], oco)
 
-    s[conv2d_stage1_buf].compute_at(s[conv2d_stage2], oco)
-    s[conv2d_stage1].compute_at(s[conv2d_stage2], oco)
-
-    oco, oci = s[conv2d_stage3].split(s[conv2d_stage3].op.axis[3], factor = 16)
-    ko, ki = s[conv2d_stage3].split(s[conv2d_stage3].op.reduce_axis[0], factor = 1)
-    x, y, m = s[conv2d_stage3].op.axis[0 : 3]
-    s[conv2d_stage3].reorder(x, y, m, oco, ko, ki, oci)
-    s[conv2d_stage3].tensorize(ki, env.intrins.get('VAddMerge', mode = 'w'))
-    s[conv2d_stage2].compute_at(s[conv2d_stage3], ko)
+    s[conv2d_stage].pragma(ni, env.copy_acc2buf)
 
     # split output.
     # to tile output, the height and width of each part we are going to compute every loop.
-    h_factor, w_factor = 31, 31
+    h_factor, w_factor = 7, 4
     print (output.shape[1], output.shape[2])
     assert int(output.shape[1]) % h_factor == 0 and int(output.shape[2]) % w_factor == 0, \
 'currently, height/width of output must be divisible to h_factor and w_factor'
     ho, wo, hi, wi = s[output].tile(s[output].op.axis[1], s[output].op.axis[2], h_factor, w_factor)
+
     # the number of output channels every inner loop going to compute.
     oc_factor = 16
     oco, oci = s[output].split(s[output].op.axis[3], oc_factor)
@@ -1260,7 +1248,7 @@ def schedule_conv2d_default(outs):
     s[cdata].compute_at(s[output], wo)
 
     # now compute_at conv2d and ewise_ops into output's corresponding axis
-    s[conv2d_stage3].compute_at(s[output], wi)
+    s[conv2d_stage].compute_at(s[output], wi)
     for op in ewise_ops:
         s[op].compute_at(s[output], wi)
 

@@ -65,7 +65,7 @@ acc_buffer:
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
-  log_size_per_channel: 11
+  log_size_per_channel: 10
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
