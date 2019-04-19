@@ -1138,12 +1138,14 @@ def schedule_conv2d_default(outs):
         print("ewise")
         print(i.tag)
     assert len(conv2d_res) == 1
+    # get every stage's tensor of conv2d
     conv2d_stage3 = conv2d_res[0].output(0)
     
     conv2d_stage2 = conv2d_stage3.op.input_tensors[0]
     
     conv2d_stage1 = conv2d_stage2.op.input_tensors[0]
 
+    # cache read data/kernel to scratchpad buffer, do pragma.
     data, kernel = conv2d_stage1.op.input_tensors
     if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
         temp = data.op.input_tensors[0]
@@ -1151,74 +1153,66 @@ def schedule_conv2d_default(outs):
         data = temp
     else:
         pad_data = None
-    gemm_shape = (1, 16, 16)
+    
+    if pad_data is not None:
+        cdata = pad_data
+        s[pad_data].set_scope(env.dram_scope)
+    else:
+        cdata = s.cache_read(data, env.uni_scratchpad_scope, [conv2d_stage1])
 
-    s[output].pragma(s[output].op.axis[3], env.dma_copy_pragma)
+    ckernel = s.cache_read(kernel, env.uni_scratchpad_scope, [conv2d_stage1])
+
+    s[cdata].pragma(s[cdata].op.axis[3], env.dma_copy_to_buf)
+    s[ckernel].pragma(s[ckernel].op.axis[2], env.dma_copy_to_buf)
+
+    gemm_shape = (1, 16, 16)
+    # cache write output, and replace the compute stage of output with cached 'cout'
+    s[output].pragma(s[output].op.axis[3], env.dma_copy_from_buf)
+    cout = s.cache_write(output, env.uni_scratchpad_scope)
     
     if (conv2d_stage3 == output):
-        cout = s.cache_write(output, env.dram_scope)
-        s[cout].pragma(s[cout].op.axis[2], env.scratchpad_ls)
-        conv2d_stage3 = s.cache_write(cout, env.uni_scratchpad_scope)
+        conv2d_stage3 = cout
     else:
+        # otherwise, set_scope the conv2d_stage3 tensor to scratchpad
         s[conv2d_stage3].set_scope(env.uni_scratchpad_scope)
     
     for idx, op in enumerate(ewise_ops):
         tensor = op.output(0)
-        if (op != output):
-            tensor.set_scope(env.uni_scratchpad_scope)
+        if (op == output):
+            # if so, this compute op should be repalced with cout.
+            ewise_ops[idx] = cout.op
         else:
-            tensor_dram = s.cache_write(tensor, env.dram_scope)
-            s[tensor_dram].pragma(s[tensor_dram].op.axis[2], env.scratchpad_ls)
-            tensor_buf = s.cache_write(tensor_dram, env.uni_scratchpad_scope)
-            # then modify the tensor in ewise_ops
-            ewise_ops[idx] = tensor_buf.op
-
-            cout = tensor_dram
+            # otherwise, set_scope
+            tensor.set_scope(env.uni_scratchpad_scope)            
     
+    # tensorize all fused element-wise ops.
+    # TODO: add tensorize of other element-wise ops
     for op in ewise_ops:
         if op.tag == "elemwise_relu":
             tensor = op.output(0)
             s[tensor].split(op.axis[-1], factor=16)
             s[tensor].tensorize(s[tensor].leaf_iter_vars[-1], 
                                 env.intrins.get('VGTMI', imm_value = 0.0, mode = modes))
-        # TODO: add tensorize of other element-wise ops
         else:
             raise ValueError('unhandled element-wise op')
 
     print(ewise_inputs)
     for consumer, tensor in ewise_inputs:
-        ctensor = s.cache_read(tensor, env.dram_scope, [consumer])
-        c2tensor = s.cache_read(ctensor, env.uni_scratchpad_scope, [consumer])
+        ctensor = s.cache_read(tensor, env.uni_scratchpad_scope, [consumer])
         # s[ctensor].compute_at(s[cout], s[cout].op.axis[2])  ????
-        s[ctensor].pragma(s[ctensor].op.axis[0], env.dma_copy_pragma)
+        s[ctensor].pragma(s[ctensor].op.axis[0], env.dma_copy_to_buf)
         # s[c2tensor].compute_at(s[cout], s[cout].op.axis[2])   ????
-        s[c2tensor].pragma(s[c2tensor].op.axis[0], env.scratchpad_ls)
 
-    # for op in ewise_ops:
-    #     s[op].compute_at(s[cout], s[cout].op.axis[2])
+    # cache write GEMM output, and set_scope.
     conv2d_stage1_buf = conv2d_stage1
     conv2d_stage1 = s.cache_write(conv2d_stage1, env.acc_scope)
-    if pad_data is not None:
-        cdata = pad_data
-        s[pad_data].set_scope(env.dram_scope)
-    else:
-        cdata = s.cache_read(data, env.dram_scope, [conv2d_stage1])
-
-    ckernel = s.cache_read(kernel, env.dram_scope, [conv2d_stage1])
-    c2data = s.cache_read(cdata, env.uni_scratchpad_scope, [conv2d_stage1])
-    c2kernel = s.cache_read(ckernel, env.uni_scratchpad_scope, [conv2d_stage1])
-
-    s[cdata].pragma(s[cdata].op.axis[2], env.dma_copy_pragma)
-    s[ckernel].pragma(s[ckernel].op.axis[2], env.dma_copy_pragma)
-    s[c2data].pragma(s[c2data].op.axis[2], env.scratchpad_ls)
-    s[c2kernel].pragma(s[c2kernel].op.axis[2], env.scratchpad_ls)
 
     s[conv2d_stage1_buf].set_scope(env.uni_scratchpad_scope)
     s[conv2d_stage1_buf].pragma(s[conv2d_stage1_buf].op.axis[0], env.copy_acc2buf)
 
     s[conv2d_stage2].set_scope(env.uni_scratchpad_scope)
     s[conv2d_stage3].set_scope(env.uni_scratchpad_scope)
-    
+    # schedule and tensorize conv2d, this may be modified in future.
     oco, oci = s[conv2d_stage1].split(s[conv2d_stage1].op.axis[5], gemm_shape[2])
     ko, ki = s[conv2d_stage1].split(s[conv2d_stage1].op.reduce_axis[0], gemm_shape[1])
     x, y, m, l, n = s[conv2d_stage1].op.axis[0: 5]
@@ -1245,28 +1239,30 @@ def schedule_conv2d_default(outs):
     s[conv2d_stage3].tensorize(ki, env.intrins.get('VAddMerge', mode = 'w'))
     s[conv2d_stage2].compute_at(s[conv2d_stage3], ko)
 
-    last_ewise_stage = s[ewise_ops[-1]]
-    print(last_ewise_stage.leaf_iter_vars)
-    # n, h, w, co, ci = last_ewise_stage.leaf_iter_vars
-    # last_ewise_stage.reorder(n, co, h, w, ci)
-    # compute_at input and kernel
-    s[cdata].compute_at(last_ewise_stage, last_ewise_stage.leaf_iter_vars[2])
-    s[c2data].compute_at(last_ewise_stage, last_ewise_stage.leaf_iter_vars[2])
-    s[ckernel].compute_at(last_ewise_stage, last_ewise_stage.leaf_iter_vars[1])
-    s[c2kernel].compute_at(last_ewise_stage, last_ewise_stage.leaf_iter_vars[1])
+    # split output.
+    # to tile output, the height and width of each part we are going to compute every loop.
+    h_factor, w_factor = 31, 31
+    print (output.shape[1], output.shape[2])
+    assert int(output.shape[1]) % h_factor == 0 and int(output.shape[2]) % w_factor == 0, \
+'currently, height/width of output must be divisible to h_factor and w_factor'
+    ho, wo, hi, wi = s[output].tile(s[output].op.axis[1], s[output].op.axis[2], h_factor, w_factor)
+    # the number of output channels every inner loop going to compute.
+    oc_factor = 16
+    oco, oci = s[output].split(s[output].op.axis[3], oc_factor)
+    n_factor = 1
+    no, ni = s[output].split(s[output].op.axis[0], n_factor)
+    s[output].reorder(no, oco, ho, wo, hi, wi, ni, oci)
+    # repragma output
+    s[output].pragma(ni, env.dma_copy_from_buf)
 
-    # compute_at conv2d result into the last ewise_op stage
-    s[conv2d_stage3].compute_at(last_ewise_stage, last_ewise_stage.leaf_iter_vars[-2] )
-    # compute_at every ewise_op except the last one into last ewise_op stage.
-    for idx, op in enumerate(ewise_ops):
-        if (idx != len(ewise_ops) - 1):
-            s[op].compute_at(last_ewise_stage, last_ewise_stage.leaf_iter_vars[-2])
-    # compute_at last ewise_op stage into DMA tensor
-    s[cout].split(s[cout].op.axis[-1], factor=16)
-    n, h, w, co, ci = s[cout].leaf_iter_vars
-    s[cout].reorder(n, co, h, w, ci)
+    # compute_at data/kernel load into outputs corresponding axis.
+    s[ckernel].compute_at(s[output], oco)
+    s[cdata].compute_at(s[output], wo)
 
-    last_ewise_stage.compute_at(s[cout], s[cout].leaf_iter_vars[2])
+    # now compute_at conv2d and ewise_ops into output's corresponding axis
+    s[conv2d_stage3].compute_at(s[output], wi)
+    for op in ewise_ops:
+        s[op].compute_at(s[output], wi)
 
     print(tvm.lower(s, [data, kernel, output], simple_mode=True))
     return s

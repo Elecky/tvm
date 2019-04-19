@@ -454,7 +454,7 @@ def test_log():
         print(deploy_graph.ir())
         
 def test_conv2d():
-    input_shape = (1, 16, 9, 64)
+    input_shape = (1, 64, 64, 64)
     target_host = "llvm"
     device = "nnpu"
     target = tvm.target.create("llvm -device={}".format(device))
@@ -484,7 +484,7 @@ def test_conv2d():
         module.set_input(inputs = a_np)
         module.run()
         print(deploy_graph.ir())
-        out = module.get_output(0, out = tvm.nd.empty((1, 14, 7, 64)))
+        out = module.get_output(0, out = tvm.nd.empty((1, 62, 62, 64)))
         
 """
 

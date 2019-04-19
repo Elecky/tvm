@@ -1,6 +1,6 @@
 # data configs
-dtype_w: int16
-dtype_n: int8
+dtype_w: float32
+dtype_n: float16
 
 # scalar register file configs
 register_file:
@@ -49,11 +49,11 @@ scratchpad_design: unified
 
 # unified scratchpad configs
 scratchpad:
-  nchannel: 8
+  nchannel: 4
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
-  log_size_per_channel: 20
+  log_size_per_channel: 24
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
