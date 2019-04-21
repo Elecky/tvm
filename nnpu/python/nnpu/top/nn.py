@@ -322,8 +322,7 @@ def schedule_dense_default(attrs, outs):
         # # now compute_at conv2d and ewise_ops into output's corresponding axis
         s[dense_stage].compute_at(s[output], no)
         for op in ewise_ops:
-            s[op].compute_at(s[output], ni)
-        
+            s[op].compute_at(s[output], no)
         
     else:
         dense_stage1 = dense_res[0].output(0)
