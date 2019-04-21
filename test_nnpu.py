@@ -105,9 +105,9 @@ def test_sigmoid():
         print(compute_graph.ir())
         print(deploy_graph.ir())
 def test_dense():
-    shape = (1, 802816)
-    weight_shape = (32, 802816)
-    bias_shape = (32,)
+    shape = (16, 1024)
+    weight_shape = (256, 1024)
+    bias_shape = (256,)
     inputs = nnvm.symbol.Variable("inputs")
     weights = nnvm.symbol.Variable("weights")
     bias = nnvm.symbol.Variable("bias")
@@ -115,28 +115,27 @@ def test_dense():
     target_host = "llvm"
     device = "nnpu"
     target = tvm.target.create("llvm -device={}".format(device))
-    z = nnvm.symbol.dense(data = inputs, weight = weights, bias = bias, units = 32)
-    compute_graph = nnvm.graph.create(z)
-    with nnvm.compiler.build_config(opt_level = 0):
+    z = nnvm.symbol.dense(data = inputs, weight = weights, use_bias = 0, units = 256)
+    z1 = nnvm.symbol.relu(z)
+    compute_graph = nnvm.graph.create(z1)
+    with nnvm.compiler.build_config(opt_level = 1):
         if target.device_name != "nnpu":
-            deploy_graph, lib, params = nnvm.compiler.build(compute_graph, target, shape = {"inputs":shape, "weights":weight_shape, "bias":bias_shape}, dtype = "float32", target_host = target_host)
+            deploy_graph, lib, params = nnvm.compiler.build(compute_graph, target, shape = {"inputs":shape, "weights":weight_shape}, dtype = "float32", target_host = target_host)
         else:
             with ScheduleProcHelper():
                 with nnpu.build_config():
-                    nnpu.set_device(nnpu.get_env(), type = 'S0')
-                    deploy_graph, lib, params = nnvm.compiler.build(compute_graph, target, shape = {"inputs":shape, "weights":weight_shape, "bias":bias_shape}, dtype = "float32", target_host = target_host)
+                    nnpu.set_device(nnpu.get_env(), type = 'SC')
+                    deploy_graph, lib, params = nnvm.compiler.build(compute_graph, target, shape = {"inputs":shape, "weights":weight_shape}, dtype = "float32", target_host = target_host)
         ctx = tvm.context(str("nnpu"), 0) if device == "nnpu" else tvm.context(str("llvm"), 0)
         m = runtime.create(deploy_graph, lib, ctx)
         a_np = np.random.random(size = shape)
         b_np = np.random.random(size = weight_shape)
 
-        c_np = np.random.random(size = bias_shape)
-
-        m.set_input(**{"inputs":a_np, "weights":b_np, "bias":c_np})
+        m.set_input(**{"inputs":a_np, "weights":b_np})
         m.run()
-        gt = a_np.dot(b_np.transpose()) + c_np
+        gt = a_np.dot(b_np.transpose())
 
-        out = m.get_output(0, out = tvm.nd.empty((1, 32)))
+        out = m.get_output(0, out = tvm.nd.empty((16, 256)))
         np.testing.assert_allclose(out.asnumpy(), gt, rtol = 5e-5)
         print("tests")
         print(out)
@@ -459,9 +458,11 @@ def test_conv2d():
     device = "nnpu"
     target = tvm.target.create("llvm -device={}".format(device))
     inputs = nnvm.symbol.Variable("inputs")
+    inputs1 = nnvm.symbol.Variable("inputs1")
     z1 = nnvm.symbol.conv2d(data = inputs, channels = 64, kernel_size=(3, 3), padding = (0, 0), use_bias=False,
                                 layout='NHWC', kernel_layout='HWOI')
-    z = nnvm.symbol.relu(z1)
+    z2 = nnvm.symbol.sigmoid(z1)
+    z = nnvm.symbol.elemwise_add(z2, inputs1)
 
     compute_graph = nnvm.graph.create(z)
         
@@ -469,7 +470,7 @@ def test_conv2d():
         if target.device_name != "nnpu":
 
                 deploy_graph, lib, params = nnvm.compiler.build(compute_graph, target, shape = 
-                                        {"inputs" : input_shape}, dtype = "float32", target_host = target_host)
+                                        {"inputs" : input_shape, "inputs1" : (1, 14, 8, 64)}, dtype = "float32", target_host = target_host)
         else:
             with ScheduleProcHelper():
                 with nnpu.build_config():
@@ -479,8 +480,8 @@ def test_conv2d():
 
         ctx = tvm.context(str("nnpu"), 0) if device == "nnpu" else tvm.context(str("llvm"), 0)
         module = runtime.create(deploy_graph, lib, ctx)
-        a_np = np.random.uniform(size  = input_shape, low = -32, high = 32).astype(np.float32)
- 
+        a_np = np.random.uniform(size = input_shape, low = -32, high = 32).astype(np.float32)
+        b_np = np.random.uniform(size = (1, 14, 8, 64), low = -32, high = 32).astype(np.float32)
         module.set_input(inputs = a_np)
         module.run()
         print(deploy_graph.ir())
@@ -515,4 +516,5 @@ print("test_conv2d         :      ")
 test_conv2d()
 """
 nnpu.set_dump(False)
-test_conv2d()
+# test_conv2d()
+test_dense()

@@ -66,7 +66,7 @@ def compute_relu_default(data):
         pad_data = topi.nn.pad(data, before, after)
     else:
         pad_data = data
-    res = tvm.compute(pad_data.shape, lambda *i: tvm.max(pad_data(*i), Imm), name = "res", tag = "elemwise_relu")
+    res = tvm.compute(pad_data.shape, lambda *i: tvm.max(pad_data(*i), Imm), name = "relu_res", tag = "elemwise_relu")
     return res
 
 @reg.register_compute("relu", level = levels)
@@ -196,10 +196,10 @@ def compute_dense_default(data, weight, bias = None):
     out_dim, _ = weight.shape
     k = tvm.reduce_axis((0, in_dim))
     if bias is not None:
-        first = tvm.compute((batch_size, out_dim), lambda i,j : tvm.sum(data[i, k].astype(dtype_w) * weight[j, k].astype(dtype_w), axis = k), name = "first")
-        res = tvm.compute((batch_size, out_dim), lambda i,j : first[i, j] + bias[j], name = "res", tag="dense")
+        first = tvm.compute((batch_size, out_dim), lambda i,j : tvm.sum(data[i, k].astype(dtype_w) * weight[j, k].astype(dtype_w), axis = k), name = "first", tag = "inner_dense")
+        res = tvm.compute((batch_size, out_dim), lambda i,j : first[i, j] + bias[j], name = "dense_res", tag="packed_dense")
     else:
-        res = tvm.compute((batch_size,out_dim), lambda i,j : tvm.sum(data[i, k].astype(dtype_w) * weight[j, k].astype(dtype_w), axis = k), name = "res", tag = "dense")
+        res = tvm.compute((batch_size,out_dim), lambda i,j : tvm.sum(data[i, k].astype(dtype_w) * weight[j, k].astype(dtype_w), axis = k), name = "dense_res", tag = "packed_dense")
     return res
 
 @reg.register_compute("dense", level = levels)
@@ -213,37 +213,39 @@ def compute_dense(attrs, inputs, out):
 		return compute_dense_default(inputs[0], inputs[1], inputs[2])
 
 def schedule_dense_default(attrs, outs):
-    assert len(outs) == 1
+    outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
+    s = nnpu.create_schedule([x.op for x in outs])
     output = outs[0]
     ewise_ops = []
     ewise_inputs = []
     dense_res = []
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    """
+
     def _traverse(op):
-        print(op.tag)
         if topi.tag.is_broadcast(op.tag):
-            if not op.same_as(output.op):
-                ewise_ops.append(op)
+            ewise_ops.append(op)
             for tensor in op.input_tensors:
                 if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
                     ewise_inputs.append((op, tensor))
                 else:
                     _traverse(tensor.op)
         else:
-            assert op.tag == "dense"
+            assert op.tag == "packed_dense"
             dense_res.append(op)
 			
             
     _traverse(output.op)
-    """
-    dense_res.append(output.op)
+    ewise_ops.reverse()
+    
     assert len(dense_res) == 1
-    gemm_shape = (1, 16, 16)
+    gemm_shape = (8, 8, 8)
     factors = 16
     if attrs['use_bias'] == '0':
+        # get every stage's tensor of conv2d
         dense_stage = dense_res[0].output(0)
+
+        # cache read data/weight to scratchpad buffer, do pragma.
         data, weight = dense_stage.op.input_tensors
         if data.dtype == dtype_n:
             modes = 'n'
@@ -251,34 +253,79 @@ def schedule_dense_default(attrs, outs):
             modes = 'w'
         else:
             raise RuntimeError("NPU not support dtype %s"%data.dtype)
-        s = nnpu.create_schedule(output.op)
+        # cout = s.cache_write(output, env.dram_scope)
+        # c2out = s.cache_write(cout, env.uni_scratchpad_scope)
+        # dense_stage = s.cache_write(c2out, env.acc_scope)
         
-        cout = s.cache_write(output, env.dram_scope)
-        c2out = s.cache_write(cout, env.uni_scratchpad_scope)
-        dense_stage = s.cache_write(c2out, env.acc_scope)
+        cdata = s.cache_read(data, env.uni_scratchpad_scope, [dense_stage])
+        cweight = s.cache_read(weight, env.uni_scratchpad_scope, [dense_stage])
         
-        cdata = s.cache_read(data, env.dram_scope, [dense_stage])
-        cweight = s.cache_read(weight, env.dram_scope, [dense_stage])
-        c2data = s.cache_read(cdata, env.uni_scratchpad_scope, [dense_stage])
-        c2weight = s.cache_read(cweight, env.uni_scratchpad_scope, [dense_stage])
-        s[dense_stage].set_scope(env.acc_scope)
+        s[cdata].pragma(s[cdata].op.axis[1], env.dma_copy_to_buf)
+        s[cweight].pragma(s[cweight].op.axis[1], env.dma_copy_to_buf)
+        for consumer, tensor in ewise_inputs:
+            assert tensor in consumer.input_tensors
+            ctensor = s.cache_read(tensor, env.uni_scratchpad_scope, [consumer])
+            # s[ctensor].compute_at(s[cout], s[cout].op.axis[2])  
+            s[ctensor].pragma(s[ctensor].op.axis[0], env.dma_copy_to_buf)
+        # cache write output, and replace the compute stage of output with cached 'cout'
+        # s[output].pragma(s[output].op.axis[1], env.dma_copy_from_buf)
         
-        s[cdata].pragma(s[cdata].op.axis[0], env.dma_copy_pragma)
-        s[cweight].pragma(s[cweight].op.axis[0], env.dma_copy_pragma)
-        s[c2data].pragma(s[c2data].op.axis[0], env.scratchpad_ls)
-        s[c2weight].pragma(s[c2weight].op.axis[0], env.scratchpad_ls)
-        
-        s[c2out].pragma(s[c2out].op.axis[0], env.copy_acc2buf)
-        s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
-        s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
+        cout = s.cache_write(output, env.uni_scratchpad_scope)
+        if (dense_stage == output):
+            dense_stage = cout
+        else:
+            # otherwise, set_scope the conv2d_stage3 tensor to scratchpad
+            s[dense_stage].set_scope(env.uni_scratchpad_scope)
+            
+        for idx, op in enumerate(ewise_ops):
+            tensor = op.output(0)
+            if (op == output):
+                # if so, this compute op should be repalced with cout.
+                ewise_ops[idx] = cout.op
+            else:
+                # otherwise, set_scope
+                s[tensor].set_scope(env.uni_scratchpad_scope)
+         # cache write GEMM output, and set_scope.
+        dense_stage_acc = s.cache_write(dense_stage, env.acc_scope)
+        s[dense_stage].set_scope(env.uni_scratchpad_scope)
+        # schedule and tensorize conv2d, this may be modified in future.
+
+        xo, xi = s[dense_stage_acc].split(s[dense_stage_acc].op.axis[1], factor = gemm_shape[2])
+        ko, ki = s[dense_stage_acc].split(s[dense_stage_acc].op.reduce_axis[0], factor = gemm_shape[1])
+        no, ni = s[dense_stage_acc].split(s[dense_stage_acc].op.axis[0], factor = gemm_shape[0])
+        s[dense_stage_acc].reorder(no, xo, ko, ni, xi, ki)
+        if modes == 'n':
+            s[dense_stage_acc].tensorize(ni, env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out='acc'))
+        elif modes == 'w':
+            s[dense_stage_acc].tensorize(ni, env.intrins.get('GEMM', shape = gemm_shape, mode = modes, scope_out='acc'))
         
         xo, xi = s[dense_stage].split(s[dense_stage].op.axis[1], factor = gemm_shape[2])
-        ko, ki = s[dense_stage].split(s[dense_stage].op.reduce_axis[0], factor = gemm_shape[1])
-        s[dense_stage].reorder(xo, ko, s[dense_stage].op.axis[0], xi, ki)
-        if modes == 'n':
-            s[dense_stage].tensorize(s[dense_stage].op.axis[0], env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out='acc'))
-        elif modes == 'w':
-            s[dense_stage].tensorize(s[dense_stage].op.axis[0], env.intrins.get('GEMM', shape = gemm_shape, mode = 'modes', scope_out='acc'))
+        no, ni = s[dense_stage].split(s[dense_stage].op.axis[0], factor = gemm_shape[0])
+        s[dense_stage].reorder(no, xo, ni, xi)
+        s[dense_stage_acc].compute_at(s[dense_stage], xo)
+        s[dense_stage].pragma(ni, env.copy_acc2buf)
+
+        # split output.
+        # to tile output, the height and width of each part we are going to compute every loop.
+
+        oc_factor = 16
+        oco, oci = s[output].split(s[output].op.axis[1], oc_factor)
+        n_factor = 8
+        no, ni = s[output].split(s[output].op.axis[0], n_factor)
+        
+        s[output].reorder(oco, no, ni, oci)
+        # repragma output
+        s[output].pragma(oci, env.dma_copy_from_buf)
+        # compute_at data/weight load into outputs corresponding axis.
+        s[cweight].compute_at(s[output], oco)
+        # s[cdata].compute_at(s[output], ni)
+        # # now compute_at conv2d and ewise_ops into output's corresponding axis
+        s[dense_stage].compute_at(s[output], no)
+        print("0ooooooooooooooooooooooooo")
+        for op in ewise_ops:
+            s[op].compute_at(s[output], ni)
+        
+        
     else:
         dense_stage1 = dense_res[0].output(0)
         dense_stage, bias = dense_stage1.op.input_tensors
@@ -335,7 +382,70 @@ def schedule_dense_default(attrs, outs):
         s[dense_stage].compute_at(s[dense_stage1], xo)
         s[cbias].compute_at(s[dense_stage1], xo)
         s[c2bias].compute_at(s[dense_stage1], xo)
-        print(nnpu.lower(s, [data, weight, bias, output], simple_mode = True))
+    # tensorize all fused element-wise ops.
+    # TODO: add tensorize of other element-wise ops
+    for op in ewise_ops:
+        if op.tag == "elemwise_relu":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1], 
+                                env.intrins.get('VGTMI', imm_value = 0.0, mode = modes))
+        elif op.tag == "elemwise_log":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                env.intrins.get('VLog', mode = modes))
+        elif op.tag == "elemwise_elemwise_add":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                    env.intrins.get('VAddV', mode = modes))
+            
+        elif op.tag == "elemwise_elemwise_sub":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                env.intrins.get('VSubV', mode = modes))
+
+        elif op.tag == "elemwise_elemwise_mul":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                env.intrins.get('VMulV', mode = modes))
+
+        elif op.tag == "elemwise_exp":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                env.intrins.get('VExp', mode = modes))
+        elif op.tag == "elemwise_sigmoid":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            sigmoid_stage3 = tensor.op.input_tensors[0]
+            sigmoid_stage2 = sigmoid_stage3.op.input_tensors[0]
+            sigmoid_stage1 = sigmoid_stage2.op.input_tensors[0]
+
+            s[sigmoid_stage1].tensorize(s[sigmoid_stage1].leaf_iter_vars[-1], 
+                                        env.intrins.get('ISubV', imm_value = 0.0, mode = modes))
+
+
+            s[sigmoid_stage2].tensorize(s[sigmoid_stage2].leaf_iter_vars[-1],
+                                        env.intrins.get('VExp', mode = modes))
+
+            s[sigmoid_stage3].tensorize(s[sigmoid_stage3].leaf_iter_vars[-1],
+                                        env.intrins.get('VAddI', imm_value = 1.0, mode = modes))
+
+
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                        env.intrins.get('IDivV', imm_value = 1.0, mode = modes))
+
+            
+            
+
+            
+        else:
+            raise ValueError('unhandled element-wise op')
+    print(nnpu.lower(s, [data, weight, output], simple_mode = True))
     return s
 	
 @reg.register_schedule("dense", level = levels)
@@ -381,7 +491,7 @@ def compute_elemwise_add_default(lhs, rhs):
           n-D dimension
     """
     assert len(lhs.shape) == len(rhs.shape) 
-    res = tvm.compute(lhs.shape, lambda *i : lhs(*i) + rhs(*i), name = "res", tag = "elemwise_add")
+    res = tvm.compute(lhs.shape, lambda *i : lhs(*i) + rhs(*i), name = "elemwise_add_res", tag = "elemwise_elemwise_add")
     return res
 
 @reg.register_compute("elemwise_add", level = levels)
@@ -498,7 +608,7 @@ def compute_elemwise_sub_default(lhs, rhs):
     """
     print("nnpu : compute_elemwise_sub")
     assert len(lhs.shape) == len(rhs.shape) 
-    res = tvm.compute(lhs.shape, lambda *i : lhs(*i) - rhs(*i), name = "res", tag = "elemwise_add")
+    res = tvm.compute(lhs.shape, lambda *i : lhs(*i) - rhs(*i), name = "elemwise_sub_res", tag = "elemwise_elemwise_sub")
     return res
 
 @reg.register_compute("elemwise_sub", level = levels)
@@ -616,7 +726,7 @@ def compute_elemwise_mul_default(lhs, rhs):
     assert len(lhs.shape) == len(rhs.shape) 
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    res = tvm.compute(lhs.shape, lambda *i : lhs(*i).astype(dtype_w) * rhs(*i).astype(dtype_w), name = "res", tag = "elemwise_add")
+    res = tvm.compute(lhs.shape, lambda *i : lhs(*i).astype(dtype_w) * rhs(*i).astype(dtype_w), name = "elemwise_mul_res", tag = "elemwise_elemwise_mul")
     return res
 
 @reg.register_compute("elemwise_mul", level = levels)
@@ -638,25 +748,7 @@ def schedule_elemwise_mul_default(outs):
         modes = 'w'
     else:
         raise RuntimeError("NPU not support dtype %s"%output.op.input_tensors[0].dtype)
-        """
-    def _traverse(op):
-        if topi.tag.is_broadcast(op.tag):
-            if not op.same_as(output.op):
-                ewise_ops.append(op)
-            for tensor in op.input_tensors:
-                if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
-                    ewise_inputs.append((op, tensor))
-                else:
-                    _traverse(tensor.op)
-        else:
-            assert op.tag == "elemwise_add"
-            elemwise_add_res.append(op)
-    
-    print(output.op)
-    print(output.op.tag)
-    _traverse(output.op)
-    print(len(elemwise_add_res))
-    """
+
     elemwise_mul_res.append(output.op)
     assert len(elemwise_mul_res) == 1
     elemwise_mul_stage = elemwise_mul_res[0].output(0)
@@ -736,7 +828,7 @@ def compute_exp_default(input):
     print("nnpu : compute_exp")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    res = tvm.compute(input.shape, lambda *i : tvm.exp(input(*i).astype(dtype_w)), name = "res", tag = "elemwise_exp")
+    res = tvm.compute(input.shape, lambda *i : tvm.exp(input(*i).astype(dtype_w)), name = "exp_res", tag = "elemwise_exp")
     return res
 
 
@@ -852,7 +944,7 @@ def compute_log_default(data):
     print("nnpu : compute_log")
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    res = tvm.compute(data.shape, lambda *i : tvm.log(data(*i).astype(dtype_w)), name = 'res', tag = 'log')
+    res = tvm.compute(data.shape, lambda *i : tvm.log(data(*i).astype(dtype_w)), name = 'log_res', tag = 'elemwise_log')
     return res
 
 def schedule_log_default(outs):
@@ -875,22 +967,7 @@ def schedule_log_default(outs):
     else:
         raise RuntimeError("NPU not support dtype %s"%output.op.input_tensors[0].dtype)
     
-    def _traverse(op):
-        if topi.tag.is_broadcast(op.tag):
-            if not op.same_as(output.op):
-                ewise_ops.append(op)
-            for tensor in op.input_tensors:
-                if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
-                    ewise_inputs.append((op, tensor))
-                else:
-                    _traverse(tensor.op)
-        else:
-            assert op.tag == "log"
-            log_res.append(op)
-        
-    print("output.op : "%output.op)
-    _traverse(output.op)
-    
+    log_res.append(output.op)
     assert len(log_res) == 1
     log_stage = log_res[0].output(0)
     data = log_stage.op.input_tensors[0]
@@ -1105,8 +1182,9 @@ def schedule_conv2d_default(outs):
     print("nnpu : schedule_conv2d")
     env = nnpu.get_env()
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
-    s = tvm.create_schedule([x.op for x in outs])
+    s = nnpu.create_schedule([x.op for x in outs])
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
+    factors = 16
     output = outs[0]
     ewise_inputs = []
     ewise_ops = []
@@ -1118,9 +1196,13 @@ def schedule_conv2d_default(outs):
         modes = 'n'
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
-            print(op.tag)
-            # if op not in s.outputs:
             ewise_ops.append(op)
+            for tensor in op.input_tensors:
+                if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
+                    ewise_inputs.append((op, tensor))
+                else:
+                    _traverse(tensor.op)
+        elif op.tag.startswith('inner'):
             for tensor in op.input_tensors:
                 if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
                     ewise_inputs.append((op, tensor))
@@ -1130,13 +1212,9 @@ def schedule_conv2d_default(outs):
             assert op.tag == "packed_conv2d"
             conv2d_res.append(op)
 
-    
     _traverse(output.op)
-    print("===================================")
-    ewise_ops.reverse()
-    for i in ewise_ops:
-        print("ewise")
-        print(i.tag)
+    ewise_ops.reverse() 
+
     assert len(conv2d_res) == 1
     # get every stage's tensor of conv2d
     conv2d_stage = conv2d_res[0].output(0)
@@ -1161,6 +1239,13 @@ def schedule_conv2d_default(outs):
     s[cdata].pragma(s[cdata].op.axis[3], env.dma_copy_to_buf)
     s[ckernel].pragma(s[ckernel].op.axis[2], env.dma_copy_to_buf)
 
+    for consumer, tensor in ewise_inputs:
+        assert tensor in consumer.input_tensors
+        print(tensor)
+        ctensor = s.cache_read(tensor, env.uni_scratchpad_scope, [consumer])
+        # s[ctensor].compute_at(s[cout], s[cout].op.axis[2])  
+        s[ctensor].pragma(s[ctensor].op.axis[0], env.dma_copy_to_buf)
+
     gemm_shape = (1, 16, 16)
     # cache write output, and replace the compute stage of output with cached 'cout'
     s[output].pragma(s[output].op.axis[3], env.dma_copy_from_buf)
@@ -1171,7 +1256,7 @@ def schedule_conv2d_default(outs):
     else:
         # otherwise, set_scope the conv2d_stage3 tensor to scratchpad
         s[conv2d_stage].set_scope(env.uni_scratchpad_scope)
-    
+
     for idx, op in enumerate(ewise_ops):
         tensor = op.output(0)
         if (op == output):
@@ -1179,25 +1264,74 @@ def schedule_conv2d_default(outs):
             ewise_ops[idx] = cout.op
         else:
             # otherwise, set_scope
-            tensor.set_scope(env.uni_scratchpad_scope)            
-    
+            s[tensor].set_scope(env.uni_scratchpad_scope)
+
     # tensorize all fused element-wise ops.
     # TODO: add tensorize of other element-wise ops
     for op in ewise_ops:
         if op.tag == "elemwise_relu":
             tensor = op.output(0)
-            s[tensor].split(op.axis[-1], factor=16)
+            s[tensor].split(op.axis[-1], factor = factors)
             s[tensor].tensorize(s[tensor].leaf_iter_vars[-1], 
                                 env.intrins.get('VGTMI', imm_value = 0.0, mode = modes))
+        elif op.tag == "elemwise_log":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                env.intrins.get('VLog', mode = modes))
+        elif op.tag == "elemwise_elemwise_add":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                    env.intrins.get('VAddV', mode = modes))
+            
+        elif op.tag == "elemwise_elemwise_sub":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                env.intrins.get('VSubV', mode = modes))
+
+        elif op.tag == "elemwise_elemwise_mul":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                env.intrins.get('VMulV', mode = modes))
+
+        elif op.tag == "elemwise_exp":
+            tensor = op.output(0)
+            s[tensor].split(op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                env.intrins.get('VExp', mode = modes))
+        elif op.tag == "elemwise_sigmoid":
+            tensor = op.output(0)
+            sigmoid_stage3 = tensor.op.input_tensors[0]
+            sigmoid_stage2 = sigmoid_stage3.op.input_tensors[0]
+            sigmoid_stage1 = sigmoid_stage2.op.input_tensors[0]
+
+
+            s[sigmoid_stage1].split(s[sigmoid_stage1].op.axis[-1], factor = factors)
+            s[sigmoid_stage1].tensorize(s[sigmoid_stage1].leaf_iter_vars[-1], 
+                                        env.intrins.get('ISubV', imm_value = 0.0, mode = modes))
+
+            s[tensor].split(s[tensor].op.axis[-1], factor = factors)
+            s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
+                                        env.intrins.get('IDivV', imm_value = 1.0, mode = modes))
+
+            
+            s[sigmoid_stage3].split(s[sigmoid_stage3].op.axis[-1], factor = factors)
+            s[sigmoid_stage3].tensorize(s[sigmoid_stage3].leaf_iter_vars[-1],
+                                        env.intrins.get('VAddI', imm_value = 1.0, mode = modes))
+
+            s[sigmoid_stage2].split(s[sigmoid_stage2].op.axis[-1], factor = factors)
+            s[sigmoid_stage2].tensorize(s[sigmoid_stage2].leaf_iter_vars[-1],
+                                        env.intrins.get('VExp', mode = modes))
+            
+            
+            
+            
         else:
             raise ValueError('unhandled element-wise op')
-
-    print(ewise_inputs)
-    for consumer, tensor in ewise_inputs:
-        ctensor = s.cache_read(tensor, env.uni_scratchpad_scope, [consumer])
-        # s[ctensor].compute_at(s[cout], s[cout].op.axis[2])  ????
-        s[ctensor].pragma(s[ctensor].op.axis[0], env.dma_copy_to_buf)
-        # s[c2tensor].compute_at(s[cout], s[cout].op.axis[2])   ????
+    
 
     # cache write GEMM output, and set_scope.
     conv2d_stage_acc = s.cache_write(conv2d_stage, env.acc_scope)
@@ -1215,8 +1349,7 @@ def schedule_conv2d_default(outs):
     if modes == 'w':
         s[conv2d_stage_acc].tensorize(ni, env.intrins.get('GEMM', shape = gemm_shape, mode = modes, scope_out = 'acc'))    
     elif modes == 'n':
-        s[conv2d_stage_acc].tensorize(ni, env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out = 'acc'))
-        pass
+        s[conv2d_stage_acc].tensorize(ni, env.intrins.get('GEMM', shape = gemm_shape, mode = 'inc', scope_out = 'acc'))    
     
     no, ni = s[conv2d_stage].split(s[conv2d_stage].op.axis[0], gemm_shape[0])
     oco, oci = s[conv2d_stage].split(s[conv2d_stage].op.axis[3], gemm_shape[2])
@@ -1252,7 +1385,7 @@ def schedule_conv2d_default(outs):
     for op in ewise_ops:
         s[op].compute_at(s[output], wi)
 
-    print(tvm.lower(s, [data, kernel, output], simple_mode=True))
+    # print(tvm.lower(s, [data, kernel, ewise_inputs[0][1],  output], simple_mode=True))
     return s
 
     
@@ -1498,15 +1631,15 @@ def compute_sigmoid_default(data):
     elif data.dtype == dtype_w:
         modes = 'w'
     Imm = tvm.const(0, data.dtype)
-    first = tvm.compute(data.shape, lambda *i : Imm - data(*i), name = 'first')
+    first = tvm.compute(data.shape, lambda *i : Imm - data(*i), name = 'inner_first', tag = "inner_first")
 
-    second = tvm.compute(data.shape, lambda *i : tvm.exp(first(*i).astype(dtype_w)), name = 'second')
+    second = tvm.compute(data.shape, lambda *i : tvm.exp(first(*i).astype(dtype_w)), name = 'inner_second', tag = "inner_second")
 
     Imm_1 = tvm.const(1, dtype_w)
 
-    thrid = tvm.compute(data.shape, lambda *i : second(*i) + Imm_1, name = 'thrid')
+    thrid = tvm.compute(data.shape, lambda *i : second(*i) + Imm_1, name = 'inner_thrid', tag = "inner_thrid")
 
-    res = tvm.compute(data.shape, lambda *i : Imm_1 / thrid(*i), name = 'res')
+    res = tvm.compute(data.shape, lambda *i : Imm_1 / thrid(*i), name = 'sigmoid_res', tag = "elemwise_sigmoid")
 
     return res
 

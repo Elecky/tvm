@@ -172,7 +172,7 @@ def _build_copy(dst, src,
             # iterate from 0 to src_shape[level]
             var = tvm.var('i{0}'.format(level))
             body = _build(src_base + var * src_strides[level],
-                          dst_base + (var + (0 if pad_before is None else pad_before[level])) \
+                          dst_base + (var + (0 if not pad_before else pad_before[level])) \
                                      * dst_strides[level],
                           level + 1)
             loop = tvm.make.For(var, 0, src_shape[level], 0, 0, body)  # fortype = serial)
