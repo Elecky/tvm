@@ -19,15 +19,7 @@ class NNPUIRUseDefAnalysis : public IRMutator {
  public:
   Stmt Mutate_(const AttrStmt *op, const Stmt& s) final {
     if (op->attr_key == attr::coproc_scope) {
-      IterVar iv(op->node.node_);
-      CHECK_NE(iv->thread_tag.length(), 0U);
-      // thread_extent can appear multiple times
-      // use the first appearance as def.
-      if (!use_count_.count(iv->var.get())) {
-        this->HandleDef(iv->var.get());
-        thread_axis_.push_back(iv);
-        coproc_scope = op->value;
-      }
+      coproc_scope = op->value;
 
       Expr value = op->value;
       // if (visit_coproc_scope) {
