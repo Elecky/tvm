@@ -321,7 +321,6 @@ def schedule_dense_default(attrs, outs):
         # s[cdata].compute_at(s[output], ni)
         # # now compute_at conv2d and ewise_ops into output's corresponding axis
         s[dense_stage].compute_at(s[output], no)
-        print("0ooooooooooooooooooooooooo")
         for op in ewise_ops:
             s[op].compute_at(s[output], ni)
         
@@ -428,20 +427,14 @@ def schedule_dense_default(attrs, outs):
             s[sigmoid_stage1].tensorize(s[sigmoid_stage1].leaf_iter_vars[-1], 
                                         env.intrins.get('ISubV', imm_value = 0.0, mode = modes))
 
-
             s[sigmoid_stage2].tensorize(s[sigmoid_stage2].leaf_iter_vars[-1],
                                         env.intrins.get('VExp', mode = modes))
 
             s[sigmoid_stage3].tensorize(s[sigmoid_stage3].leaf_iter_vars[-1],
                                         env.intrins.get('VAddI', imm_value = 1.0, mode = modes))
 
-
             s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
                                         env.intrins.get('IDivV', imm_value = 1.0, mode = modes))
-
-            
-            
-
             
         else:
             raise ValueError('unhandled element-wise op')
@@ -1203,6 +1196,7 @@ def schedule_conv2d_default(outs):
                 else:
                     _traverse(tensor.op)
         elif op.tag.startswith('inner'):
+            print(op)
             for tensor in op.input_tensors:
                 if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
                     ewise_inputs.append((op, tensor))
@@ -1249,6 +1243,9 @@ def schedule_conv2d_default(outs):
     gemm_shape = (1, 16, 16)
     # cache write output, and replace the compute stage of output with cached 'cout'
     s[output].pragma(s[output].op.axis[3], env.dma_copy_from_buf)
+    # NOTE: this may be a bug of tvm, after cache_write, cout.input_tensors are not in schedule,
+    # so we store it for later use.
+    output_inputs = output.op.input_tensors
     cout = s.cache_write(output, env.uni_scratchpad_scope)
     
     if (conv2d_stage == output):
@@ -1304,30 +1301,38 @@ def schedule_conv2d_default(outs):
                                 env.intrins.get('VExp', mode = modes))
         elif op.tag == "elemwise_sigmoid":
             tensor = op.output(0)
-            sigmoid_stage3 = tensor.op.input_tensors[0]
+            if (op == ewise_ops[-1]):
+                sigmoid_stage3 = output_inputs[0]
+            else:
+                sigmoid_stage3 = op.input_tensors[0]
             sigmoid_stage2 = sigmoid_stage3.op.input_tensors[0]
             sigmoid_stage1 = sigmoid_stage2.op.input_tensors[0]
 
+            print(s[tensor].scope)
+            print(sigmoid_stage3.op)
+            print(s[sigmoid_stage3])
 
             s[sigmoid_stage1].split(s[sigmoid_stage1].op.axis[-1], factor = factors)
+            s[sigmoid_stage1].set_scope(env.uni_scratchpad_scope)
             s[sigmoid_stage1].tensorize(s[sigmoid_stage1].leaf_iter_vars[-1], 
                                         env.intrins.get('ISubV', imm_value = 0.0, mode = modes))
+
+            s[sigmoid_stage2].split(s[sigmoid_stage2].op.axis[-1], factor = factors)
+            s[sigmoid_stage2].set_scope(env.uni_scratchpad_scope)
+            s[sigmoid_stage2].tensorize(s[sigmoid_stage2].leaf_iter_vars[-1],
+                                        env.intrins.get('VExp', mode = modes))
+            s[sigmoid_stage1].compute_at(s[sigmoid_stage2],s[sigmoid_stage2].leaf_iter_vars[-2])
+
+            s[sigmoid_stage3].split(s[sigmoid_stage3].op.axis[-1], factor = factors)
+            s[sigmoid_stage3].set_scope(env.uni_scratchpad_scope)
+            s[sigmoid_stage3].tensorize(s[sigmoid_stage3].leaf_iter_vars[-1],
+                                        env.intrins.get('VAddI', imm_value = 1.0, mode = modes))       
+            s[sigmoid_stage2].compute_at(s[sigmoid_stage3], s[sigmoid_stage3].leaf_iter_vars[-2])
 
             s[tensor].split(s[tensor].op.axis[-1], factor = factors)
             s[tensor].tensorize(s[tensor].leaf_iter_vars[-1],
                                         env.intrins.get('IDivV', imm_value = 1.0, mode = modes))
-
-            
-            s[sigmoid_stage3].split(s[sigmoid_stage3].op.axis[-1], factor = factors)
-            s[sigmoid_stage3].tensorize(s[sigmoid_stage3].leaf_iter_vars[-1],
-                                        env.intrins.get('VAddI', imm_value = 1.0, mode = modes))
-
-            s[sigmoid_stage2].split(s[sigmoid_stage2].op.axis[-1], factor = factors)
-            s[sigmoid_stage2].tensorize(s[sigmoid_stage2].leaf_iter_vars[-1],
-                                        env.intrins.get('VExp', mode = modes))
-            
-            
-            
+            s[sigmoid_stage3].compute_at(s[tensor], s[tensor].leaf_iter_vars[-2])
             
         else:
             raise ValueError('unhandled element-wise op')
