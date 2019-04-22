@@ -545,7 +545,8 @@ regNo_t NNPUAssembler::parseReg(const string &token)
     {
         // registers that has special names.
         static const std::unordered_map<string, regNo_t> nameToNo 
-                    { {"zero", 0}, {"sp", 1}, {"fp", 2} };
+                    { {"zero", getRegNo(NNPUReg::Zero)}, {"sp", getRegNo(NNPUReg::SP)}, 
+                      {"fp", getRegNo(NNPUReg::FP)}, {"coreidx", getRegNo(NNPUReg::CoreIdx)} };
         
         string nameLCase(token.begin() + 1, token.end());
         for (auto &c : nameLCase)
@@ -1190,6 +1191,7 @@ extern "C" void NNPU_AssembleAndRun(
                     string asm_code, 
                     string func_name, 
                     int coproc_scope,
+                    unsigned core_extent /* core number */ ,
                     std::vector<int32_t> args)
 {
     // auto &os = LOG(INFO);
@@ -1206,11 +1208,15 @@ extern "C" void NNPU_AssembleAndRun(
 
     // os << "begin assembling\n";
 
+    auto sim = nnpu::Simulator::ThreadLocal();
+
+    CHECK_EQ(core_extent, sim->GetCoreExtent())
+        << ", the core extent of simulator and compiled NNPU device function doesn't match";
+
     nnpu::NNPUAssembler assembler;
     assembler.Assemble(asm_code);
 
     // assign arguments.
-    auto sim = nnpu::Simulator::ThreadLocal();
     uint32_t fp = sim->GetSclrMemSize() - args.size() * sizeof(uint32_t);
     // LOG(INFO) << "FP = " << fp << std::endl;
     for (std::size_t i = 0; i != args.size(); ++i)
@@ -1252,9 +1258,11 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
                 << ", expecting 2nd argument to be function name [string]";
             CHECK_EQ(args.type_codes[2], kDLInt)
                 << ", expecting 3rd argument to be coproc scope [int]";
+            CHECK_EQ(args.type_codes[3], kDLInt)
+                << ", expecting 3rd argument to be coproc scope [int]";
 
             std::vector<int32_t> dev_args;  // arguments to be passed to device function.
-            for (int i = 3; i < args.num_args; ++i)
+            for (int i = 4; i < args.num_args; ++i)
             {
                 CHECK_EQ(args.type_codes[i], kDLInt)
                     << ", only int type arguments can be passed to NNPU device";
@@ -1264,5 +1272,6 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
             NNPU_AssembleAndRun(args[0].operator std::__cxx11::string(), 
                                 args[1].operator std::__cxx11::string(),
                                 static_cast<int>(args[2]),
+                                static_cast<int>(args[3]),
                                 dev_args);
         });

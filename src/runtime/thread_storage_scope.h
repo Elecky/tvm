@@ -122,6 +122,9 @@ struct ThreadScope {
     } else if (s.compare(0, 10, "threadIdx.") == 0) {
       r.rank = 1;
       r.dim_index = static_cast<int>(s[10] - 'x');
+    } else if (s == "coreIdx") {
+      r.rank = 0;
+      r.dim_index = 0;
     } else {
       LOG(FATAL) << "Unknown threadscope " << s;
     }

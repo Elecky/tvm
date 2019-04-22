@@ -28,6 +28,21 @@ class NNPUIRUseDefAnalysis : public IRMutator {
       Stmt body = this->Mutate(op->body);
       if (body.same_as(op->body)) return s;
       return AttrStmt::make(op->node, op->attr_key, value, body);
+    } else if (op->attr_key == attr::thread_extent) {
+      IterVar iv(op->node.node_);
+      CHECK_NE(iv->thread_tag.length(), 0U);
+      // thread_extent can appear multiple times
+      // use the first appearance as def.
+      if (!use_count_.count(iv->var.get())) {
+        this->HandleDef(iv->var.get());
+        thread_axis_.push_back(iv);
+        thread_extent_.push_back(op->value);
+      }
+
+      Expr value = op->value;
+      Stmt body = this->Mutate(op->body);
+      if (value.same_as(op->value) && body.same_as(op->body)) return s;
+      return AttrStmt::make(op->node, op->attr_key, value, body);
     // NNPU accelerator has no channel_read/write_scope attribute.
     // } else if (op->attr_key == attr::channel_write_scope ||
     //            op->attr_key == attr::channel_read_scope) {
@@ -132,6 +147,7 @@ class NNPUIRUseDefAnalysis : public IRMutator {
   // bool visit_coproc_scope{true};
   Array<Var> undefined_;
   Array<IterVar> thread_axis_;
+  Array<Expr> thread_extent_;
   Expr coproc_scope;
   std::unordered_map<const Variable*, int> use_count_;
   std::unordered_map<const Variable*, int> def_count_;
@@ -146,7 +162,8 @@ class NNPUHostDeviceSplitter : public IRMutator {
   // }
 
   Stmt Mutate_(const AttrStmt *op, const Stmt& s) final {
-    if (op->attr_key == attr::coproc_scope) {
+    if (op->attr_key == attr::coproc_scope
+        || op->attr_key == attr::thread_extent) {
       return SplitDeviceFunc(s);
     }
     return IRMutator::Mutate_(op, s);
@@ -206,6 +223,14 @@ class NNPUHostDeviceSplitter : public IRMutator {
       call_args.push_back(arg);
     }
     call_args.push_back(m.coproc_scope);
+    if (m.thread_extent_.size() == 0) {
+      call_args.push_back(IntImm::make(HalideIR::Int(32), 1));
+    }
+    else {
+      CHECK_EQ(m.thread_extent_.size(), 1) 
+        << ", NNPU thread_extent should have only one element, namely coreIdx";
+      call_args.push_back(m.thread_extent_[0]);
+    }
 
     device_funcs_.emplace_back(f_device);
     return Evaluate::make(Call::make(

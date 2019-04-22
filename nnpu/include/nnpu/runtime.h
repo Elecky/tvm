@@ -29,9 +29,17 @@ void NNPUBufferCopy(const void* from,
                     size_t size,
                     int kind_mask);
 
+/**!
+ * \brief assemble and run on NNPU simulator
+ * \param asm_code: the target assembly code of device.
+ * \param func_name: which function to run.
+ * \param core_extent: the number of cores this function should be launched on.
+ * \param args: arguments passed to device function.
+*/
 void NNPU_AssembleAndRun(std::string asm_code, 
                          std::string func_name,
                          int coproc_scope, 
+                         unsigned core_extent,
                          std::vector<int32_t> args);
 
 TVM_DLL void *NNPUBufferCPUPtr(void *buffer);

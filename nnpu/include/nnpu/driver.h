@@ -96,6 +96,12 @@ public:
     */
     virtual std::size_t GetSclrMemSize() const = 0;
 
+    /**!
+     * \brief get the core extent, ie, core numbers.
+     *        default implementation returns 1, multi-core simulator should return corresponding value.
+    */
+    virtual unsigned GetCoreExtent() const;
+
     // some static members for device setting and finding.
     /*!
     * \brief get a thread local simulator instance 
@@ -123,6 +129,11 @@ protected:
 private:
     static std::unordered_map<int, std::shared_ptr<Simulator>> devices;
 };
+
+enum class NNPUReg { Zero = 0, SP = 1, FP = 2, CoreIdx = 3 };
+inline regNo_t getRegNo(NNPUReg reg) {
+    return static_cast<regNo_t>(reg);
+}
 
 /*!
 * class copied from tvm.vta, used for managing buffer on host.

@@ -357,7 +357,6 @@ def lower(sch,
     # Phase 0
     if isinstance(sch, schedule.Schedule):
         stmt = form_body(sch)
-
     for f in lower_phase0:
         stmt = f(stmt)
     # Phase 1
@@ -435,7 +434,8 @@ def _build_for_device(flist, target, target_host):
             func = ir_pass.ThreadSync(func, "warp")
             warp_size = target.thread_warp_size
             func = ir_pass.LowerThreadAllreduce(func, warp_size)
-            fsplits = [s for s in ir_pass.SplitHostDevice(func)]
+            if (target.target_name != 'nnpu'):
+                fsplits = [s for s in ir_pass.SplitHostDevice(func)]
             # split host device for nnpu backend.
             if (target.target_name == 'nnpu'):
                 # print('trying to split')

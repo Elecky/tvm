@@ -32,11 +32,14 @@ public:
 
   llvm::Value *VisitExpr_(const Call *op) final;
 
-  // used for debugging, disable optimize
-  void Optimize() override;
-
   // WARNING: CodeGenLLVM has no virtual destructor, so we shouldn't add any field member!!
   //          since it's common to save a pointer to CodeGenLLVM derivate in unique_ptr.
+
+protected:
+  llvm::Value* GetThreadIndex(const IterVar& iv) override;
+
+  // change optimize level.
+  void Optimize() override;
 };
 
 void CodeGenNNPU::AddFunction(const LoweredFunc &f)
@@ -131,6 +134,15 @@ llvm::Value *CodeGenNNPU::VisitExpr_(const Call *op)
   {
     return CodeGenLLVM::VisitExpr_(op);
   }
+}
+
+llvm::Value* CodeGenNNPU::GetThreadIndex(const IterVar& iv) {
+  runtime::ThreadScope ts = runtime::ThreadScope::make(iv->thread_tag);
+  CHECK_EQ(ts.rank, 0) << ", NNPU coreIdx thread should have rank 0";
+  CHECK_EQ(ts.dim_index, 0) << ", NNPU coreIdx thread should have dim_index 0";
+  llvm::Intrinsic::ID intrin_id = ::llvm::Intrinsic::NNPU_GetCoreIdx;
+  llvm::Function* f = llvm::Intrinsic::getDeclaration(module_.get(), intrin_id);
+  return builder_->CreateCall(f, {});
 }
 
 class FPassManager : public llvm::legacy::FunctionPassManager {

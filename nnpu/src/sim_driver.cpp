@@ -106,6 +106,10 @@ DevType Simulator::DefaultType = DevType::S0;
 
 std::unordered_map<int, std::shared_ptr<Simulator>> Simulator::devices;
 
+unsigned Simulator::GetCoreExtent() const {
+    return 1;
+}
+
 /*!
 * use dmlc Thread Local to achieve thread local instance.
 */

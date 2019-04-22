@@ -1,6 +1,9 @@
 # data configs
-dtype_w: float32
-dtype_n: float16
+dtype_w: int16
+dtype_n: int8
+
+multi_core: true
+core_extent: 4
 
 # scalar register file configs
 register_file:
