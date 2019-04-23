@@ -182,8 +182,6 @@ namespace nnpu
 // simulator creaters
 std::shared_ptr<nnpu::Simulator> createS0Simulator(YAML::Node cfg);
 
-std::shared_ptr<nnpu::Simulator> createS1Simulator(YAML::Node cfg);
-
 std::shared_ptr<nnpu::Simulator> createSCSimulator(YAML::Node cfg);
 }
 
@@ -200,9 +198,6 @@ std::shared_ptr<nnpu::Simulator> NNPUDevAlloc(nnpu::DevType type, YAML::Node cfg
     {
     case Type::S0:
         return nnpu::createS0Simulator(cfg);
-
-    case Type::S1:
-        return nnpu::createS1Simulator(cfg);
 
     case Type::SC:
         return nnpu::createSCSimulator(cfg);
@@ -231,10 +226,6 @@ TVM_REGISTER_GLOBAL("nnpu.set_dev")
         if (t_str == s0)
         {
             devType = Type::S0;
-        }
-        else if (t_str == s1)
-        {
-            devType = Type::S1;
         }
         else if (t_str == sc)
         {
