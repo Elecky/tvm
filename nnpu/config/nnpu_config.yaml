@@ -2,7 +2,7 @@
 dtype_w: int16
 dtype_n: int8
 
-multi_core: true
+multi_core: false
 core_extent: 4
 
 # scalar register file configs
