@@ -31,7 +31,7 @@ memory_queues:
   vector_unit: 4
   matrix_unit: 4
   edram_dma_unit: 4
-  buffer_copy_set_unit: 2
+  buffer_copy_set_unit: 4
 
 #-------- configs follows are related to storage structure. --------#
 # dram configs
@@ -41,7 +41,7 @@ dram:
   width_per_channel: 64
   # log size in byte of every channel
   # due to the limit of tvm, the size is represented by int.
-  log_size_per_channel: 26
+  log_size_per_channel: 22
   # memory address map policy. NOT USED AT PRESENT
   map_policy: interleaved
   # timing related parameters
@@ -56,7 +56,7 @@ scratchpad:
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
-  log_size_per_channel: 24
+  log_size_per_channel: 18
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -64,11 +64,11 @@ scratchpad:
   map_policy: interleaved
 
 acc_buffer:
-  nchannel: 4
+  nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
-  log_size_per_channel: 10
+  log_size_per_channel: 8
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -109,7 +109,7 @@ misc_delays:
 
 DMA:
   start_up_time: 5  # the time in cycles needed to start a DMA.
-  speed: 16  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
+  speed: 8  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
 
 delay_modeling_switch:
   DMA: true
