@@ -374,7 +374,7 @@ def inject_scratchpad_ls(stmt_in):
             body = mark_coproc_scope(body)
             return body
 
-        elif (src.scope in scopes and dst.scope == env.dram_scope):
+        elif (env.is_scratchpad_scope(src.scope) and dst.scope == env.dram_scope):
             #assert not (pad_after or pad_before), \
             #    'padding is not supported when copying to global'
             src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
