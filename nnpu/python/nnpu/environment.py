@@ -36,9 +36,8 @@ class Environment(object):
     current = None
     # some constants
     dram_scope = 'local.nnpu_dram'
-    uni_scratchpad_scope = 'local.nnpu_scratchpad'
-    vctr_scratch_scope = 'local.nnpu_vscratchpad'
-    mat_scratch_scope = 'local.nnpu_mscratchpad'
+    scratchpad_scope_prefix = 'local.nnpu_scratchpad'
+    uni_scratchpad_scope = scratchpad_scope_prefix + '0'
     acc_scope = 'local.nnpu_acc_buffer'
     # compiler pragmas
     dma_copy_pragma = 'nnpu_dma_copy'
@@ -71,14 +70,26 @@ class Environment(object):
         # reset device based on the last Environment
         #set_device(Environment.current)
 
-    def scope2config(self, scope):
+    def scratchpad_scope(self, scratchpad_id = 0):
+        assert scratchpad_id < 4, 'scratchpad_id should be less than 4'
+        return self.scratchpad_scope_prefix + str(scratchpad_id)
+
+    def scratchpad_scope_to_idx(self, scope):
+        assert self.is_scratchpad_scope(scope), \
+            '{0} is not a scratchpad scope name'
+        id = scope[len(self.scratchpad_scope_prefix):]
+        id = int(id)
+        assert id < 4, 'scratchpad_id should be less than 4'
+        return id
+
+    def is_scratchpad_scope(self, scope):
+        return scope.startswith(self.scratchpad_scope_prefix)
+
+    def get_scope_config(self, scope):
         key = None
-        if (scope == self.uni_scratchpad_scope):
-            key = 'scratchpad'
-        elif (scope == self.vctr_scratch_scope):
-            key = 'vctr_scratchpad'
-        elif (scope == self.mat_scratch_scope):
-            key = 'mat_scratchpad'
+        if (self.is_scratchpad_scope(scope)):
+            id = self.scratchpad_scope_to_idx(scope)
+            key = 'scratchpad' + str(id) if id != 0 else 'scratchpad'
         elif (scope == self.acc_scope):
             key = 'acc_buffer'
         else:
@@ -111,18 +122,37 @@ def mem_info_dram():
                          max_num_bits=dram_cfg['nchannel'] * (1 << dram_cfg['log_size_per_channel']) * 8,
                          head_address=None)
 
+def get_scratchpad_memory_info(env, scratchpad_idx):
+    scope = env.scratchpad_scope(scratchpad_idx)
+    buffer_cfg = env.get_scope_config(scope)
+    if (buffer_cfg and buffer_cfg['enable']):
+        return tvm.make.node("MemoryInfo",
+                            unit_bits=8,
+                            max_simd_bits=buffer_cfg['width_per_channel'],
+                            max_num_bits=buffer_cfg['nchannel'] * (1 << buffer_cfg['log_size_per_channel']) * 8,
+                            head_address=None)
+    else:
+        raise ValueError('scratchpad buffer "{0}" is not enabled, please check config file'.format(scope))
+
 @tvm.register_func("tvm.info.mem.{0}".format(Environment.uni_scratchpad_scope))
 def mem_info_scratchpad():
     spec = get_env()
-    if (spec.cfg['scratchpad_design'] == 'unified'):
-        buffer_cfg = spec.cfg['scratchpad']
-        return tvm.make.node("MemoryInfo",
-                             unit_bits=8,
-                             max_simd_bits=buffer_cfg['width_per_channel'],
-                             max_num_bits=buffer_cfg['nchannel'] * (1 << buffer_cfg['log_size_per_channel']) * 8,
-                             head_address=None)
-    else:
-        return None
+    return get_scratchpad_memory_info(spec, 0)
+
+@tvm.register_func("tvm.info.mem.{0}{1}".format(Environment.scratchpad_scope_prefix, '1'))
+def mem_info_scratchpad():
+    spec = get_env()
+    return get_scratchpad_memory_info(spec, 1)
+
+@tvm.register_func("tvm.info.mem.{0}{1}".format(Environment.scratchpad_scope_prefix, '2'))
+def mem_info_scratchpad():
+    spec = get_env()
+    return get_scratchpad_memory_info(spec, 2)
+
+@tvm.register_func("tvm.info.mem.{0}{1}".format(Environment.scratchpad_scope_prefix, '3'))
+def mem_info_scratchpad():
+    spec = get_env()
+    return get_scratchpad_memory_info(spec, 3)
 
 @tvm.register_func("tvm.info.mem.%s" % Environment.acc_scope)
 def mem_info_acc():
@@ -134,13 +164,6 @@ def mem_info_acc():
                          max_num_bits=acc_cfg['nchannel'] * (1 << acc_cfg['log_size_per_channel']) * 8,
                          head_address=None)
 
-@tvm.register_func("tvm.info.mem.{0}".format(Environment.vctr_scratch_scope))
-def mem_info_vscratchpad():
-    raise NotImplementedError
-
-@tvm.register_func("tvm.info.mem.{0}".format(Environment.mat_scratch_scope))
-def mem_info_mscratchpad():
-    raise NotImplementedError
 
 def init_default_env():
     """Iniitalize the default global env"""

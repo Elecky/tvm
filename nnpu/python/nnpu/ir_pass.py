@@ -4,7 +4,7 @@ additional ir pass for nnpu, to transform ir before lowering
 
 from .environment import get_env
 import tvm
-from helper import dtype_bytes as get_dtype_bytes
+from helper import dtype_bytes as get_dtype_bytes, get_access_ptr
 from topi import util
 import utils
 from intrins import make_intrin_call
@@ -234,7 +234,7 @@ def inject_dma_intrin(stmt_in):
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMALoad", tvm_zero,
                                 src.data, (src_idx + src.elem_offset) * dtype_bytes,
-                                dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
+                                get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                         )
@@ -253,7 +253,7 @@ def inject_dma_intrin(stmt_in):
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMAStore", tvm_zero,
                                 dst.data, (dst_idx + dst.elem_offset) * dtype_bytes,
-                                src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
+                                get_access_ptr(src, env, 'r') + src_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                         )
@@ -285,7 +285,7 @@ def inject_dmacopy2buf_intrin(stmt_in):
                 util.equal_const_int(dst.strides[ndim - 1], 1), \
             'stride of last dimension must be 1, ie, data must be compact'
 
-        if (src.scope == 'global' and dst.scope == env.uni_scratchpad_scope):
+        if (src.scope == 'global' and env.is_scratchpad_scope(dst.scope)):
             src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
 
@@ -297,13 +297,13 @@ def inject_dmacopy2buf_intrin(stmt_in):
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMABufLoad", tvm_zero,
                                 src.data, (src_idx + src.elem_offset) * dtype_bytes,
-                                dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
+                                get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                         )
             body = mark_coproc_scope(body)
             return body
-        elif (src.scope == env.uni_scratchpad_scope and dst.scope == 'global'):
+        elif (env.is_scratchpad_scope(src.scope) and dst.scope == 'global'):
             assert not (pad_after or pad_before), \
                 'padding is not supported when copying to global'
             src_shape, src_strides, dst_shape, dst_strides, _, _ = \
@@ -316,7 +316,7 @@ def inject_dmacopy2buf_intrin(stmt_in):
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.DMABufStore", tvm_zero,
                                 dst.data, (dst_idx + dst.elem_offset) * dtype_bytes,
-                                src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
+                                get_access_ptr(src, env, 'r') + src_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                         )
@@ -354,10 +354,8 @@ def inject_scratchpad_ls(stmt_in):
             'stride of last dimension must be 1'
         assert util.equal_const_int(dst.strides[ndim - 1], 1), \
             'stride of last dimension must be 1'
-        
-        scopes = [env.uni_scratchpad_scope, env.vctr_scratch_scope, env.mat_scratch_scope]
 
-        if (src.scope == env.dram_scope and dst.scope in scopes):
+        if (src.scope == env.dram_scope and env.is_scratchpad_scope(dst.scope)):
             src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
             
@@ -368,8 +366,8 @@ def inject_scratchpad_ls(stmt_in):
                         # TODO: here should assert that both src_stride & dst_stride equals 1!
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.ScratchpadLoad", tvm_zero,
-                                src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
-                                dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
+                                get_access_ptr(src, env, 'r') + src_idx * dtype_bytes,
+                                get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                     )
@@ -387,8 +385,8 @@ def inject_scratchpad_ls(stmt_in):
                         lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                             tvm.call_llvm_intrin_with_side_effect(
                                 'void', "llvm.NNPU.ScratchpadStore", tvm_zero,
-                                dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
-                                src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
+                                get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes,
+                                get_access_ptr(src, env, 'r') + src_idx * dtype_bytes,
                                 nUnit * dtype_bytes),
                         _error
                     )
@@ -420,9 +418,8 @@ def inject_scratchpad_copy(stmt_in):
             {0} vs {1}'.format(src.dtype, dst.dtype)
         
         # check memory scope
-        scopes = [env.uni_scratchpad_scope, env.vctr_scratch_scope, env.mat_scratch_scope]
-        assert src.scope in scopes, 'source buffer scope is not scratchpad'
-        assert dst.scope in scopes, 'dst buffer scope is not scratchpad'
+        assert env.is_scratchpad_scope(src.scope), 'source buffer scope is not scratchpad'
+        assert env.is_scratchpad_scope(dst.scope), 'destination buffer scope is not scratchpad'
 
         dtype_bytes = get_dtype_bytes(src.dtype)
         
@@ -435,15 +432,15 @@ def inject_scratchpad_copy(stmt_in):
                     lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                         tvm.call_llvm_intrin_with_side_effect(
                             'void', "llvm.NNPU.ScratchpadCopy", tvm_zero,
-                            dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes, 
+                            get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes, 
                             dst_stride * dtype_bytes,
-                            src.access_ptr('r', 'int32') + src_idx * dtype_bytes, 
+                            get_access_ptr(src, env, 'r') + src_idx * dtype_bytes, 
                             src_stride * dtype_bytes,
                             dtype_bytes, nUnit),
                     lambda index, nUnit, stride:
                         tvm.call_llvm_intrin_with_side_effect(
                             "void", 'llvm.NNPU.Memset', tvm_zero,
-                            dst.access_ptr('w', 'int32') + index * dtype_bytes, 
+                            get_access_ptr(dst, env, 'w') + index * dtype_bytes, 
                             nUnit, 
                             stride * dtype_bytes,
                             pad_value, 
@@ -478,9 +475,8 @@ def inject_accTobuffer(stmt_in):
 given = {0} vs {1}'.format(src.dtype, dst.dtype)
         
         # check memory scope
-        scopes = [env.uni_scratchpad_scope, env.vctr_scratch_scope, env.mat_scratch_scope]
         assert src.scope == env.acc_scope, 'source scope can only be accumulation buffer'
-        assert dst.scope in scopes, 'dst buffer scope is not scratchpad'
+        assert env.is_scratchpad_scope(dst.scope), 'dst buffer scope is not scratchpad'
 
         dtype_bytes = get_dtype_bytes(src.dtype)
         
@@ -492,8 +488,8 @@ given = {0} vs {1}'.format(src.dtype, dst.dtype)
                     lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
                         tvm.call_llvm_intrin_with_side_effect(
                             'void', "llvm.NNPU.CopyAccToBuffer", tvm_zero,
-                            dst.access_ptr('w', 'int32') + dst_idx * dtype_bytes,
-                            src.access_ptr('r', 'int32') + src_idx * dtype_bytes,
+                            get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes,
+                            get_access_ptr(src, env, 'r') + src_idx * dtype_bytes,
                             nUnit,
                             get_mode_code(src.dtype, dst.dtype)),
                     _error

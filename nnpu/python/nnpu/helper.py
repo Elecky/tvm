@@ -14,23 +14,34 @@ def dtype_bytes(dtype):
 # convert scope name, also check whether scope is legal under current config
 def convert_scope(env, scope_str, include_acc=False):
     scope = scope_str
-    if (scope_str == 'uni'):
-        scope = env.uni_scratchpad_scope
-    elif (scope_str == 'vctr'):
-        scope = env.vctr_scratch_scope
-    elif (scope_str == 'mat'):
-        scope = env.mat_scratch_scope
-    elif (scope_str == 'acc'):
+    if (scope_str == 'acc'):
         scope = env.acc_scope
+    elif (scope_str.startswith('buffer') or scope_str.startswith('scratchpad')):
+        id = scope_str[len('buffer'):] if scope_str.startswith('buffer') \
+             else scope_str[len('scratchpad'):]
+        id = int(id)
+        scope = env.scratchpad_scope(id)
 
     if (scope == env.acc_scope):
         assert include_acc, 'accumulation scope is not allowed'
         return scope
     else:
-        design = env.cfg['scratchpad_design']
-        assert not (design == 'unified') or (scope == env.uni_scratchpad_scope), \
-            'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
-        assert not (design == 'seperated') or \
-                (scope in [env.vctr_scratch_scope, env.mat_scratch_scope]), \
-                'illegal scope {0} in {1} scratchpad design'.format(scope_str, design)
         return scope
+
+scratchpad_base_addr = { 0: 0x0, 1: 0x20000000, 2: 0x40000000, 3: 0x60000000 }
+
+def get_access_ptr(buffer, env, *args):
+    '''
+        used to get the address of one buffer, the actual address will be converted depends on 
+        the scope.
+    '''
+    args = list(args)
+    args.append('int32')
+    addr = buffer.access_ptr(*args)
+    scope = buffer.scope
+    if not env.is_scratchpad_scope(scope):
+        return addr
+    
+    cfg = env.get_scope_config(scope)
+    idx = env.scratchpad_scope_to_idx(scope)
+    return addr + scratchpad_base_addr[idx]

@@ -1,6 +1,6 @@
 import struct
 import tvm
-from helper import dtype_bytes, convert_scope
+from helper import dtype_bytes, convert_scope, get_access_ptr
 
 def make_intrin_call(dtype, name, *args, **kwargs):
     """ Build a llvm.NNPU intrinsic function call who has side-effect.
@@ -40,7 +40,7 @@ class IntrinManager(object):
         # define intrin constructors here
         
         # unary vector intrin
-        def vctr_unary(intrin_op, scope_in = 'uni', scope_out = 'uni', mode='w'):
+        def vctr_unary(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', mode='w'):
             env = self.env
             cfg = self.env.cfg
 
@@ -90,8 +90,8 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr("w", 'int32'),
-                            din.access_ptr("r", 'int32'),
+                            get_access_ptr(dout, env, 'w'),
+                            get_access_ptr(din, env, 'r'),
                             cfg['vector_unit']['size'],
                             self.get_mode_code(mode)
                             ))
@@ -109,7 +109,7 @@ class IntrinManager(object):
         self.intrin_ctors['VExp'] = vctr_unary
         self.intrin_ctors['VLog'] = vctr_unary
 
-        def vctr_imm(intrin_op, scope_in = 'uni', scope_out = 'uni', imm_value = 1 , mode = 'w'):
+        def vctr_imm(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', imm_value = 1 , mode = 'w'):
             env = self.env
             cfg = self.env.cfg
             scope_in = self.get_scope(scope_in)
@@ -170,8 +170,8 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr("w", 'int32'),
-                            din.access_ptr("r", 'int32'),
+                            get_access_ptr(dout, env, 'w'),
+                            get_access_ptr(din, env, 'r'),
                             tvm.const(imm_value, 'float64'),
                             cfg['vector_unit']['size'],
                             self.get_mode_code(mode)
@@ -193,8 +193,8 @@ class IntrinManager(object):
         self.intrin_ctors['ISubV'] = vctr_imm
         self.intrin_ctors['IDivV'] = vctr_imm
 
-        def gemm(intrin_op, shape, scope_in1 = 'uni', scope_in2 = 'uni', 
-                 scope_out = 'uni', mode='inc', reduce=False):
+        def gemm(intrin_op, shape, scope_in1 = 'buffer0', scope_in2 = 'buffer0', 
+                 scope_out = 'buffer0', mode='inc', reduce=False):
             env = self.env
             cfg = self.env.cfg
 
@@ -281,7 +281,7 @@ class IntrinManager(object):
                     out_row_stride = dout.strides[0]
                 out_row_stride = out_row_stride * dtype_bytes(dtype_out)
 
-                init = self.emit_acc_init(dout.access_ptr('w', 'uint32'),
+                init = self.emit_acc_init(get_access_ptr(dout, env, 'w'),
                                 nRowOut, nColOut, out_row_stride, mode, 0)
 
                 def calc(toAccBuf, doAcc):
@@ -290,11 +290,11 @@ class IntrinManager(object):
                     ptr_type = 'rw' if doAcc else 'w'
                     irb.emit(make_intrin_call("void", 'GEMM',
                                 nRowOut, factor, nColOut,
-                                dout.access_ptr(ptr_type, 'int32'),
+                                get_access_ptr(dout, env, ptr_type),
                                 out_row_stride,
-                                din1.access_ptr('r', 'int32'),
+                                get_access_ptr(din1, env, 'r'),
                                 in1_row_stride,
-                                din2.access_ptr('r', 'int32'),
+                                get_access_ptr(din2, env, 'r'),
                                 in2_row_stride,
                                 self.get_mode_code(mode),
                                 toAccBuf, doAcc
@@ -313,8 +313,8 @@ class IntrinManager(object):
                                                  out: out_buf})
         self.intrin_ctors['GEMM'] = gemm
 
-        def mat_imm(intrin_op, shape, imm_value, scope_in = 'uni',
-                 scope_out = 'uni', mode='inc',reduce=False):
+        def mat_imm(intrin_op, shape, imm_value, scope_in = 'buffer0',
+                 scope_out = 'buffer0', mode='inc',reduce=False):
             env = self.env
             cfg = self.env.cfg
             
@@ -366,8 +366,8 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('w', 'int32'),
-                            din.access_ptr('r', 'int32'),
+                            get_access_ptr(dout, env, 'w'),
+                            get_access_ptr(din, env, 'r'),
                             tvm.const(imm_value, 'float64'), 
                             nRow, nCol, 
                             self.get_mode_code(mode)
@@ -381,8 +381,8 @@ class IntrinManager(object):
         self.intrin_ctors['MMulI'] = mat_imm
         self.intrin_ctors['ISubM'] = mat_imm
         
-        def vctr_binary(intrin_op, scope_in1 = 'uni', scope_in2 = 'uni', 
-                 scope_out = 'uni', mode='n'):
+        def vctr_binary(intrin_op, scope_in1 = 'buffer0', scope_in2 = 'buffer0', 
+                 scope_out = 'buffer0', mode='n'):
             env = self.env
             cfg = self.env.cfg
 
@@ -441,9 +441,9 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('w', 'int32'),
-                            din1.access_ptr('r', 'int32'),
-                            din2.access_ptr('r', 'int32'),
+                            get_access_ptr(dout, env, 'w'),
+                            get_access_ptr(din1, env, 'r'),
+                            get_access_ptr(din2, env, 'r'),
                             shape[0],
                             self.get_mode_code(mode)
                             ))
@@ -462,7 +462,7 @@ class IntrinManager(object):
         self.intrin_ctors['VDivV'] = vctr_binary
         self.intrin_ctors['VGTMV'] = vctr_binary
 
-        def vctr_merge(intrin_op, scope_in = 'uni', scope_out = 'uni', mode='n', nDim=2):
+        def vctr_merge(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', mode='n', nDim=2):
             env = self.env
             cfg = self.env.cfg
 
@@ -519,16 +519,16 @@ class IntrinManager(object):
                 din = ins[0]
                 dout = outs[0]
 
-                init = self.emit_memset(dout.access_ptr('w', 'uint32'), shape_out[-1], 
+                init = self.emit_memset(get_access_ptr(dout, env, 'w'), shape_out[-1], 
                             dtype_bytes(dtype_out), num , mode)
 
                 def comp():
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('w', 'int32'),
-                            din.access_ptr('r', 'int32'),
-                            dout.access_ptr('r', 'int32'),
+                            get_access_ptr(dout, env, 'w'),
+                            get_access_ptr(din, env, 'r'),
+                            get_access_ptr(dout, env, 'r'),
                             shape_out[-1],
                             self.get_mode_code(mode)
                             ))
@@ -544,7 +544,7 @@ class IntrinManager(object):
         self.intrin_ctors['VGTMMerge'] = vctr_merge
 
 
-        def vctr_dot_product(intrin_op, scope_in1 = 'uni', scope_in2 = 'uni', scope_out = 'uni',
+        def vctr_dot_product(intrin_op, scope_in1 = 'buffer0', scope_in2 = 'buffer0', scope_out = 'buffer0',
                              mode='n'):
             env = self.env
             cfg = self.env.cfg
@@ -587,9 +587,9 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", 'VDotV',
-                            dout.access_ptr('w', 'int32'),
-                            din1.access_ptr('r', 'int32'),
-                            din2.access_ptr('r', 'int32'),
+                            get_access_ptr(dout, env, 'w'),
+                            get_access_ptr(din1, env, 'r'),
+                            get_access_ptr(din2, env, 'r'),
                             shape[0],
                             self.get_mode_code(mode)
                             ))
@@ -604,7 +604,7 @@ class IntrinManager(object):
         
         self.intrin_ctors['VDotV'] = vctr_dot_product
 
-        def vctr_reduce(intrin_op, scope_in='uni', scope_out='uni', mode='inc'):
+        def vctr_reduce(intrin_op, scope_in='buffer0', scope_out='buffer0', mode='inc'):
             env = self.env
             cfg = self.env.cfg
 
@@ -657,8 +657,8 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('w', 'int32'),
-                            din1.access_ptr('r', 'int32'),
+                            get_access_ptr(dout, env, 'w'),
+                            get_access_ptr(din1, env, 'r'),
                             shape[0],
                             self.get_mode_code(mode)
                             ))
@@ -674,7 +674,7 @@ class IntrinManager(object):
         self.intrin_ctors['VReduceMax'] = vctr_reduce
         self.intrin_ctors['VReduceMin'] = vctr_reduce
 
-        def vctr_reduce_key(intrin_op, scope_in1='uni', scope_out1='uni',scope_out2='uni', mode='inc'):
+        def vctr_reduce_key(intrin_op, scope_in1='buffer0', scope_out1='buffer0',scope_out2='buffer0', mode='inc'):
             env = self.env
             cfg = self.env.cfg
 
@@ -721,9 +721,9 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(tvm.call_extern("int32", extern_func,
-                            dout1.access_ptr('w', 'int32'),
-                            dout2.access_ptr('w', 'int32'),
-                            din1.access_ptr('r', 'int32'),
+                            get_access_ptr(dout1, env, 'w'),
+                            get_access_ptr(dout2, env, 'w'),
+                            get_access_ptr(din1, env, 'r'),
                             shape[0]*shape[1],
                             self.get_mode_code(mode)
                             ))
@@ -738,7 +738,7 @@ class IntrinManager(object):
         
         self.intrin_ctors['VReduceKey'] = vctr_reduce_key
 
-        def mat_binary(intrin_op, shape, scope_in1='uni', scope_in2='uni', scope_out='uni',
+        def mat_binary(intrin_op, shape, scope_in1='buffer0', scope_in2='buffer0', scope_out='buffer0',
                        mode='n'):
             env = self.env
             cfg = self.env.cfg
@@ -795,11 +795,11 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('w', 'int32'), 
+                            get_access_ptr(dout, env, 'w'),
                             dout.strides[0] * dtype_bytes(dtype_out),
-                            din1.access_ptr('r', 'int32'), 
+                            get_access_ptr(din1, env, 'r'),
                             din1.strides[0] * dtype_bytes(dtype_in),
-                            din2.access_ptr('r', 'int32'), 
+                            get_access_ptr(din2, env, 'r'),
                             din2.strides[0] * dtype_bytes(dtype_in),
                             shape[0], shape[1],
                             self.get_mode_code(mode)
@@ -816,7 +816,7 @@ class IntrinManager(object):
         self.intrin_ctors['MSubM'] = mat_binary
         self.intrin_ctors['MMulM'] = mat_binary
 
-        def mat_merge(intrin_op, shape ,scope_in = 'uni', scope_out = 'uni', mode='n'):
+        def mat_merge(intrin_op, shape ,scope_in = 'buffer0', scope_out = 'buffer0', mode='n'):
             env = self.env
             cfg = self.env.cfg
 
@@ -862,16 +862,16 @@ class IntrinManager(object):
                 din = ins[0]
                 dout = outs[0]
 
-                init = self.emit_memset(dout.access_ptr('w'), shape_out[0]*shape_out[1], 
+                init = self.emit_memset(get_access_ptr(dout, env, 'w'), shape_out[0]*shape_out[1], 
                             dtype_bytes(dtype_out), num, mode)
 
                 def comp():
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('rw', 'int32'),
-                            din.access_ptr('r', 'int32'),
-                            dout.access_ptr('rw', 'int32'),
+                            get_access_ptr(dout, env, 'rw'),
+                            get_access_ptr(din, env, 'r'),
+                            get_access_ptr(dout, env, 'rw'),
                             shape_out[0]*shape_out[1],
                             self.get_mode_code(mode)
                             ))
@@ -885,7 +885,7 @@ class IntrinManager(object):
         self.intrin_ctors['MAddMerge'] = mat_merge
         self.intrin_ctors['MMulMerge'] = mat_merge
 
-        def mat_reduce_row(intrin_op, shape, scope_in='uni', scope_out='uni', mode='inc'):
+        def mat_reduce_row(intrin_op, shape, scope_in='buffer0', scope_out='buffer0', mode='inc'):
             env = self.env
             cfg = self.env.cfg
 
@@ -932,7 +932,7 @@ class IntrinManager(object):
                 din1 = ins[0]
                 dout = outs[0]
 
-                init = self.emit_acc_init(dout.access_ptr('w', 'int32'), 1, nRow, 0, 
+                init = self.emit_acc_init(get_access_ptr(dout, env, 'w'), 1, nRow, 0, 
                                 mode, 0.0)
 
                 def calc(toAccBuf, doAcc):
@@ -940,8 +940,8 @@ class IntrinManager(object):
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     ptr_mode = 'rw' if doAcc else 'w'
                     irb.emit(make_intrin_call("void", intrin_func,
-                                dout.access_ptr(ptr_mode, 'int32'),
-                                din1.access_ptr('r', 'int32'), 
+                                get_access_ptr(dout, env, ptr_mode),
+                                get_access_ptr(din1, env, 'r'),
                                 din1.strides[0] * dtype_bytes(dtype_in),
                                 shape[0], shape[1],
                                 self.get_mode_code(mode),
@@ -960,8 +960,8 @@ class IntrinManager(object):
                                                  out: out_buf})
         self.intrin_ctors['MReduceSumRow'] = mat_reduce_row
 
-        def mat_vctr_row(intrin_op, shape, scope_in_mat='uni', scope_in_vctr='uni', 
-                         scope_out='uni', mode='n'):
+        def mat_vctr_row(intrin_op, shape, scope_in_mat='buffer0', scope_in_vctr='buffer0', 
+                         scope_out='buffer0', mode='n'):
             env = self.env
             cfg = self.env.cfg
 
@@ -1018,11 +1018,11 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('w', 'int32'),
+                            get_access_ptr(dout, env, 'w'),
                             dout.strides[0] * dtype_bytes(dtype_out),
-                            din1.access_ptr('r', 'int32'),
+                            get_access_ptr(din1, env, 'r'),
                             din1.strides[0] * dtype_bytes(dtype_in),
-                            din2.access_ptr('r', 'int32'),
+                            get_access_ptr(din2, env, 'r'),
                             shape[0], shape[1],
                             self.get_mode_code(mode)
                             ))
@@ -1039,7 +1039,7 @@ class IntrinManager(object):
         self.intrin_ctors['MSubV'] = mat_vctr_row
         self.intrin_ctors['MMulV'] = mat_vctr_row
 
-        def mat_row_dot(intrin_op, shape, scope_in1='uni', scope_in2='uni', scope_out='uni',
+        def mat_row_dot(intrin_op, shape, scope_in1='buffer0', scope_in2='buffer0', scope_out='buffer0',
                        mode='inc'):
             env = self.env
             cfg = self.env.cfg
@@ -1081,7 +1081,7 @@ class IntrinManager(object):
                 din1, din2 = ins[0], ins[1]
                 dout = outs[0]
 
-                init = self.emit_acc_init(dout.access_ptr('w', 'int32'),
+                init = self.emit_acc_init(get_access_ptr(dout, env, 'w'),
                                     1, nRow, 0, mode, 0.0)
 
                 def calc(toAccBuf, doAcc):
@@ -1089,10 +1089,10 @@ class IntrinManager(object):
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                     ptr_mode = 'rw' if doAcc else 'w'
                     irb.emit(make_intrin_call("void", 'MRowDot',
-                                dout.access_ptr(ptr_mode, 'int32'),
-                                din1.access_ptr('r', 'int32'),
+                                get_access_ptr(dout, env, ptr_mode),
+                                get_access_ptr(din1, env, 'r'),
                                 din1.strides[0] * dtype_bytes(dtype_in),
-                                din2.access_ptr('r', 'int32'),
+                                get_access_ptr(din2, env, 'r'),
                                 din2.strides[0] * dtype_bytes(dtype_in),
                                 shape[0], shape[1],
                                 self.get_mode_code(mode),
@@ -1113,8 +1113,8 @@ class IntrinManager(object):
                                                  out: out_buf})
         self.intrin_ctors['MRowDot'] = mat_row_dot
 
-        def vctr_sclr(intrin_op, scope_vctr='uni', scope_sclr='uni',
-                      scope_out='uni', mode='n'):
+        def vctr_sclr(intrin_op, scope_vctr='buffer0', scope_sclr='buffer0',
+                      scope_out='buffer0', mode='n'):
             env = self.env
             cfg = self.env.cfg
 
@@ -1183,9 +1183,9 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", 0)
                 irb.emit(make_intrin_call("void", intrin_func,
-                            dout.access_ptr('w', 'int32'),
-                            din1.access_ptr('r', 'int32'),
-                            din2.access_ptr('r', 'int32'),
+                            get_access_ptr(dout, env, 'w'),
+                            get_access_ptr(din1, env, 'r'),
+                            get_access_ptr(din2, env, 'r'),
                             shape[0],
                             self.get_mode_code(mode)
                             ))
@@ -1221,8 +1221,8 @@ class IntrinManager(object):
         dtype_bits = dtype_bytes(tensor.dtype) * 8
         return tvm.decl_buffer(
                 tensor.shape, tensor.dtype, buf_name, scope=scope,
-                data_alignment=self.env.scope2config(scope)['width_per_channel'] / 8,
-                offset_factor=self.env.scope2config(scope)['width_per_channel'] / dtype_bits,
+                data_alignment=1, #self.env.scope2config(scope)['width_per_channel'] / 8,
+                offset_factor=1,#self.env.scope2config(scope)['width_per_channel'] / dtype_bits,
                 **kwargs)
 
     def mode2dtype(self, mode):

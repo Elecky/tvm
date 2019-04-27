@@ -17,8 +17,10 @@ def test():
     
     sph = ScheduleProcHelper()
 
+    b_scope = 'buffer1'
+
     a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a', sph)
-    b_buf, b_dram = nnpu.utils.CopyHtoBuf(b, 'b', sph)
+    b_buf, b_dram = nnpu.utils.CopyHtoBuf(b, 'b', sph, dst_scope=b_scope)
     
     c_buf = tvm.compute(shape, lambda i: a_buf[i] + b_buf[i], 'c_buf')
     sph.MarkScope(c_buf)
@@ -38,13 +40,13 @@ def test():
     sph.Transform(s)
     
     xo, xi = s[c_buf].split(c_buf.op.axis[0], factor=nvctr_unit)
-    s[c_buf].tensorize(xi, env.intrins.get('VAddV', mode='n'))
+    s[c_buf].tensorize(xi, env.intrins.get('VAddV', mode='n', scope_in2=b_scope))
 
     xo, xi = s[mul_buf].split(mul_buf.op.axis[0], factor=nvctr_unit)
-    s[mul_buf].tensorize(xi, env.intrins.get('VMulV', mode='inc'))
+    s[mul_buf].tensorize(xi, env.intrins.get('VMulV', mode='inc', scope_in2=b_scope))
     
     xo, xi = s[gtm_buf].split(gtm_buf.op.axis[0], factor=nvctr_unit)
-    s[gtm_buf].tensorize(xi, env.intrins.get('VGTMV', mode='n'))
+    s[gtm_buf].tensorize(xi, env.intrins.get('VGTMV', mode='n', scope_in2=b_scope))
 
 
     print(nnpu.lower(s, [a, b, c_host, mul_host, gtm_host], simple_mode=True))
@@ -66,11 +68,11 @@ def test():
     mul_nd = tvm.nd.array(np.zeros(shape).astype(mul_host.dtype), ctx)
     gtm_nd = tvm.nd.array(np.zeros(shape).astype(gtm_host.dtype), ctx)
 
-    print('------------------- device module 1 llvm IR: ')
-    print(func.imported_modules[0].get_source('ll'))
+    # print('------------------- device module 1 llvm IR: ')
+    # print(func.imported_modules[0].get_source('ll'))
 
-    print('------------------- device module 1 asm code: ')
-    print(func.imported_modules[0].get_source('asm'))
+    # print('------------------- device module 1 asm code: ')
+    # print(func.imported_modules[0].get_source('asm'))
 
     func(a_nd, b_nd, c_nd, mul_nd, gtm_nd)
     # exit()

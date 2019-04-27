@@ -52,6 +52,7 @@ scratchpad_design: unified
 
 # unified scratchpad configs
 scratchpad:
+  enable: true
   nchannel: 4
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
@@ -62,6 +63,23 @@ scratchpad:
   w_delay: 1
   # memory address map policy
   map_policy: interleaved
+
+scratchpad1:
+  enable: true
+  nchannel: 4
+  # qeuivalent width in bits of every channel, has to be the power of 2
+  width_per_channel: 128
+  # log size in byte of every channel
+  log_size_per_channel: 18
+  # read and write delays in cycle
+  r_delay: 1
+  w_delay: 1
+
+scratchpad2:
+  enable: false
+
+scratchpad3:
+  enable: false
 
 acc_buffer:
   nchannel: 8
@@ -79,9 +97,6 @@ sclr_buffer:
   r_delay: 1
   w_delay: 1
   log_size: 12  # 4KB scalar buffer.
-
-vctr_scratchpad: {}
-mat_scratchpad: {}
 
 #-------- configs follows are delays of execution units. --------#
 ALU:

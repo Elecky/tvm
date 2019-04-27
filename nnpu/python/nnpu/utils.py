@@ -23,7 +23,7 @@ class ScheduleProcHelper(object):
             f(sc)
         self.closures = []
     
-    def MarkScope(self, tensor, scope='uni'):
+    def MarkScope(self, tensor, scope='buffer0'):
         scope = convert_scope(self.env, scope, include_acc=True)
         #print('marking scope:')
         #print(scope)
@@ -37,9 +37,9 @@ class ScheduleProcHelper(object):
     def __exit__(self, ptype, value, trace):
         ScheduleProcHelper.current = self.last
 
-def MarkScope(tensor, scope='uni', sph=None):
+def MarkScope(tensor, scope='buffer0', sph=None):
     if (sph):
-        sph.MarkScope(tensor, sph)
+        sph.MarkScope(tensor, scope)
     else:
         ScheduleProcHelper.current.MarkScope(tensor, scope)
 
@@ -54,7 +54,7 @@ def DMACopyHtoDram(tensor, name_prefix, sph=None):
     
     return tensor_dram
 
-def CopyHtoBuf(tensor, name_prefix, sph=None, dst_scope='uni', via_edram=False):
+def CopyHtoBuf(tensor, name_prefix, sph=None, dst_scope='buffer0', via_edram=False):
     sph = ScheduleProcHelper.current if sph is None else sph
     env = get_env()
     if (via_edram):
@@ -104,7 +104,7 @@ def PragmaCopy(tensor, sph=None):
     sph = ScheduleProcHelper.current if sph is None else sph
     sph.Add(lambda sc: sc[tensor].pragma(tensor.op.axis[0], env.scratchpad_copy))
 
-def reshape(tensor, shape, sph=None, dst_scope='uni'):
+def reshape(tensor, shape, sph=None, dst_scope='buffer0'):
     res = topi.reshape(tensor, shape)
     
     MarkScope(res, dst_scope)
@@ -112,14 +112,14 @@ def reshape(tensor, shape, sph=None, dst_scope='uni'):
 
     return res
 
-def transpose(tensor, axes=None, sph=None, dst_scope='uni'):
+def transpose(tensor, axes=None, sph=None, dst_scope='buffer0'):
     res = topi.transpose(tensor, axes)
 
     MarkScope(res, dst_scope)
     PragmaCopy(res)
     return res
 
-def CopyAccToBuf(tensor, name, dst_scope='uni', sph=None):
+def CopyAccToBuf(tensor, name, dst_scope='buffer0', sph=None):
     res = tvm.compute(tensor.shape, lambda *i: tensor(*i), name)
     MarkScope(res, dst_scope, sph)
     env = get_env()

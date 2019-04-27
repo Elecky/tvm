@@ -19,7 +19,7 @@ if(PYTHON)
   set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/S0Simulator.cpp)
   set(NNPU_S1SIM_SRC ${SIM_SRC}/insn_wrapper.cpp 
                      ${SIM_SRC}/address_range.cpp ${SIM_SRC}/insn_opcode.cpp
-                     )
+                     ${SIM_SRC}/scratchpad_holder.cpp)
   
   set(NNPU_SCSIM_DIR ${SIM_SRC}/sc_sim)
   set(NNPU_SCSIM_EXEC_DIR ${NNPU_SCSIM_DIR}/instructions/)
