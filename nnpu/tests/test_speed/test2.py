@@ -16,8 +16,8 @@ nnpu.set_device(env, type=args.sim)
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    shape1 = (128, 1024)
-    shape2 = (128, 1024)
+    shape1 = (128, 256)
+    shape2 = (128, 256)
     gemm_shape = (8, 8, 8)
     factor = gemm_shape[1]
     assert shape1[1] == shape2[1], \
@@ -36,7 +36,9 @@ with ScheduleProcHelper():
     a = tvm.placeholder(shape1_tiled, dtype_n, 'a')
     b = tvm.placeholder(shape2_tiled, dtype_n, 'b')
 
-    a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a')
+    a_buffer_scope = 'buffer0'
+
+    a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a', dst_scope=a_buffer_scope)
     b_buf, b_dram = nnpu.utils.CopyHtoBuf(b, 'b')
 
     out_shape_tiled = (shape1_tiled[0], shape2_tiled[0], shape1_tiled[2], shape2_tiled[2])
@@ -60,13 +62,14 @@ with ScheduleProcHelper():
     xo, yo, xi, yi = out_acc.op.axis
     ko, ki = out_acc.op.reduce_axis
     s[out_acc].reorder(xo, yo, ko, xi, yi, ki)
-    s[out_acc].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_out='acc'))
+    s[out_acc].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', 
+                                            scope_out='acc', scope_in1=a_buffer_scope))
 
     s[out_buf].pragma(out_buf.op.axis[2], env.copy_acc2buf)
 
     # split output
     xo, yo, xi, yi = out_host.op.axis
-    xparts, yparts = 1, 16
+    xparts, yparts = 2, 16
     xoo, xoi = s[out_host].split(xo, nparts=xparts)
     yoo, yoi = s[out_host].split(yo, nparts=yparts)
     s[out_host].reorder(xoo, yoo, xoi, yoi, xi, yi)
@@ -78,14 +81,13 @@ with ScheduleProcHelper():
 
     s[out_buf].compute_at(s[out_host], yoi)
     s[out_acc].compute_at(s[out_host], yoi)
-
     s[out_acc].unroll(s[out_acc].leaf_iter_vars[2])
 
     print(nnpu.lower(s, [a, b, out_host], simple_mode=True))
 
     func = nnpu.build(s, [a, b, out_host], 'nnpu', 'llvm', 'nnpu_func')
     # print('------------------- device module 1 asm code: ')
-    # print(func.imported_modules[0].get_source('ll'))
+    # print(func.imported_modules[0].get_source('asm'))
 
     ctx = tvm.nd.TVMContext(13, 0)
     a_np = np.random.randint(size=shape1_tiled, dtype=a.dtype, low = -16, high = 16)

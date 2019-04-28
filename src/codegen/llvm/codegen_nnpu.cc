@@ -166,7 +166,7 @@ class MPassManager : public llvm::legacy::PassManager {
 void CodeGenNNPU::Optimize() {
   // place optimization pass
   llvm::PassManagerBuilder builder;
-  builder.OptLevel = 1;
+  builder.OptLevel = 2;
 
 #if TVM_LLVM_VERSION >= 50
   builder.Inliner = llvm::createFunctionInliningPass(builder.OptLevel, 0, false);

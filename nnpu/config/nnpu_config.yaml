@@ -20,7 +20,7 @@ predictBranchTaken: false
 
 issue_queue:
   size: 8  # number of issue queue slots
-  issue_depth: 1  # how many insns can be fetched and issued on every cycle.
+  issue_depth: 2  # how many insns can be fetched and issued on every cycle.
 
 ReservationStations:  # the number of slot of each reservation station.
   ALU: 8
@@ -59,8 +59,8 @@ scratchpad0:
   # log size in byte of every channel
   log_size_per_channel: 18
   # read and write delays in cycle
-  r_delay: 1
-  w_delay: 1
+  r_delay: 2
+  w_delay: 2
   # memory address map policy
   map_policy: interleaved
 
@@ -72,8 +72,8 @@ scratchpad1:
   # log size in byte of every channel
   log_size_per_channel: 18
   # read and write delays in cycle
-  r_delay: 1
-  w_delay: 1
+  r_delay: 2
+  w_delay: 2
 
 scratchpad2:
   enable: false
@@ -83,7 +83,7 @@ scratchpad3:
 
 # accumulation buffer in matrix unit.
 acc_buffer:
-  nchannel: 8
+  nchannel: 4
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
@@ -116,8 +116,8 @@ vector_unit:
 matrix_unit:
   set_up_cycle: false  # need one cycle to calculate and set up read/write access.
                       # this simply adds one cycle on every instruction's read/write phase.
-  multiplier_delay: 3  # 
-  adder_tree_delay: 3
+  multiplier_delay: 2  # 
+  adder_tree_delay: 2
   adder_delay: 1
   opcodes_need_multiply: ['GEMM', 'MMulM', 'MMulI', 'MMulV', 'MRowDot']
   opcodes_nned_adder_tree: ['GEMM', 'MRowDot', 'MReduceSumRow']
