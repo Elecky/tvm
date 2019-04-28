@@ -51,7 +51,7 @@ dram:
 scratchpad_design: unified
 
 # unified scratchpad configs
-scratchpad:
+scratchpad0:
   enable: true
   nchannel: 4
   # qeuivalent width in bits of every channel, has to be the power of 2
@@ -81,6 +81,7 @@ scratchpad2:
 scratchpad3:
   enable: false
 
+# accumulation buffer in matrix unit.
 acc_buffer:
   nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
@@ -90,6 +91,9 @@ acc_buffer:
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
+  # accumulation delay of dtype_n and dtype_w
+  acc_dtype_n_delay: 1
+  acc_dtype_w_delay: 1
   # memory address map policy
   map_policy: interleaved
 

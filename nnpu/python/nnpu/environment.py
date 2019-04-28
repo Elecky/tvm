@@ -89,7 +89,7 @@ class Environment(object):
         key = None
         if (self.is_scratchpad_scope(scope)):
             id = self.scratchpad_scope_to_idx(scope)
-            key = 'scratchpad' + str(id) if id != 0 else 'scratchpad'
+            key = 'scratchpad' + str(id)
         elif (scope == self.acc_scope):
             key = 'acc_buffer'
         else:
