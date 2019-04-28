@@ -1,6 +1,7 @@
 '''
 helper functions
 '''
+from topi import util
 
 dtype2bytes = {'int8': 1, 'int16': 2, 'int32': 4, 'uint8': 1, 'uint16': 2, 'uint32': 4, 
                'float16': 2, 'float32': 4, 'fixed16': 2}
@@ -44,4 +45,4 @@ def get_access_ptr(buffer, env, *args):
     
     cfg = env.get_scope_config(scope)
     idx = env.scratchpad_scope_to_idx(scope)
-    return addr + scratchpad_base_addr[idx]
+    return util.simplify(addr + scratchpad_base_addr[idx])

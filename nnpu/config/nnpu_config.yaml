@@ -104,6 +104,7 @@ sclr_buffer:
 
 #-------- configs follows are delays of execution units. --------#
 ALU:
+  alu_count: 1  # number of ALUs
   default_delay: 1
   delays: { MulU: 2, DivU: 4, ModU: 4, MulIU: 2, DivIU: 4, ModIU: 4 }
 
