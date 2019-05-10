@@ -16,7 +16,7 @@ register_file:
 # if false, IF will continue fetching next insn, and wait for branch request.
 # if true, IF will jump to target and continue fetching, so if branch is not taken,
 # the issue queue will be cleared and fetch insn starts from next insn.
-predictBranchTaken: false
+predictBranchTaken: true
 
 issue_queue:
   size: 8  # number of issue queue slots
@@ -87,7 +87,7 @@ acc_buffer:
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
-  log_size_per_channel: 8
+  log_size_per_channel: 10
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -128,7 +128,7 @@ misc_delays:
   address_generation: 1  # number of cycles needed to calculate memory dependency, ie, the delay in AGU.
 
 DMA:
-  start_up_time: 5  # the time in cycles needed to start a DMA.
+  start_up_time: 2  # the time in cycles needed to start a DMA.
   speed: 8  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
 
 delay_modeling_switch:
