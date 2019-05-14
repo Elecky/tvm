@@ -23,7 +23,8 @@ Checkout the [tvm stack homepage](https://tvm.ai/)  for more information.
 4. 下载并编译安装[SystemC 2.3.3](https://accellera.org/images/downloads/standards/systemc/systemc-2.3.3.tar.gz)。建议在编译SystemC时使用C++14标准（`cmake -DCMAKE_CXX_STANDARD=14 ...`），否则可能出现加载libsystemc.so时符号找不到的错误。
 
 ## 运行NNPU demo
-* `tvm/nnpu/tests`目录下有各个算子的测试代码，例如执行`python test_conv.2.py`执行卷积算子演示。使用`--sim S0/SC`参数选择功能级/行为级仿真器,例如`python test_conv.2.py --sim SC`。
+* 首先将tvm/nnpu/python添加到PYTHONPATH环境变量。
+* `tvm/nnpu/demos`目录下有各个算子的演示代码，例如执行`python test_conv.1.py`执行卷积算子演示。使用`--sim S0/SC`参数选择功能级/行为级仿真器,例如`python test_conv.2.py --sim SC`。
 * 配置文件`tvm/nnpu/config/nnpu_config.yaml`包含NNPU后端硬件属性的配置参数，也可以将其复制到`tvm/nnpu/`目录下。
 
 
