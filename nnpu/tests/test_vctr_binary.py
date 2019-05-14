@@ -17,7 +17,7 @@ def test():
     
     sph = ScheduleProcHelper()
 
-    b_scope = 'buffer1'
+    b_scope = 'buffer0'
 
     a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a', sph)
     b_buf, b_dram = nnpu.utils.CopyHtoBuf(b, 'b', sph, dst_scope=b_scope)

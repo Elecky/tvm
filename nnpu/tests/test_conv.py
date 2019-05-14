@@ -17,7 +17,7 @@ nnpu.set_device(env, type=args.sim)
 with ScheduleProcHelper():
     env = nnpu.get_env()
 
-    shape = (9, 9, 32)  # (h, w, c)
+    shape = (32, 18, 32)  # (h, w, c)
     kshape = (3, 3, 48, 32)  # (kh, kw, oc, c)
     assert shape[-1] == kshape[-1], 'feature map in-channel != kernel in-channel'
     assert shape[0] >= kshape[0] and shape[1] >= kshape[1], 'feature map smaller than kernel'

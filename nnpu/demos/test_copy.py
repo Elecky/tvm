@@ -1,3 +1,12 @@
+'''
+reshape and permute demo.
+====================
+reshape and premute are essentially memory copies, they are both implemented by Scratchpad Copy instruction.
+in this demo, we try to do the following operation on NNPU:
+    b = np.transpose(a, (1, 0))
+    c = np.reshape(b, (2, 16, 2, 16))
+    d = np.transpose(c, (0, 2, 1, 3))
+'''
 import nnpu
 import tvm
 import topi
@@ -19,16 +28,32 @@ with (ScheduleProcHelper()):
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
     a = tvm.placeholder((32, 32), dtype_w, 'a')
+    
+    #=================================================================#
+    # ------ after all tensors declared, begin compute describing. ------
+    #=================================================================#
+    # copy to scratchpad.
     a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a')
-    
-    trans_buf = nnpu.utils.transpose(a_buf, (1, 0))
 
+    # here we simply use some helper function to do the reshape and transpose.
+    trans_buf = nnpu.utils.transpose(a_buf, (1, 0))
     re_buf = nnpu.utils.reshape(trans_buf, (2, 16, 2, 16))
-    
     tile_buf = nnpu.utils.transpose(re_buf, (0, 2, 1, 3))
+    # copy back to host.
     tile_host, _ = nnpu.utils.CopyBufToH(tile_buf, 'tile')
-    
+    # ------ this ends the computation description. ------
+
+    #==================================#
+    # ------ begin scheduling ------
+    #==================================#
     s = nnpu.create_schedule([tile_host.op])
+
+    # since all operations are scratchpad copy, all we need to do is pragma.
+    # this is done by the helper functions, so nothing to do here.
+    
+    #==================================#
+    # ------ this ends the scheduling ------
+    #==================================#
 
     print(tvm.lower(s, [a, tile_host], simple_mode=True))
     print(nnpu.lower(s, [a, tile_host], simple_mode=True))
@@ -42,12 +67,6 @@ with (ScheduleProcHelper()):
     #b_nd = tvm.nd.array(b_np, ctx)
 
     re_nd = tvm.nd.array(np.zeros((2, 2, 16, 16), dtype=tile_host.dtype), ctx)
-
-    print('------------------- device module 1 llvm IR: ')
-    print(func.imported_modules[0].get_source('ll'))
-
-    print('------------------- device module 1 asm code: ')
-    print(func.imported_modules[0].get_source('asm'))
     
     func(a_nd, re_nd)
 

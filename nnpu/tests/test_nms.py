@@ -134,10 +134,10 @@ def test_ib():
                     build_nms_ir,
                     in_buffers=[tvm.decl_buffer(a_buf.shape,dtype_w,
                                     data_alignment=dtype_bytes(dtype_w),
-                                    scope = 'local.nnpu_scratchpad')]
+                                    scope = 'local.nnpu_scratchpad0')]
                     ,out_buffers=[tvm.decl_buffer(a_buf.shape,dtype_w,
                                     data_alignment=dtype_bytes(dtype_w),
-                                    scope = 'local.nnpu_scratchpad')]
+                                    scope = 'local.nnpu_scratchpad0')]
                     ,dtype=dtype_w,name="test_ir")
     sph.MarkScope(out)
     out_host, out_dram = nnpu.utils.CopyBufToH(out, 'out', sph)

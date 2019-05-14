@@ -17,8 +17,8 @@ nnpu.set_device(env, type=args.sim)
 with ScheduleProcHelper():
     env = nnpu.get_env()
     shape1 = (8, 32)  # (8, 32) reshaped & transpoased to (4, 8, 8)
-    shape2 = (8, 32)
-    gemm_shape = (8, 8, 8)
+    shape2 = (16, 32)
+    gemm_shape = (8, 8, 16)
     factor = gemm_shape[1]
     assert shape1[1] == shape2[1], \
         'gemm do dot product between rows, so the shape[1] of inputs should match'
@@ -30,16 +30,18 @@ with ScheduleProcHelper():
 
     shape1_tiled = (shape1[1] // factor, shape1[0], factor)
     shape2_tiled = (shape2[1] // factor, shape2[0], factor)
+    res_shape = (shape1[0], shape2[0])
+
     a = tvm.placeholder(shape1_tiled, dtype_n, 'a')
     b = tvm.placeholder(shape2_tiled, dtype_n, 'b')
+    bias = tvm.placeholder((shape2[0], ), dtype_w, 'bias')
 
     a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a')
     b_buf, b_dram = nnpu.utils.CopyHtoBuf(b, 'b')
+    bias_buf, _ = nnpu.utils.CopyHtoBuf(bias, 'bias')
 
     ko = tvm.reduce_axis((0, shape1_tiled[0]), 'k0')
     ki = tvm.reduce_axis((0, factor), 'k0')
-
-    res_shape = (shape1[0], shape2[0])
 
     res_acc = tvm.compute(res_shape, 
                             lambda i, j: tvm.sum(
@@ -48,7 +50,13 @@ with ScheduleProcHelper():
     nnpu.utils.MarkScope(res_acc, 'acc')
 
     res_buf = nnpu.utils.CopyAccToBuf(res_acc, 'res')
-    res_host, _ = nnpu.utils.CopyBufToH(res_buf, 'res')
+
+    res = tvm.compute(res_shape, 
+                      lambda i, j: res_buf[i, j] + bias_buf[j],
+                      'out')
+    nnpu.utils.MarkScope(res, 'buffer0')
+
+    res_host, _ = nnpu.utils.CopyBufToH(res, 'res')
 
     s = nnpu.create_schedule(res_host.op)
     
@@ -58,8 +66,11 @@ with ScheduleProcHelper():
     s[res_acc].reorder(ko, xi, xj, ki)
     s[res_acc].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_out='acc'))
 
-    print(nnpu.lower(s, [a, b, res_host], simple_mode=True))
+    oco, oci = s[res].split(res.op.axis[1], 16)
+    s[res].tensorize(oci, env.intrins.get("VAddV", mode='w'))
 
+    print(nnpu.lower(s, [a, b, bias, res_host], simple_mode=True))
+    exit()
     func = nnpu.build(s, [a, b, res_host], 'nnpu', 'llvm', 'nnpu_func')
     print('------------------- device module 1 asm code: ')
     print(func.imported_modules[0].get_source('asm'))

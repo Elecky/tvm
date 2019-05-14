@@ -7,10 +7,10 @@ core_extent: 4
 
 # scalar register file configs
 register_file:
-  size: 32  # number of architectural registers.
-  read_port_num: 6  # number of future file read ports, can be no less than 6,
-                    # since some insn has to read 6 reigsters.
-  read_port_group_size: 2  # the number of read port comsumed by a insn is K times of this value.
+  size: 32  # number of architectural registers. DON'T MODIFY THIS, since LLVM NNPU backend defined register file size as 32.
+  # read_port_num: 6  # number of future file read ports, can be no less than 6,
+  #                   # since some insn has to read 6 reigsters.
+  # read_port_group_size: 2  # the number of read port comsumed by a insn is K times of this value.
 
 # predict a branch is taken or just fall through.
 # if false, IF will continue fetching next insn, and wait for branch request.

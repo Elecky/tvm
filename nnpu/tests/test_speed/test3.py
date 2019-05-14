@@ -18,7 +18,8 @@ with ScheduleProcHelper():
     env = nnpu.get_env()
     shape1 = (128, 256)
     shape2 = (128, 256)
-    gemm_shape = (8, 8, 8)
+    gemm_shape = (4, 4, 4)
+    # gemm_shape = (8, 8, 8)
     factor = gemm_shape[1]
     assert shape1[1] == shape2[1], \
         'gemm do dot product between rows, so the shape[1] of inputs should match'
@@ -71,9 +72,9 @@ with ScheduleProcHelper():
 
     # split output
     xo, yo, xi, yi = out_host.op.axis
-    xparts, yparts = 2, 16
+    xparts, yparts = 1, 32
     xoo, xoi = s[out_host].split(xo, nparts=xparts)
-    yoo, yoi = s[out_host].split(yo, nparts=yparts)
+    yoo, yoi = s[out_host].split(yo, factor=1)
     s[out_host].reorder(xoo, yoo, xoi, yoi, xi, yi)
     s[out_host].pragma(xi, env.dma_copy_from_buf)
 
