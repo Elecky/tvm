@@ -30,7 +30,7 @@ with (ScheduleProcHelper()):
     a = tvm.placeholder((32, 32), dtype_w, 'a')
     
     #=================================================================#
-    # ------ after all tensors declared, begin compute describing. ------
+    # ------ begin compute describing. ------
     #=================================================================#
     # copy to scratchpad.
     a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a')

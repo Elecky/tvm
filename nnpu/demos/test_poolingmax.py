@@ -65,8 +65,12 @@ def test():
     ko, ki = s[pooling_buf].split(k2, factor=1)
     xo, xi = s[pooling_buf].split(k, factor=16)
     # reorder axes.
-    s[pooling_buf].reorder( i, j, xo, k1, ko, ki, xi)
+    # put xo right before ki to eliminate memory dependency between two consecutive VGTMV instruction
+    s[pooling_buf].reorder( i, j, k1, ko, xo, ki, xi)
     s[pooling_buf].tensorize(ki, env.intrins.get(str_op, scope_out='buffer0', mode='w'))
+    # unroll
+    s[pooling_buf].unroll(ko)
+    s[pooling_buf].unroll(xo)
     #==================================#
     # ------ this ends the scheduling ------
     #==================================#

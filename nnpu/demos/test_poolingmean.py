@@ -80,13 +80,18 @@ def test():
     ko, ki = s[pooling_buf].split(k2, factor=1)
     xo, xi = s[pooling_buf].split(k, factor=nvctr_unit)
     # reorder axes.
-    s[pooling_buf].reorder( i, j, xo, k1, ko, ki, xi)
+    # put xo right before ki to eliminate memory dependency between two consecutive VAddV instruction
+    s[pooling_buf].reorder( i, j, k1, ko, xo, ki, xi)
     s[pooling_buf].tensorize(ki, env.intrins.get('VAddMerge',  mode='w'))
+    # unroll
+    s[pooling_buf].unroll(xo)
+    s[pooling_buf].unroll(ko)
     
     # split and tensorize.
-    xo2,xi2 = s[step3_buf].split(step3_buf.op.axis[2], factor=nvctr_unit)
-    s[step3_buf].reorder( step3_buf.op.axis[0],step3_buf.op.axis[1],xo2,xi2)
+    xo2, xi2 = s[step3_buf].split(step3_buf.op.axis[2], factor=nvctr_unit)
+    s[step3_buf].reorder( step3_buf.op.axis[0], step3_buf.op.axis[1], xo2, xi2)
     s[step3_buf].tensorize(xi2, env.intrins.get('VDivI',imm_value=Imm.value,  mode='w'))
+    s[step3_buf].unroll(xo2)
     #==================================#
     # ------ this ends the scheduling ------
     #==================================#
