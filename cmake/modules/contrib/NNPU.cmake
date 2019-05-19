@@ -7,14 +7,14 @@ if(PYTHON)
 
   set(RUNTIME_SRC nnpu/src/)
   set(NNPU_RUNTIME_SRCS ${RUNTIME_SRC}/device_api.cpp ${RUNTIME_SRC}/runtime.cpp 
-                        ${RUNTIME_SRC}/sim_driver.cpp ${RUNTIME_SRC}/insn.cpp
-                        ${RUNTIME_SRC}/insn_ctors.cpp)
+                        ${RUNTIME_SRC}/sim_driver.cpp)
 
   set(SIM_SRC nnpu/NNPUSim/src/)
   set(NNPU_SIM_COMMON ${SIM_SRC}/common/bit_packer.cpp ${SIM_SRC}/common/bit_packer_factory.cpp
                       ${SIM_SRC}/common/bit_wrapper.cpp
                       ${SIM_SRC}/common/data_types.cpp ${SIM_SRC}/misc/semaphore.cpp
-                      )
+                      ${SIM_SRC}/insn.cpp
+                      ${SIM_SRC}/insn_ctors.cpp)
 
   set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/S0Simulator.cpp)
   set(NNPU_S1SIM_SRC ${SIM_SRC}/insn_wrapper.cpp 
