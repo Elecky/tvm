@@ -4,17 +4,19 @@ additional ir pass for nnpu, to transform ir before lowering
 
 from .environment import get_env
 import tvm
-from helper import dtype_bytes as get_dtype_bytes, get_access_ptr
+from .helper import dtype_bytes as get_dtype_bytes, get_access_ptr
 from topi import util
-import utils
-from intrins import make_intrin_call
+from .utils import *
+from .intrins import make_intrin_call
 
 tvm_zero = tvm.const(0, 'uint32')
 
 # some helper functions
-def mark_coproc_scope(stmt):
+def mark_coproc_scope(stmt, pid):
     irb = tvm.ir_builder.create()
-    irb.scope_attr(get_env().nnpu_axis, "coproc_scope", 0)
+    env = get_env()
+    irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
+    irb.scope_attr(get_env().nnpu_axis, "coproc_scope", pid)
     irb.emit(stmt)
     body = irb.get()
     return body
@@ -238,7 +240,7 @@ def inject_dma_intrin(stmt_in):
                                 nUnit * dtype_bytes),
                         _error
                         )
-            body = mark_coproc_scope(body)
+            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy))
             return body
         elif (src.scope == env.dram_scope and dst.scope == 'global'):
             assert not (pad_after or pad_before), \
@@ -257,7 +259,7 @@ def inject_dma_intrin(stmt_in):
                                 nUnit * dtype_bytes),
                         _error
                         )
-            body = mark_coproc_scope(body)
+            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy))
             return body
         else:
             raise ValueError('donnot support copy from {0} to {1}'.format(
@@ -301,7 +303,7 @@ def inject_dmacopy2buf_intrin(stmt_in):
                                 nUnit * dtype_bytes),
                         _error
                         )
-            body = mark_coproc_scope(body)
+            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy))
             return body
         elif (env.is_scratchpad_scope(src.scope) and dst.scope == 'global'):
             assert not (pad_after or pad_before), \
@@ -320,7 +322,7 @@ def inject_dmacopy2buf_intrin(stmt_in):
                                 nUnit * dtype_bytes),
                         _error
                         )
-            body = mark_coproc_scope(body)
+            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy))
             return body
         else:
             raise ValueError('donnot support copy from {0} to {1}'.format(
@@ -371,7 +373,7 @@ def inject_scratchpad_ls(stmt_in):
                                 nUnit * dtype_bytes),
                         _error
                     )
-            body = mark_coproc_scope(body)
+            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy))
             return body
 
         elif (env.is_scratchpad_scope(src.scope) and dst.scope == env.dram_scope):
@@ -390,7 +392,7 @@ def inject_scratchpad_ls(stmt_in):
                                 nUnit * dtype_bytes),
                         _error
                     )
-            body = mark_coproc_scope(body)
+            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy))
             return body
         else:
             raise ValueError('donnot support copy from {0} to {1}'.format(
@@ -448,7 +450,7 @@ def inject_scratchpad_copy(stmt_in):
                         )
                     )
 
-        body = mark_coproc_scope(body)
+        body = mark_coproc_scope(body, env.get_pid(env.pid_scratchpad_copy))
         return body
     
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.scratchpad_copy, _inject_copy)
@@ -494,7 +496,7 @@ given = {0} vs {1}'.format(src.dtype, dst.dtype)
                             get_mode_code(src.dtype, dst.dtype)),
                     _error
                 )
-        body = mark_coproc_scope(body)
+        body = mark_coproc_scope(body, env.get_pid(env.pid_acc2buf_copy))
         return body
     
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.copy_acc2buf, _inject_copy)

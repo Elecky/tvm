@@ -8,7 +8,8 @@ import copy
 import tvm
 import yaml
 
-from intrins import IntrinManager
+from .intrins import IntrinManager
+from .intrins import make_intrin_call
 
 class Environment(object):
     """Hardware configuration object.
@@ -46,6 +47,12 @@ class Environment(object):
     scratchpad_ls = 'nnpu_scratchpad_ls'
     scratchpad_copy = 'nnpu_scratchpad_copy'
     copy_acc2buf = 'nnpu_copy_acc2buf'
+    # pipeline IDs:
+    pid_dma_copy = 1
+    pid_matrix_compute = 2
+    pid_acc2buf_copy = 2
+    pid_vector_compute = 3
+    pid_scratchpad_copy = 4
 
     def __init__(self, cfg_path):
         self.cfg = {}
@@ -96,6 +103,9 @@ class Environment(object):
             raise ValueError('illegal scope name')
         return self.cfg[key]
 
+    def get_pid(self, pid):
+        return pid
+
 # set device with the configs in the environment
 def set_device(env, device_id=0, type='S0'):
     func = tvm.get_global_func('nnpu.set_dev', False)
@@ -122,6 +132,9 @@ def mem_info_dram():
                          max_num_bits=dram_cfg['nchannel'] * (1 << dram_cfg['log_size_per_channel']) * 8,
                          head_address=None)
 
+#################################
+# register scratchpad memories. #
+#################################
 def get_scratchpad_memory_info(env, scratchpad_idx):
     scope = env.scratchpad_scope(scratchpad_idx)
     buffer_cfg = env.get_scope_config(scope)
@@ -154,6 +167,9 @@ def mem_info_scratchpad():
     spec = get_env()
     return get_scratchpad_memory_info(spec, 3)
 
+#################################
+# register accumulation buffer. #
+#################################
 @tvm.register_func("tvm.info.mem.%s" % Environment.acc_scope)
 def mem_info_acc():
     spec = get_env()
@@ -190,5 +206,15 @@ def init_default_env():
 def coproc_sync(op):
     _ = op
     return tvm.const(0, 'int32')
+
+@tvm.register_func("tvm.intrin.rule.default.nnpu.coproc_dep_push")
+def coproc_dep_push(op):
+    return make_intrin_call('void', 'DependPush',
+                            op.args[0], op.args[1])
+
+@tvm.register_func("tvm.intrin.rule.default.nnpu.coproc_dep_pop")
+def coproc_dep_pop(op):
+    return make_intrin_call('void', 'DependPop',
+                            op.args[0], op.args[1])
 
 Environment.current = init_default_env()

@@ -297,6 +297,8 @@ private:
     DeclareAssembleFunc(assembleMatBinary);
     DeclareAssembleFunc(assembleCopy);
     DeclareAssembleFunc(assembleMatVctr);
+    DeclareAssembleFunc(assembleDependPush);
+    DeclareAssembleFunc(assembleDependPop);
 
     static const std::unordered_set<char> tokenDelims;
     static const std::unordered_set<char> functDelims;
@@ -413,6 +415,9 @@ NNPUAssembler::NNPUAssembler()
     {
         instrHandler.insert({item, &NNPUAssembler::assembleMatVctr});
     }
+
+    instrHandler.insert({"DependPush", &NNPUAssembler::assembleDependPush});
+    instrHandler.insert({"DependPop", &NNPUAssembler::assembleDependPop});
 }
 
 // void NNPU_VReduceKey(uint32_t out1Addr, uint32_t out2Addr, uint32_t inAddr, uint32_t size, uint32_t mode)
@@ -509,7 +514,7 @@ void NNPUAssembler::Assemble(string asm_str)
         CHECK(it != labelAddr.end())
             << "relocating target label not found";
         uint32_t *ptr = reinterpret_cast<uint32_t*>(
-                            (reinterpret_cast<void*>(&insns[rr.insnIdx]) + rr.RelocPtr));
+                            (reinterpret_cast<char*>(&insns[rr.insnIdx]) + rr.RelocPtr));
         *(ptr) = rr.IsRelative ? it->second - rr.Base : it->second;
     }
 
@@ -1104,6 +1109,28 @@ void NNPUAssembler::assembleMatVctr(const vector<string> &functs,
     );
 }
 
+void NNPUAssembler::assembleDependPush(
+        const vector<string> &functs, 
+        const vector<string> &tokens,
+        const string &instr) {
+    CHECK_EQ(tokens.size(), 3) << ", illegal syntax: " << instr;
+
+    insns.emplace_back(
+            DependPushInsn(parseInt(tokens[1]), parseInt(tokens[2]))
+    );
+}
+
+void NNPUAssembler::assembleDependPop(
+        const vector<string> &functs, 
+        const vector<string> &tokens,
+        const string &instr) {
+    CHECK_EQ(tokens.size(), 3) << ", illegal syntax: " << instr;
+
+    insns.emplace_back(
+            DependPopInsn(parseInt(tokens[1]), parseInt(tokens[2]))
+    );
+}
+
 }  // end namespace nnpu
 
 // the following 3 functions are from tvm.vta, used for managing driver buffers.
@@ -1190,7 +1217,7 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_handleTophyAddr_ =
 extern "C" void NNPU_AssembleAndRun(
                     string asm_code, 
                     string func_name, 
-                    int coproc_scope,
+                    // int coproc_scope,
                     unsigned core_extent /* core number */ ,
                     std::vector<int32_t> args)
 {
@@ -1201,7 +1228,8 @@ extern "C" void NNPU_AssembleAndRun(
     // {
     //     os << it << ", ";
     // }
-    // os << "]\n coproc scope = " << coproc_scope;
+    // os << "]";
+    // // os << "]\n coproc scope = " << coproc_scope;
     // os << "\n calling function [" << func_name;
     // os << "] in asm code: \n";
     // os << asm_code;
@@ -1256,13 +1284,13 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
                 << ", expecting 1st argument to be assembly code [string]";
             CHECK_EQ(args.type_codes[1], kStr)
                 << ", expecting 2nd argument to be function name [string]";
+            // CHECK_EQ(args.type_codes[2], kDLInt)
+            //     << ", expecting 3rd argument to be coproc scope [int]";
             CHECK_EQ(args.type_codes[2], kDLInt)
-                << ", expecting 3rd argument to be coproc scope [int]";
-            CHECK_EQ(args.type_codes[3], kDLInt)
-                << ", expecting 3rd argument to be coproc scope [int]";
+                << ", expecting 3rd argument to be core extent [int]";
 
             std::vector<int32_t> dev_args;  // arguments to be passed to device function.
-            for (int i = 4; i < args.num_args; ++i)
+            for (int i = 3; i < args.num_args; ++i)
             {
                 CHECK_EQ(args.type_codes[i], kDLInt)
                     << ", only int type arguments can be passed to NNPU device";
@@ -1272,6 +1300,5 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
             NNPU_AssembleAndRun(args[0].operator std::__cxx11::string(), 
                                 args[1].operator std::__cxx11::string(),
                                 static_cast<int>(args[2]),
-                                static_cast<int>(args[3]),
                                 dev_args);
         });

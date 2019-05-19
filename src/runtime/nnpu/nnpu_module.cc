@@ -107,13 +107,13 @@ void NNPUWrappedFunc::operator()(TVMArgs args,
     type_codes[0] = kStr;
     values[1].v_str = func_name_.c_str();
     type_codes[1] = kStr;
-    values[2].v_int64 = static_cast<int>(args[args.num_args - 2]);
+    // values[2].v_int64 = static_cast<int>(args[args.num_args - 2]);
+    // type_codes[2] = kDLInt;
+    values[2].v_int64 = static_cast<int>(args[args.num_args - 1]);
     type_codes[2] = kDLInt;
-    values[3].v_int64 = static_cast<int>(args[args.num_args - 1]);
-    type_codes[3] = kDLInt;
 
-    /* the last two arguments are coproc_scope and core_extent */
-    for (int i = 0; i < args.num_args - 2; ++i)
+    /* the last argument are core_extent */
+    for (int i = 0; i < args.num_args - 1; ++i)
     {
         int32_t val;
         switch (args.type_codes[i])
@@ -130,8 +130,8 @@ void NNPUWrappedFunc::operator()(TVMArgs args,
             CHECK(false) << "unexpected argument type";
         }
 
-        values[i + 4].v_int64 = val;
-        type_codes[i + 4] = kDLInt;
+        values[i + 3].v_int64 = val;
+        type_codes[i + 3] = kDLInt;
     }
 
     auto assembleAndRun = Registry::Get("nnpu.assemble_and_run");

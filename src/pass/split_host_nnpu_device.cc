@@ -18,9 +18,7 @@ namespace ir {
 class NNPUIRUseDefAnalysis : public IRMutator {
  public:
   Stmt Mutate_(const AttrStmt *op, const Stmt& s) final {
-    if (op->attr_key == attr::coproc_scope) {
-      coproc_scope = op->value;
-
+    if (op->attr_key == "nnpu_function") {
       Expr value = op->value;
       // if (visit_coproc_scope) {
       //   value = this->Mutate(value);
@@ -162,7 +160,7 @@ class NNPUHostDeviceSplitter : public IRMutator {
   // }
 
   Stmt Mutate_(const AttrStmt *op, const Stmt& s) final {
-    if (op->attr_key == attr::coproc_scope
+    if (op->attr_key == "nnpu_function"
         || op->attr_key == attr::thread_extent) {
       return SplitDeviceFunc(s);
     }
@@ -222,7 +220,6 @@ class NNPUHostDeviceSplitter : public IRMutator {
     for (Var arg : n->args) {
       call_args.push_back(arg);
     }
-    call_args.push_back(m.coproc_scope);
     if (m.thread_extent_.size() == 0) {
       call_args.push_back(IntImm::make(HalideIR::Int(32), 1));
     }
