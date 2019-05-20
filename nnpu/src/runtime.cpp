@@ -1115,8 +1115,11 @@ void NNPUAssembler::assembleDependPush(
         const string &instr) {
     CHECK_EQ(tokens.size(), 3) << ", illegal syntax: " << instr;
 
+    int32_t src = parseInt(tokens[1]), dst = parseInt(tokens[2]);
+    CHECK(src >= 1 && src <= static_cast<int32_t>(pipeline_id::last_pid)) << ", invalid pipeline id: " << src;
+    CHECK(dst >= 1 && dst <= static_cast<int32_t>(pipeline_id::last_pid)) << ", invalid pipeline id: " << dst;
     insns.emplace_back(
-            DependPushInsn(parseInt(tokens[1]), parseInt(tokens[2]))
+            DependPushInsn(static_cast<pipeline_id>(src), static_cast<pipeline_id>(dst))
     );
 }
 
@@ -1126,8 +1129,12 @@ void NNPUAssembler::assembleDependPop(
         const string &instr) {
     CHECK_EQ(tokens.size(), 3) << ", illegal syntax: " << instr;
 
+    int32_t src = parseInt(tokens[1]), dst = parseInt(tokens[2]);
+    CHECK(src >= 1 && src <= static_cast<int32_t>(pipeline_id::last_pid)) << ", invalid pipeline id: " << src;
+    CHECK(dst >= 1 && dst <= static_cast<int32_t>(pipeline_id::last_pid)) << ", invalid pipeline id: " << dst;
+
     insns.emplace_back(
-            DependPopInsn(parseInt(tokens[1]), parseInt(tokens[2]))
+            DependPopInsn(static_cast<pipeline_id>(src), static_cast<pipeline_id>(dst))
     );
 }
 

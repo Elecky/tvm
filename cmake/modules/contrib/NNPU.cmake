@@ -36,19 +36,21 @@ if(PYTHON)
                            ${NNPU_SCSIM_EXEC_DIR}/vctr_sclr.cpp
                            ${NNPU_SCSIM_EXEC_DIR}/vctr_dot_prod.cpp
                            )
-  set(NNPU_SCSIM_SRCS ${NNPU_SCSIM_DIR}/sc_simulator.cpp ${NNPU_SCSIM_DIR}/ifetch.cpp
-                      ${NNPU_SCSIM_DIR}/idecode.cpp ${NNPU_SCSIM_DIR}/issue_queue.cpp
-                      ${NNPU_SCSIM_DIR}/future_file.cpp ${NNPU_SCSIM_DIR}/reserve_station.cpp
-                      ${NNPU_SCSIM_DIR}/alu.cpp ${NNPU_SCSIM_DIR}/common_data_bus.cpp
-                      ${NNPU_SCSIM_DIR}/branch_unit.cpp ${NNPU_SCSIM_DIR}/load_store_unit.cpp
-                      ${NNPU_SCSIM_DIR}/scalar_memory.cpp ${NNPU_SCSIM_DIR}/address_generate_unit.cpp
-                      ${NNPU_SCSIM_DIR}/memory_queue.cpp ${NNPU_SCSIM_DIR}/data_read_unit.cpp
-                      ${NNPU_SCSIM_DIR}/data_write_unit.cpp ${NNPU_SCSIM_DIR}/vctr_calc_unit.cpp
-                      ${NNPU_SCSIM_DIR}/vector_unit.cpp ${NNPU_SCSIM_DIR}/retire_bus.cpp
-                      ${NNPU_SCSIM_DIR}/dram_access_unit.cpp ${NNPU_SCSIM_DIR}/mat_calc_unit.cpp
-                      ${NNPU_SCSIM_DIR}/matrix_unit.cpp ${NNPU_SCSIM_DIR}/ram_access.cpp
-                      ${NNPU_SCSIM_DIR}/ram_channel.cpp ${NNPU_SCSIM_DIR}/buffer_access_spliter.cpp
-                      ${NNPU_SCSIM_DIR}/mem_copy_set_unit.cpp
+  set(NNPU_SCSIM_SRCS ${NNPU_SCSIM_DIR}/sc_simulator.cpp            ${NNPU_SCSIM_DIR}/ifetch.cpp
+                      ${NNPU_SCSIM_DIR}/idecode.cpp                 ${NNPU_SCSIM_DIR}/issue_queue.cpp
+                      ${NNPU_SCSIM_DIR}/future_file.cpp             ${NNPU_SCSIM_DIR}/reserve_station.cpp
+                      ${NNPU_SCSIM_DIR}/alu.cpp                     ${NNPU_SCSIM_DIR}/common_data_bus.cpp
+                      ${NNPU_SCSIM_DIR}/branch_unit.cpp             ${NNPU_SCSIM_DIR}/load_store_unit.cpp
+                      ${NNPU_SCSIM_DIR}/scalar_memory.cpp           ${NNPU_SCSIM_DIR}/address_generate_unit.cpp
+                      ${NNPU_SCSIM_DIR}/memory_queue.cpp            ${NNPU_SCSIM_DIR}/data_read_unit.cpp
+                      ${NNPU_SCSIM_DIR}/data_write_unit.cpp         ${NNPU_SCSIM_DIR}/vctr_calc_unit.cpp
+                      ${NNPU_SCSIM_DIR}/vector_unit.cpp             ${NNPU_SCSIM_DIR}/retire_bus.cpp
+                      ${NNPU_SCSIM_DIR}/dram_access_unit.cpp        ${NNPU_SCSIM_DIR}/mat_calc_unit.cpp
+                      ${NNPU_SCSIM_DIR}/matrix_unit.cpp             ${NNPU_SCSIM_DIR}/ram_access.cpp
+                      ${NNPU_SCSIM_DIR}/ram_channel.cpp             ${NNPU_SCSIM_DIR}/buffer_access_spliter.cpp
+                      ${NNPU_SCSIM_DIR}/mem_copy_set_unit.cpp       ${NNPU_SCSIM_DIR}/depend_queue.cpp
+                      ${NNPU_SCSIM_DIR}/depend_queue_hub.cpp        ${NNPU_SCSIM_DIR}/pipeline_controller.cpp
+                      ${NNPU_SCSIM_DIR}/pipeline_controller_impl.cpp
                       ${NNPU_SCSIM_EXEC_SRCS})
 
   add_library(nnpu-dummy SHARED ${NNPU_SCSIM_DIR}/dummy.cpp)
