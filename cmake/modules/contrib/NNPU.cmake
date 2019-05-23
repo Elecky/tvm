@@ -10,11 +10,10 @@ if(PYTHON)
                         ${RUNTIME_SRC}/sim_driver.cpp)
 
   set(SIM_SRC nnpu/NNPUSim/src/)
-  set(NNPU_SIM_COMMON ${SIM_SRC}/common/bit_packer.cpp ${SIM_SRC}/common/bit_packer_factory.cpp
-                      ${SIM_SRC}/common/bit_wrapper.cpp
-                      ${SIM_SRC}/common/data_types.cpp ${SIM_SRC}/misc/semaphore.cpp
-                      ${SIM_SRC}/insn.cpp
-                      ${SIM_SRC}/insn_ctors.cpp)
+  set(NNPU_SIM_COMMON ${SIM_SRC}/common/bit_packer.cpp    ${SIM_SRC}/common/bit_packer_factory.cpp
+                      ${SIM_SRC}/common/bit_wrapper.cpp   ${SIM_SRC}/common/data_types.cpp
+                      ${SIM_SRC}/insn.cpp                 ${SIM_SRC}/misc/semaphore.cpp
+                      ${SIM_SRC}/insn_ctors.cpp           ${SIM_SRC}/insn_functors.cpp)
 
   set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/S0Simulator.cpp)
   set(NNPU_S1SIM_SRC ${SIM_SRC}/insn_wrapper.cpp 
@@ -37,7 +36,7 @@ if(PYTHON)
                            ${NNPU_SCSIM_EXEC_DIR}/vctr_dot_prod.cpp
                            )
   set(NNPU_SCSIM_SRCS ${NNPU_SCSIM_DIR}/sc_simulator.cpp            ${NNPU_SCSIM_DIR}/ifetch.cpp
-                      ${NNPU_SCSIM_DIR}/idecode.cpp                 ${NNPU_SCSIM_DIR}/issue_queue.cpp
+                      ${NNPU_SCSIM_DIR}/idecode.cpp                 ${NNPU_SCSIM_DIR}/dispatch_queue.cpp
                       ${NNPU_SCSIM_DIR}/future_file.cpp             ${NNPU_SCSIM_DIR}/reserve_station.cpp
                       ${NNPU_SCSIM_DIR}/alu.cpp                     ${NNPU_SCSIM_DIR}/common_data_bus.cpp
                       ${NNPU_SCSIM_DIR}/branch_unit.cpp             ${NNPU_SCSIM_DIR}/load_store_unit.cpp

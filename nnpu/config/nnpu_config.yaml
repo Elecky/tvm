@@ -18,20 +18,23 @@ register_file:
 # the issue queue will be cleared and fetch insn starts from next insn.
 predictBranchTaken: true
 
-issue_queue:
-  size: 8  # number of issue queue slots
-  issue_depth: 2  # how many insns can be fetched and issued on every cycle.
+dispatch_queue:
+  size: 8  # number of dispatch queue slots
+  issue_width: 2  # how many insns can be fetched and dispatched on every cycle.
 
 ReservationStations:  # the number of slot of each reservation station.
   ALU: 8
   load_store_unit: 4
-  tensor_pipeline: 4
+  dma_pipeline: 4
+  matrix_compute_pipeline: 4
+  vector_compute_pipeline: 4
+  memcpy_memset_pipeline: 4
 
 memory_queues: 
   vector_unit: 4
-  matrix_unit: 4
-  edram_dma_unit: 4
-  buffer_copy_set_unit: 4
+  matrix_unit: 6
+  edram_dma_unit: 2
+  memcpy_memset_unit: 2
 
 #-------- configs follows are related to storage structure. --------#
 # dram configs
