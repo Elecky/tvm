@@ -19,7 +19,7 @@ Checkout the [tvm stack homepage](https://tvm.ai/)  for more information.
 #### 本fork repo额外的依赖
 1. 需要安装python yaml包。例如使用`pip install pyyaml`安装。
 2. 需要编译并安装[yaml-cpp库](https://github.com/jbeder/yaml-cpp)。
-3. 下载并按说明编译这个[LLVM repo](https://github.com/Elecky/llvm)。并在编译TVM时，在`build/config.cmake`中修改`set(USE_LLVM /path/to/your/llvm/bin/llvm-config)`，令它指向刚刚编译的LLVM。
+3. 下载并按说明编译这个[LLVM repo](https://github.com/Elecky/llvm/tree/release_70)，注意需要切换到release_70分支！并在编译TVM时，在`build/config.cmake`中修改`set(USE_LLVM /path/to/your/llvm/bin/llvm-config)`，令它指向刚刚编译的LLVM。
 4. 下载并编译安装[SystemC 2.3.3](https://accellera.org/images/downloads/standards/systemc/systemc-2.3.3.tar.gz)。建议在编译SystemC时使用C++14标准（`cmake -DCMAKE_CXX_STANDARD=14 ...`），否则可能出现加载libsystemc.so时符号找不到的错误。
 
 ## 运行NNPU demo
