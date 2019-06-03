@@ -6,6 +6,7 @@ the instruction set definitions of nnpu simulator
 #define NNPU_INSN_H
 
 #include <nnpusim/insn.h>
+#include <nnpusim/micro_code.h>
 
 namespace nnpu
 {

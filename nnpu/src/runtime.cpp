@@ -13,6 +13,7 @@ NNPU runtime
 #include <tvm/runtime/registry.h>
 #include <vector>
 #include <sstream>
+#include <unordered_map>
 
 #define DeclareAssembleFunc(funcName) void funcName(const vector<string>&, const vector<string>&, const string&)
 
@@ -103,6 +104,7 @@ struct DataBuffer
 
 using std::vector;
 using std::string;
+using std::unordered_map;
 
 static string Trim(string str)
 {
@@ -299,6 +301,8 @@ private:
     DeclareAssembleFunc(assembleMatVctr);
     DeclareAssembleFunc(assembleDependPush);
     DeclareAssembleFunc(assembleDependPop);
+    DeclareAssembleFunc(assembleSetPipelineReg);
+    DeclareAssembleFunc(assembleLaunchMicroKernel);
 
     static const std::unordered_set<char> tokenDelims;
     static const std::unordered_set<char> functDelims;
@@ -418,6 +422,9 @@ NNPUAssembler::NNPUAssembler()
 
     instrHandler.insert({"DependPush", &NNPUAssembler::assembleDependPush});
     instrHandler.insert({"DependPop", &NNPUAssembler::assembleDependPop});
+
+    instrHandler.insert({"SetPipelineReg", &NNPUAssembler::assembleSetPipelineReg});
+    instrHandler.insert({"LaunchMicroKernel", &NNPUAssembler::assembleLaunchMicroKernel});
 }
 
 // void NNPU_VReduceKey(uint32_t out1Addr, uint32_t out2Addr, uint32_t inAddr, uint32_t size, uint32_t mode)
@@ -458,12 +465,9 @@ void NNPUAssembler::Assemble(string asm_str)
     Segment segment = Segment::text;
 
     std::stringstream ss(asm_str);
-    constexpr std::size_t bufferSize = 1024;
-    std::unique_ptr<char[]> buffer(new char[bufferSize]);
-
-    while (ss.getline(buffer.get(), bufferSize))
+    string raw;
+    while (getline(ss, raw))
     {
-        string raw = string(buffer.get());
         string line = Trim(raw);
 
         if (line.length() == 0)  // a empty line.
@@ -1138,6 +1142,140 @@ void NNPUAssembler::assembleDependPop(
     );
 }
 
+void NNPUAssembler::assembleSetPipelineReg(
+        const vector<string> &functs, 
+        const vector<string> &tokens,
+        const string &instr) {
+    CHECK_EQ(tokens.size(), 4) << ", illegal syntax: " << instr;
+
+    int32_t pid = parseInt(tokens[1]);
+    CHECK(pid >= 1 && pid <= static_cast<int32_t>(pipeline_id::last_pid)) << ", invalid pipeline id: " << pid;
+
+    insns.emplace_back(SetPipelineRegInsn(static_cast<pipeline_id>(pid), parseInt(tokens[2]), parseReg(tokens[3])));
+}
+
+void NNPUAssembler::assembleLaunchMicroKernel(
+        const vector<string> &functs, 
+        const vector<string> &tokens,
+        const string &instr) {
+    CHECK_EQ(tokens.size(), 5) << ", illegal syntax: " << instr;
+
+    int32_t pid = parseInt(tokens[1]);
+    CHECK(pid >= 1 && pid <= static_cast<int32_t>(pipeline_id::last_pid)) << ", invalid pipeline id: " << pid;
+
+    insns.emplace_back(
+            LaunchMicroKernelInsn(static_cast<pipeline_id>(pid), parseInt(tokens[2]), parseReg(tokens[3]), parseReg(tokens[4])));
+}
+
+class MicroCodeParser {
+public:
+    vector<micro_kernel_t> parse(const string &kernel_str);
+
+    inline static uint32_t parseUInt(const string &token) {
+        return std::atoi(token.c_str());
+    }
+
+    inline static double parseDouble(const string &token) {
+        return std::stod(token.c_str());
+    }
+
+    inline static bool parseBool(const string &token) {
+        assert(token.length() == 1 && ", a boolean value should be either 1 or 0");
+        return token[0] == '1';
+    }
+
+    static CompOp parseCompositeOp(const string &token) {
+        auto parts = Split(token, {'{', ':', '}'});
+        CHECK_EQ(parts.size(), 4) << ", invalid composite operand syntax: " << token;
+
+        return CompOp{parseUInt(parts[0]), parseUInt(parts[1]), parseUInt(parts[2]), parseUInt(parts[3])};
+    }
+
+    using parse_method_t = void (MicroCodeParser::*)(const vector<string> &tokens, const string &instr);
+    static unordered_map<string, MicroCodeParser::parse_method_t> initialize_dispatch();
+
+private:
+    vector<micro_kernel_t> micro_kernels;
+
+    inline micro_kernel_t & current_kernel() {
+        assert(micro_kernels.size() > 0);
+        return micro_kernels.back();
+    }
+
+#define DECLARE_PARSE_METHOD(METHOD) \
+void METHOD(const vector<string> &, const string &)
+
+    DECLARE_PARSE_METHOD(parseGEMM);
+    DECLARE_PARSE_METHOD(parseAccMemset);
+
+#undef DECLARE_PARSE_METHOD
+
+    static unordered_map<string, parse_method_t> dispatch_table;
+};
+
+unordered_map<string, MicroCodeParser::parse_method_t> 
+MicroCodeParser::initialize_dispatch() {
+    unordered_map<string, MicroCodeParser::parse_method_t> table;
+
+    table.insert({"NNPU.GEMM", &MicroCodeParser::parseGEMM});
+    table.insert({"NNPU.AccMemset", &MicroCodeParser::parseAccMemset});
+
+    return table;
+}
+
+unordered_map<string, MicroCodeParser::parse_method_t> 
+MicroCodeParser::dispatch_table = MicroCodeParser::initialize_dispatch();
+
+vector<micro_kernel_t> MicroCodeParser::parse(const string &kernel_str) {
+    micro_kernels = vector<micro_kernel_t>();
+
+    std::stringstream ss(kernel_str);
+    string raw;
+    while (getline(ss, raw)) {
+        if (raw.length() == 0) {
+            continue;
+        }
+
+        if (raw[0] == '#') {
+            /* begin a new kernel */
+            micro_kernels.emplace_back();
+            continue;
+        }
+
+        auto tokens = Split(raw, {',', ' '});
+
+        // the first token is micro-code operation, use it to find the parse method.
+        assert(tokens.size() > 0);
+        auto it = dispatch_table.find(tokens[0]);
+        CHECK(it != dispatch_table.end()) << ", parse method not found for micro-code: " << tokens[0];
+
+        auto parse_method = it->second;
+        (this->*parse_method)(tokens, raw);
+    }
+
+    return move(micro_kernels);
+}
+
+void MicroCodeParser::parseGEMM(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 13) << ", invalid micro-code syntax" << instr;
+
+    current_kernel().emplace_back(
+        GEMMMCode{parseUInt(tokens[1]), parseUInt(tokens[2]), parseUInt(tokens[3]),
+                parseCompositeOp(tokens[4]), parseUInt(tokens[5]),
+                parseCompositeOp(tokens[6]), parseUInt(tokens[7]),
+                parseCompositeOp(tokens[8]), parseUInt(tokens[9]),
+                ModeFromInt(parseUInt(tokens[10])), parseBool(tokens[11]), parseBool(tokens[12])} );
+}
+
+void MicroCodeParser::parseAccMemset(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 7) << ", invalid micro-code syntax" << instr;
+
+    current_kernel().emplace_back(
+        AccMemsetMCode{ parseCompositeOp(tokens[1]), parseUInt(tokens[2]),
+                        parseUInt(tokens[3]), parseUInt(tokens[4]),
+                        parseDouble(tokens[5]), ModeFromInt(parseUInt(tokens[6])) } );
+}
+
 }  // end namespace nnpu
 
 // the following 3 functions are from tvm.vta, used for managing driver buffers.
@@ -1224,7 +1362,7 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_handleTophyAddr_ =
 extern "C" void NNPU_AssembleAndRun(
                     string asm_code, 
                     string func_name, 
-                    // int coproc_scope,
+                    string micro_kernel_src,
                     unsigned core_extent /* core number */ ,
                     std::vector<int32_t> args)
 {
@@ -1280,7 +1418,11 @@ extern "C" void NNPU_AssembleAndRun(
                                 pc))
         << ", entry point not found for function " << func_name;
 
-    sim->Run(insns, pc);
+    /* parse micro-kernels */
+    nnpu::MicroCodeParser parser;
+    auto micro_kernels = parser.parse(micro_kernel_src);
+
+    sim->Run(insns, pc, micro_kernels);
 }
 
 static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
@@ -1291,13 +1433,13 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
                 << ", expecting 1st argument to be assembly code [string]";
             CHECK_EQ(args.type_codes[1], kStr)
                 << ", expecting 2nd argument to be function name [string]";
-            // CHECK_EQ(args.type_codes[2], kDLInt)
-            //     << ", expecting 3rd argument to be coproc scope [int]";
-            CHECK_EQ(args.type_codes[2], kDLInt)
-                << ", expecting 3rd argument to be core extent [int]";
+            CHECK_EQ(args.type_codes[2], kStr)
+                << ", expecting 3rd argument to be micro-kernel sources [string]";
+            CHECK_EQ(args.type_codes[3], kDLInt)
+                << ", expecting 4th argument to be core extent [int]";
 
             std::vector<int32_t> dev_args;  // arguments to be passed to device function.
-            for (int i = 3; i < args.num_args; ++i)
+            for (int i = 4; i < args.num_args; ++i)
             {
                 CHECK_EQ(args.type_codes[i], kDLInt)
                     << ", only int type arguments can be passed to NNPU device";
@@ -1306,6 +1448,7 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
 
             NNPU_AssembleAndRun(args[0].operator std::__cxx11::string(), 
                                 args[1].operator std::__cxx11::string(),
-                                static_cast<int>(args[2]),
+                                args[2].operator std::__cxx11::string(),
+                                static_cast<int>(args[3]),
                                 dev_args);
         });

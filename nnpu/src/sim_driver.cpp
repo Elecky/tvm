@@ -166,10 +166,10 @@ void NNPUMemFree(void *buf)
     return nnpu::DRAM::Global()->Free(buf);
 }
 
-void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns)
+void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns, std::vector<nnpu::micro_kernel_t> &micro_kernels)
 {
     //LOG(INFO) << "pointer to simulator is: " << nnpu::Simulator::ThreadLocal();
-    nnpu::Simulator::ThreadLocal()->Run(insns);
+    nnpu::Simulator::ThreadLocal()->Run(insns, 0, micro_kernels);
 }
 
 void NNPUSetDevice(int id)

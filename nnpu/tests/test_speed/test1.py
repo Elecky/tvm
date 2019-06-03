@@ -76,13 +76,13 @@ with ScheduleProcHelper():
     s[a_buf].compute_at(s[out_host], xoo)
     s[b_buf].compute_at(s[out_host], yoo)
 
-    s[out_buf].compute_at(s[out_host], yoi)
-    s[out_acc].compute_at(s[out_host], yoi)
+    s[out_buf].compute_at(s[out_host], yoo)
+    s[out_acc].compute_at(s[out_host], yoo)
 
-    s[out_acc].unroll(s[out_acc].leaf_iter_vars[2])
+    # s[out_acc].unroll(s[out_acc].leaf_iter_vars[2])
 
     print(nnpu.lower(s, [a, b, out_host], simple_mode=True))
-
+    # exit(0)
     func = nnpu.build(s, [a, b, out_host], 'nnpu', 'llvm', 'nnpu_func')
     # print('------------------- device module 1 asm code: ')
     # print(func.imported_modules[0].get_source('ll'))
@@ -96,3 +96,11 @@ with ScheduleProcHelper():
     out_nd = tvm.nd.array(np.zeros(out_shape_tiled, dtype=out_host.dtype), ctx)
 
     func(a_nd, b_nd, out_nd)
+
+    # check result.
+    a_ord = np.reshape(np.transpose(a_np, axes=[0, 2, 1, 3]), shape1)
+    b_ord = np.transpose(np.reshape(np.transpose(b_np, axes=[0, 2, 1, 3]), shape2), axes=[1,0])
+    out_ord = np.reshape(np.transpose(out_nd.asnumpy(), axes=[0, 2, 1, 3]), (shape1[0], shape2[0]))
+    gt = np.dot(a_ord, b_ord.astype(dtype_w))
+    np.testing.assert_allclose(gt, out_ord)
+    print('test passed')

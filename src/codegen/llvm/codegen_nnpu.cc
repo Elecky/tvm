@@ -10,6 +10,10 @@
 #include "../build_common.h"
 #include "../../pass/ir_util.h"
 #include "../../runtime/nnpu/nnpu_module.h"
+#include "extract_micro_code.h"
+#include <sstream>
+
+using std::string;
 
 namespace tvm
 {
@@ -166,7 +170,7 @@ class MPassManager : public llvm::legacy::PassManager {
 void CodeGenNNPU::Optimize() {
   // place optimization pass
   llvm::PassManagerBuilder builder;
-  builder.OptLevel = 1;
+  builder.OptLevel = 0;
 
 #if TVM_LLVM_VERSION >= 50
   builder.Inliner = llvm::createFunctionInliningPass(builder.OptLevel, 0, false);
@@ -199,6 +203,10 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
 {
   CHECK(target.length() >= 4 &&
         target.substr(0, 4) == "nnpu");
+
+  auto converted_funcs = generate_micro_kernels(funcs, { {"NNPU.GEMM", "iiiciciciiuu"}, {"NNPU.AccMemset", "ciiifi"} });
+  funcs = converted_funcs.first;
+
   InitializeLLVM();  // initialize LLVM, forgetting to do this, llvm even can't find target.
   std::ostringstream config;
   config << "-mtriple=NNPU";
@@ -221,7 +229,7 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
   dest_ll.SetUnbuffered();
   module->print(dest_ll, nullptr);
   std::string ll(data_ll.begin(), data_ll.end());
-  // // print ll
+  // print ll
   // std::cout << "The generate LLVM IR is:\n";
   // std::cout << ll;
 
@@ -240,7 +248,20 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
   std::string asm_code(data_asm.begin(), data_asm.end());
   // std::cout << "The generate asm is:\n";
   // std::cout << asm_code;
-  return NNPUModuleCreate(asm_code, ExtractFuncInfo(funcs), ll);
+
+  std::stringstream ir_ss;
+  for (const auto &func : funcs) {
+    ir_ss << func->name << ":\n" << func->body << '\n';
+  }
+
+  std::stringstream micro_kernel_ss;
+  int id = 0;
+  for (const std::string &kernel : converted_funcs.second) {
+    micro_kernel_ss << '#' << id << ":\n";
+    micro_kernel_ss << kernel << std::endl;
+  }
+
+  return NNPUModuleCreate(asm_code, ExtractFuncInfo(funcs), micro_kernel_ss.str(), ll, ir_ss.str());
 }
 
 TVM_REGISTER_API("codegen.build_nnpu")

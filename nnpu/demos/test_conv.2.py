@@ -126,9 +126,9 @@ with ScheduleProcHelper():
     #   once GEMM finished computing one row of output.
     s[conv_acc].compute_at(s[conv], conv.op.axis[0])
     # unroll
-    s[conv_acc].unroll(co_reduce)
-    s[conv_acc].unroll(kw_reduce)
-    s[conv_acc].unroll(kh_reduce)
+    # s[conv_acc].unroll(co_reduce)
+    # s[conv_acc].unroll(kw_reduce)
+    # s[conv_acc].unroll(kh_reduce)
 
     # split conv to eliminate divide and modular arithmetic.
     io, ii = s[conv].split(conv.op.axis[1], n_row)
@@ -150,6 +150,10 @@ with ScheduleProcHelper():
     func = nnpu.build(s, [feature, kernel, res_host], 'nnpu', 'llvm', 'nnpu_conv')
     # print('------------------- device module 1 asm code: ')
     # print(func.imported_modules[0].get_source('asm'))
+    print('------------------- device module 1 TVM IR: ')
+    print(func.imported_modules[0].get_source('ir'))
+    print('------------------- device module 1 uop: ')
+    print(func.imported_modules[0].get_source('uop'))
 
     ctx = tvm.nd.TVMContext(13, 0)
     fm_np = np.random.randint(size=shape, dtype=feature.dtype, low = -16, high = 16)

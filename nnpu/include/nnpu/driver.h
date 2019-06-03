@@ -12,6 +12,7 @@ driver function declarations of nnpu simulator
 #include <unordered_map>
 #include <map>
 #include <nnpusim/typedef.h>
+#include <nnpusim/micro_code.h>
 
 namespace nnpu
 {
@@ -36,7 +37,7 @@ uint32_t NNPUMemGetPhyAddr(void *buf);
 
 void NNPUMemFree(void *buf);
 
-void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns);
+void NNPU_Run(const std::vector<nnpu::NNPUInsn> &insns, std::vector<nnpu::micro_kernel_t> &micro_kernels);
 
 /*!
  * \brief relate device[id] with current thread.
@@ -69,7 +70,8 @@ public:
     * \param insns: instructions to run.
     * \param pc: program counter where execution starts.
     */
-    virtual void Run(const std::vector<NNPUInsn> &insns, std::size_t pc = 0) = 0;
+    virtual void Run(const std::vector<NNPUInsn> &insns, std::size_t pc,
+                     const std::vector<micro_kernel_t> micro_kernels) = 0;
 
     virtual ~Simulator() {}
 

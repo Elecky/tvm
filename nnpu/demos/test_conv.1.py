@@ -136,9 +136,9 @@ with ScheduleProcHelper():
     s[conv_acc].tensorize(pw_i, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_in2='buffer1',
                                               scope_out='acc'))
     # unroll some axes, to eliminate loop overhead.
-    s[conv_acc].unroll(co_reduce)
-    s[conv_acc].unroll(kw_reduce)
-    s[conv_acc].unroll(kh_reduce)
+    # s[conv_acc].unroll(co_reduce)
+    # s[conv_acc].unroll(kw_reduce)
+    # s[conv_acc].unroll(kh_reduce)
 
     # use compute_at to attach GEMM stage into CopyAcc2Buf stage(copying from accumulation buffer to scratchpad).
     # because accumulation buffer may be quiet small, so we copy output into scratchpad 
@@ -163,6 +163,10 @@ with ScheduleProcHelper():
     func = nnpu.build(s, [feature, kernel, res_host], 'nnpu', 'llvm', 'nnpu_conv')
     # print('------------------- device module 1 asm code: ')
     # print(func.imported_modules[0].get_source('asm'))
+    print('------------------- device module 1 TVM IR: ')
+    print(func.imported_modules[0].get_source('ir'))
+    print('------------------- device module 1 uop: ')
+    print(func.imported_modules[0].get_source('uop'))
 
     ctx = tvm.nd.TVMContext(13, 0)
     fm_np = np.random.randint(size=shape, dtype=feature.dtype, low = -16, high = 16)

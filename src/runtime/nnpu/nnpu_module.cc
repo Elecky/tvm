@@ -20,10 +20,14 @@ class NNPUModule : public runtime::ModuleNode
 public:
     NNPUModule(string asm_, 
                std::unordered_map<string, tvm::runtime::FunctionInfo> fmap,
-               string ll) :
+               string micro_kernels,
+               string ll,
+               string ir) :
         asm_code(move(asm_)),
+        micro_kernels_(move(micro_kernels)),
         fmap_(move(fmap)),
-        ll_(move(ll))
+        ll_(move(ll)),
+        ir_(move(ir))
     {}
 
     const char* type_key() const
@@ -42,10 +46,16 @@ public:
         return asm_code.c_str();
     };
 
+    const char* GetMicroKernelCStr() const {
+        return micro_kernels_.c_str();
+    }
+
 private:
     string asm_code;
+    string micro_kernels_;
     std::unordered_map<string, tvm::runtime::FunctionInfo> fmap_;
     string ll_;
+    string ir_;
 };
 
 /*!
@@ -97,20 +107,27 @@ void NNPUWrappedFunc::operator()(TVMArgs args,
     // // the last argument is coproc scope.
     // os << "\n coproc_scope = " << static_cast<int>(args[5]) << std::endl;
 
-    const std::size_t num_args = args.num_args + 2;  // args plus asm code and functions name.
+    const std::size_t num_args = args.num_args + 3;  // args plus asm code, function name and micro-kernel sources.
     std::unique_ptr<TVMValue[]> values(new TVMValue[num_args]);
     std::unique_ptr<int[]> type_codes(new int[num_args]);
 
     auto ptr = std::dynamic_pointer_cast<NNPUModule>(sptr_);
 
+    /* asm string */
     values[0].v_str = ptr->GetAsmCodeCStr();
     type_codes[0] = kStr;
+    /* function name */
     values[1].v_str = func_name_.c_str();
     type_codes[1] = kStr;
-    // values[2].v_int64 = static_cast<int>(args[args.num_args - 2]);
-    // type_codes[2] = kDLInt;
-    values[2].v_int64 = static_cast<int>(args[args.num_args - 1]);
-    type_codes[2] = kDLInt;
+    /* micro-kernel sources */
+    values[2].v_str = ptr->GetMicroKernelCStr();
+    type_codes[2] = kStr;
+    /* core extent */
+    values[3].v_int64 = static_cast<int>(args[args.num_args - 1]);
+    type_codes[3] = kDLInt;
+
+    /* START is the begin index of following arguments. */
+    int start = 4;
 
     /* the last argument are core_extent */
     for (int i = 0; i < args.num_args - 1; ++i)
@@ -130,8 +147,8 @@ void NNPUWrappedFunc::operator()(TVMArgs args,
             CHECK(false) << "unexpected argument type";
         }
 
-        values[i + 3].v_int64 = val;
-        type_codes[i + 3] = kDLInt;
+        values[i + start].v_int64 = val;
+        type_codes[i + start] = kDLInt;
     }
 
     auto assembleAndRun = Registry::Get("nnpu.assemble_and_run");
@@ -160,6 +177,10 @@ std::string NNPUModule::GetSource(const std::string& format) {
         return asm_code;
     else if (format == "ll")
         return ll_;
+    else if (format == "uop" || format == "micro-kernels")
+        return micro_kernels_;
+    else if (format == "ir")
+        return ir_;
     else
         return "";
 }
@@ -167,9 +188,11 @@ std::string NNPUModule::GetSource(const std::string& format) {
 Module NNPUModuleCreate(
     std::string asm_,
     std::unordered_map<std::string, tvm::runtime::FunctionInfo> fmap,
-    std::string ll)
+    std::string micro_kernels,
+    std::string ll,
+    std::string ir)
 {
-    auto modNode = std::make_shared<NNPUModule>(asm_, fmap, ll);
+    auto modNode = std::make_shared<NNPUModule>(asm_, fmap, micro_kernels, ll, ir);
     return Module(modNode);
 }
 

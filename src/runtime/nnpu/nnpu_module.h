@@ -15,14 +15,18 @@ namespace runtime
 /*!
  * \brief create a cuda module from generated asm code.
  *
- * \param asm_ generated asm code.
- * \param fmap The map function information map of each function.
- * \param ll Optional, printed llvm::module
+ * \param asm_: generated asm code.
+ * \param fmap: The map function information map of each function.
+ * \param micro_kernels: micro kernels in string representation.
+ * \param ll: Optional, printed llvm::module
+ * \param ir: Optional, printed TVM IR
  */
 Module NNPUModuleCreate(
     std::string asm_,
     std::unordered_map<std::string, FunctionInfo> fmap,
-    std::string ll);
+    std::string micro_kernels,
+    std::string ll,
+    std::string ir);
 
 } // end namespace runtime
 }  // end namespace tvm

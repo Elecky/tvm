@@ -38,7 +38,7 @@ void NNPUBufferCopy(const void* from,
 */
 void NNPU_AssembleAndRun(std::string asm_code, 
                          std::string func_name,
-                        //  int coproc_scope, 
+                         std::string micro_kernels,
                          unsigned core_extent,
                          std::vector<int32_t> args);
 

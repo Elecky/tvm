@@ -290,8 +290,9 @@ class IntrinManager(object):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_matrix_compute))
+                    irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_matrix_compute))
                     ptr_type = 'rw' if doAcc else 'w'
-                    irb.emit(make_intrin_call("void", 'GEMM',
+                    irb.emit(tvm.call_intrin("int32", 'NNPU.GEMM',
                                 nRowOut, factor, nColOut,
                                 get_access_ptr(dout, env, ptr_type),
                                 out_row_stride,
@@ -1281,7 +1282,8 @@ class IntrinManager(object):
         env = self.env
         irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
         irb.scope_attr(env.nnpu_axis, "coproc_scope", env.pid_matrix_compute)
-        irb.emit(make_intrin_call("void", 'AccMemset',
+        irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_matrix_compute))
+        irb.emit(tvm.call_intrin("int32", 'NNPU.AccMemset',
                 addr,
                 rowStride,
                 nRow, nCol,
