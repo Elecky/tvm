@@ -12,6 +12,7 @@
 #include "../../runtime/nnpu/nnpu_module.h"
 #include "extract_micro_code.h"
 #include <sstream>
+#include <fstream>
 
 using std::string;
 
@@ -199,12 +200,15 @@ void CodeGenNNPU::Optimize() {
   mpass.run(*module_);
 }
 
+/* the micro-code templates of NNPU backend, initialized by calling nnpu.init_uop_template globally registerd function from python. */
+static std::unordered_map<string, string> micro_code_templates;
+
 runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
 {
   CHECK(target.length() >= 4 &&
         target.substr(0, 4) == "nnpu");
 
-  auto converted_funcs = generate_micro_kernels(funcs, { {"NNPU.GEMM", "iiiciciciiuu"}, {"NNPU.AccMemset", "ciiifi"} });
+  auto converted_funcs = generate_micro_kernels(funcs, micro_code_templates);
   funcs = converted_funcs.first;
 
   InitializeLLVM();  // initialize LLVM, forgetting to do this, llvm even can't find target.
@@ -257,7 +261,7 @@ runtime::Module BuildNNPU(Array<LoweredFunc> funcs, std::string target)
   std::stringstream micro_kernel_ss;
   int id = 0;
   for (const std::string &kernel : converted_funcs.second) {
-    micro_kernel_ss << '#' << id << ":\n";
+    micro_kernel_ss << '#' << id++ << ":\n";
     micro_kernel_ss << kernel << std::endl;
   }
 
@@ -268,6 +272,19 @@ TVM_REGISTER_API("codegen.build_nnpu")
     .set_body([](TVMArgs args, TVMRetValue *rv) {
       *rv = BuildNNPU(args[0], args[1]);
     }); 
+
+static TVM_ATTRIBUTE_UNUSED auto &__register_uop_template_init =
+    ::tvm::runtime::Registry::Register("nnpu.init_uop_template", true)
+        .set_body([](TVMArgs args, TVMRetValue *rv) {
+          micro_code_templates.clear();
+          /* the first argument should be string */
+          string path = args[0];
+          std::ifstream file(path);
+          string micro_code, args_format;
+          while (file >> micro_code >> args_format) {
+            micro_code_templates.insert({micro_code, args_format});
+          }
+        });
 
 } // namespace codegen
 } // namespace tvm
@@ -290,8 +307,7 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_patch_irprinter_ =
                       auto id_node = op->args[0].as<UIntImm>();
                       // std::cerr << op->args[0]->type_key() << "\n";
                       CHECK(id_node != nullptr) 
-                        << "the first argument of llvm_intrin_with_side_effct is not intrin id, \
-ie, an unsigned int";
+                        << "the first argument of llvm_intrin_with_side_effct is not intrin id, ie, an unsigned int";
                       auto id = static_cast<llvm::Intrinsic::ID>(id_node->value);
                       auto real_name = llvm::Intrinsic::getName(id);
                       p->stream << real_name.str() << "(";

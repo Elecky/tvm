@@ -12,11 +12,13 @@ from .intrins import make_intrin_call
 tvm_zero = tvm.const(0, 'uint32')
 
 # some helper functions
-def mark_coproc_scope(stmt, pid):
+def mark_coproc_scope(stmt, pid, is_uop=False):
     irb = tvm.ir_builder.create()
     env = get_env()
     irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
     irb.scope_attr(get_env().nnpu_axis, "coproc_scope", pid)
+    if (is_uop):
+        irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", pid)
     irb.emit(stmt)
     body = irb.get()
     return body
@@ -488,15 +490,15 @@ given = {0} vs {1}'.format(src.dtype, dst.dtype)
                     dst, src,
                     src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
                     lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
-                        tvm.call_llvm_intrin_with_side_effect(
-                            'void', "llvm.NNPU.CopyAccToBuffer", tvm_zero,
+                        tvm.call_intrin(
+                            'int32', "NNPU.CopyAccToBuffer",
                             get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes,
                             get_access_ptr(src, env, 'r') + src_idx * dtype_bytes,
                             nUnit,
                             get_mode_code(src.dtype, dst.dtype)),
                     _error
                 )
-        body = mark_coproc_scope(body, env.get_pid(env.pid_acc2buf_copy))
+        body = mark_coproc_scope(body, env.get_pid(env.pid_acc2buf_copy), True)
         return body
     
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.copy_acc2buf, _inject_copy)

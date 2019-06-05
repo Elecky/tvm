@@ -37,6 +37,34 @@ Stmt call_void_llvm_intrin(const string &name, const Array<Expr> &args) {
 }
 
 /**!
+ * \brief a exception to indicate that the mutator failed to expand the body of of micro-kernel.
+*/
+class cannot_expand_error : std::exception {
+public:
+    cannot_expand_error(const string &message, bool _should_report = false) :
+        message_(message),
+        should_report_(_should_report)
+    {}
+
+    cannot_expand_error() :
+        should_report_(false)
+    {}
+
+    const char * what() const noexcept final {
+        return message_.c_str();
+    }
+
+    inline bool should_report() const noexcept {
+        return should_report_;
+    }
+private:
+    string message_;
+    /* indicates whether this message should be reported to user/developer.
+       currently, errors caused by bad config file should be reported */
+    bool should_report_;
+};
+
+/**!
  * \brief 
 */
 class micro_code_asm_printer : IRVisitor {
@@ -46,27 +74,17 @@ public:
             unsigned num_loop_levels) :
         uop_templates_(uop_templates),
         num_loop_levels_(num_loop_levels),
-        fail(false)
+        micro_code_count(0)
     {}
 
-    pair<bool, string> print(const Stmt &s) {
+    pair<unsigned, string> print(const Stmt &s) {
         Visit(s);
-        if (!fail) {
-            return {true, outs.str()};
-        }
-        else {
-            return {false, ""};
-        }
+        return {micro_code_count, outs.str()};
     }
 
     void Visit_(const Call *op) final {
-        if (fail) {
-            // early stop.
-            return;
-        }
-
         if (op->call_type != Call::Intrinsic && op->call_type != Call::PureIntrinsic) {
-            fail_with_info("when trying to print micro-code asm of NNPU, non-Intrinsic call met");
+            throw cannot_expand_error("when trying to print micro-code asm of NNPU, non-Intrinsic call met", true);
             return;
         }
         
@@ -75,8 +93,7 @@ public:
         if (it == uop_templates_->end()) {
             string error = "when trying to print micro-code asm of NNPU, corresponding uop template was not found for call: ";
             error.append(op->name);
-            fail_with_info(error);
-            return;
+            throw cannot_expand_error(error, true);
         }
 
         /* first print the uop name. uop name is exactly the call->name */
@@ -86,9 +103,6 @@ public:
         const string &temp = it->second;
         const auto &args = op->args;
         for (size_t idx = 0, arg_idx = 0; idx < temp.length(); ++idx) {
-            if (fail) {
-                break;
-            }
             /* print a comma if this is not first argument. */
             if (idx != 0) {
                 outs << ", ";
@@ -125,13 +139,14 @@ public:
                 break;
 
             default:
-                fail_with_info("invalid uop template: " + temp);
+                throw cannot_expand_error("invalid uop template: " + temp, true);
                 break;
             }
         }
 
         /* print a new line character. */
         outs << '\n';
+        ++micro_code_count;
     }
 
 private:
@@ -140,16 +155,8 @@ private:
 
     stringstream outs;
 
-    /* did any error already occur? that is, expansion can not be finished.
-       this may be caused by a unsupported expression pattern in body, or pipeline register number limitation exceeded. */
-    bool fail;
-
-    inline void fail_with_info(const string &info) {
-        fail = true;
-        if (info.length() != 0) {
-            LOG(WARNING) << info;
-        }
-    }
+    /* the number of micro codes generated. */
+    unsigned micro_code_count;
 
     template <typename T>
     auto get_value(const Expr &expr) -> decltype(T::value) {
@@ -158,7 +165,7 @@ private:
             return node->value;
         }
         else {
-            fail_with_info(string("when printing NNPU micro-code asm, wrong argument type met, real type is: ") + expr->type_key());
+            throw cannot_expand_error(string("when printing NNPU micro-code asm, wrong argument type met, real type is: ") + expr->type_key(), true);
             return decltype(T::value)();
         }
     }
@@ -173,45 +180,42 @@ public:
             Array<Var> loop_vars, unsigned num_loop_levels, 
             const unordered_map<string, string> *uop_templates) :
         loop_vars_(loop_vars),
-        fail(false),
         uop_templates_(uop_templates),
         num_loop_levels_(num_loop_levels),
         input_exprs(1)  // initialize first expr (index 0) to empty.
     {}
 
-    std::tuple<bool, string, std::vector<Expr>> expand(const Stmt &s) {
+    std::tuple<bool, string, std::vector<Expr>, unsigned> expand(const Stmt &s) {
         using std::make_tuple;
 
-        fail = false;
-        Stmt expanded = Mutate(s);
-        if (fail) {
-            return make_tuple(false, "", vector<Expr>());
-        }
-        /* simplify expanded stmt, making sure all constants are folded. */
-        expanded = Simplify(expanded);
-        
-        micro_code_asm_printer printer(uop_templates_, num_loop_levels_);
-        auto res = printer.print(expanded);
-        if (!res.first) {
-            return make_tuple(false, "", vector<Expr>());
-        }
+        try {
+            Stmt expanded = Mutate(s);
+            /* simplify expanded stmt, making sure all constants are folded. */
+            expanded = Simplify(expanded);
+            
+            micro_code_asm_printer printer(uop_templates_, num_loop_levels_);
+            auto res = printer.print(expanded);
 
-        return make_tuple(true, move(res.second), move(input_exprs));
+            return make_tuple(true, move(res.second), move(input_exprs), res.first);
+        }
+        catch (cannot_expand_error &error) {
+            if (error.should_report()) {
+                LOG(WARNING) << error.what();
+            }
+            return make_tuple(false, "", vector<Expr>(), 0);
+        }
     }
 
     Stmt Mutate_(const For *op, const Stmt &s) final {
         /* first push current loop variable into EXPAND_VARS, then call IRMutator::mutate_ to mutate body. */
         expand_vars.push_back(Var(op->loop_var.node_));
         Stmt stmt = IRMutator::Mutate_(op, s);
+        // remember to pop the var.
         expand_vars.pop_back();
 
-        if (!fail) {
-            op = stmt.as<For>();
-            return unroll(op, stmt);
-        }
-        else {
-            return s;
-        }
+        op = stmt.as<For>();
+        /* then we try to unroll the for loop. */
+        return unroll(op, stmt);
     }
 
     Stmt unroll(const For *op, const Stmt &s) {
@@ -219,8 +223,7 @@ public:
         int value = GetExtent(op);
         // For loop must have a constant integer extent
         if (value == -1) {
-            fail = true;
-            return s;
+            throw cannot_expand_error("non-constant loop extent met");
         }
         if (value == 0) return Evaluate::make(0);
         Stmt body = op->body;
@@ -243,8 +246,7 @@ public:
 
     Expr Mutate_(const Call *op, const Expr &expr) final {
         if (op->call_type != Call::Intrinsic && op->call_type != Call::PureIntrinsic) {
-            fail_with_info("when trying to expand micro-code of NNPU, non-Intrinsic call met");
-            return expr;
+            throw cannot_expand_error("when trying to expand micro-code of NNPU, non-Intrinsic call met", true);
         }
         
         /* get the call intrinsic name. */
@@ -252,16 +254,14 @@ public:
         if (it == uop_templates_->end()) {
             string error = "when trying to expand micro-code of NNPU, corresponding uop template was not found for call: ";
             error.append(op->name);
-            fail_with_info(error);
-            return expr;
+            throw cannot_expand_error(error, true);
         }
         
         if (it->second.length() != op->args.size()) {
             std::stringstream error;
             error << "when trying to expand micro-code of NNPU, number of args in uop template and call doesn't match, template: "
                     << it->second << ", while " << op->args.size() << " arguments in call";
-            fail_with_info(error.str());
-            return expr;
+            throw cannot_expand_error(error.str(), true);
         }
 
         /* the converted arguments. */
@@ -270,9 +270,6 @@ public:
         Array<Var> unroll_vars(expand_vars.begin(), expand_vars.end());
         /* handle every argument. */
         for (size_t idx = 0; idx < it->second.length(); ++idx) {
-            if (fail) {
-                break;
-            }
             /* the argument type at index IDX of this uop instruction. */
             char type = it->second[idx];
             /* the argument expression. */
@@ -290,7 +287,8 @@ public:
                     args.push_back(arg);
                 }
                 else {
-                    fail = true;  // otherwise, it means the call doesn't satify uop definition, so can't convert it to uop.
+                    // otherwise, it means the call doesn't satify uop definition, so can't convert it to uop.
+                    throw cannot_expand_error("non-const argument met, when template indicates it should be const");
                 }
                 break;
 
@@ -300,7 +298,7 @@ public:
                     args.push_back(arg);
                 }
                 else {
-                    fail = true;
+                    throw cannot_expand_error("non-const argument met, when template indicates it should be const");
                 }
                 break;
 
@@ -312,15 +310,13 @@ public:
                 /* base is the expression after subtracting COEF*LOOP_VARS_ from ARG */
                 Expr base;
                 if (!detect_imm_linear_equation(arg, loop_vars_, coef_imm, base, num_loop_levels_ - loop_vars_.size())) {
-                    fail = true;
-                    break;
+                    throw cannot_expand_error("failed to detect the coefficient of loop variable from composite operand expression");
                 }
                 
                 /* now check if base = f(unroll_vars)+tail, where TAIL is invariant to UNROLL_VARS, and f only depends on UNROLL_VARS */
                 Expr f_unrool_vars, tail;
                 if (!split_expr(base, unroll_vars, f_unrool_vars, tail)) {
-                    fail = true;
-                    break;
+                    throw cannot_expand_error("failed to split free variable from expression");
                 }
                 /* allocate a pipeline local register to store the expression TAIL. the expression will be computed by ALU. */
                 int tail_reg = allocate_register(tail);
@@ -334,25 +330,16 @@ public:
                 break;
             }
             default:
-                fail_with_info("invalid uop template: " + it->second);
-                break;
+                throw cannot_expand_error("invalid uop template: " + it->second, true);
             }
         }
 
-        if (fail) {
-            return expr;
-        }
-        else {
-            return Call::make(op->type, op->name, args, op->call_type);
-        }
+        return Call::make(op->type, op->name, args, op->call_type);
     }
 
 private:
     /* micro-code loop variables */
     Array<Var> loop_vars_;
-    /* did any error already occur? that is, expansion can not be finished.
-       this may be caused by a unsupported expression pattern in body, or pipeline register number limitation exceeded. */
-    bool fail;
     /* templates of uop instructions. */
     const unordered_map<string, string> *uop_templates_;
     /* the loop variables of loops in micro-code, those loops are to be expanded. 
@@ -363,13 +350,6 @@ private:
 
     /* expressions that should be computed by ALU, and then passed to micro-kernel runner. */
     vector<Expr> input_exprs;
-
-    inline void fail_with_info(const string &info) {
-        fail = true;
-        if (info.length() != 0) {
-            LOG(WARNING) << info;
-        }
-    }
 
     /**!
      * \brief 
@@ -517,36 +497,12 @@ public:
         micro_code_expander expander(loop_vars, 2, uop_templates_);
         auto res = expander.expand(body);
 
-        if (std::get<0>(res)) {
-            /* current pipeline id as Expr */
-            Expr pid = make_const(Int(32), pipeline_id_);
-            /* list of stmts to execute */
-            vector<Stmt> stmts;
-
+        // TODO: I limited the micro-code count to be less than 256, is there any beeter way to do limitation?
+        if (std::get<0>(res) && std::get<3>(res) < 256) {
             /* insert this micro-kernel into list. */
             micro_kernels.push_back(move(std::get<1>(res)));
-
-            /* first make intrinsic calls to set pipeline local registers */
-            const vector<Expr> &local_regs_vals = std::get<2>(res);
-            for (size_t idx = 1; idx < local_regs_vals.size(); ++idx) {
-                Array<Expr> args;
-                args.push_back(pid);  // arg0: pipeline id
-                args.push_back(make_const(Int(32), static_cast<int64_t>(idx)));  // arg1: local register no.
-                args.push_back(local_regs_vals[idx]);  // arg2: the value.
-                stmts.push_back(call_void_llvm_intrin("llvm.NNPU.SetPipelineReg", args));
-            }
-            /* then make call to launch micro-kernel */
-            Array<Expr> args;
-            Expr kernel_id = make_const(Int(32), start_idx_ + micro_kernels.size() - 1);
-            args.push_back(pid);  // arg0: pipeline id
-            args.push_back(kernel_id);  // arg1: micro kernel id
-            // loop extens.
-            for (auto &item : loop_exts) {
-                args.push_back(item);
-            }
-            stmts.push_back(call_void_llvm_intrin("llvm.NNPU.LaunchMicroKernel", args));
-
-            return MergeSeq(stmts);
+            /* build statements to set local register and launch micro-kernel */
+            return build_launch_kernel(loop_exts, std::get<2>(res));
         }
         else {
             /* if fails, forward to IRMutator to skip this level of loop, continue to try expanding inner loops to generate micro-kernel body. */
@@ -555,7 +511,26 @@ public:
     }
 
     Expr Mutate_(const Call *op, const Expr &s) final {
+        /* the call should have been handled in Mutate(Evaluate*, Stmt) method. */
         throw std::logic_error("unexpected Node Call");
+    }
+
+    Stmt Mutate_(const Evaluate *op, const Stmt &s) final {
+        /* handle the condition that a micro-code is not wrapped in any loop. */
+        micro_code_expander expander(Array<Var>()/* no loop var */, 2, uop_templates_);
+        auto res = expander.expand(s);
+        if (std::get<0>(res)) {
+            /* insert this micro-kernel into list. */
+            micro_kernels.push_back(move(std::get<1>(res)));
+            /* build statements to set local register and launch micro-kernel */
+            Array<Expr> loop_exts;
+            loop_exts.push_back(make_const(Int(32), 1));
+            loop_exts.push_back(make_const(Int(32), 1));
+            return build_launch_kernel(loop_exts, std::get<2>(res));
+        }
+        else {
+            throw std::logic_error("failed to generate kernel for a single Call Node");
+        }
     }
 
     inline vector<string> & get_micro_codes() {
@@ -570,6 +545,32 @@ private:
     int pipeline_id_;
     /* templates of uop instructions. */
     const unordered_map<string, string> *uop_templates_;
+
+    Stmt build_launch_kernel(const Array<Expr> loop_exts, const vector<Expr> &local_reg_vals) {
+        /* current pipeline id as Expr */
+        Expr pid = make_const(Int(32), pipeline_id_);
+        /* list of stmts to execute */
+        vector<Stmt> stmts;
+        /* first make intrinsic calls to set pipeline local registers */
+        for (size_t idx = 1; idx < local_reg_vals.size(); ++idx) {
+            Array<Expr> args;
+            args.push_back(pid);  // arg0: pipeline id
+            args.push_back(make_const(Int(32), static_cast<int64_t>(idx)));  // arg1: local register no.
+            args.push_back(local_reg_vals[idx]);  // arg2: the value.
+            stmts.push_back(call_void_llvm_intrin("llvm.NNPU.SetPipelineReg", args));
+        }
+        /* then make call to launch micro-kernel */
+        Array<Expr> args;
+        Expr kernel_id = make_const(Int(32), start_idx_ + micro_kernels.size() - 1);
+        args.push_back(pid);  // arg0: pipeline id
+        args.push_back(kernel_id);  // arg1: micro kernel id
+        // loop extens.
+        for (auto &item : loop_exts) {
+            args.push_back(item);
+        }
+        stmts.push_back(call_void_llvm_intrin("llvm.NNPU.LaunchMicroKernel", args));
+        return MergeSeq(stmts);
+    }
 };
 
 micro_code_extractor::micro_code_extractor(

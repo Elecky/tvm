@@ -1,0 +1,3 @@
+NNPU.GEMM iiiciciciiuu
+NNPU.AccMemset ciiifi
+NNPU.CopyAccToBuffer ccii

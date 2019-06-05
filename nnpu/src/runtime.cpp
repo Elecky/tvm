@@ -14,6 +14,7 @@ NNPU runtime
 #include <vector>
 #include <sstream>
 #include <unordered_map>
+#include <limits>
 
 #define DeclareAssembleFunc(funcName) void funcName(const vector<string>&, const vector<string>&, const string&)
 
@@ -1175,6 +1176,12 @@ public:
         return std::atoi(token.c_str());
     }
 
+    inline static uint16_t parseUShort(const string &token) {
+        auto data = std::atoi(token.c_str());
+        assert(data >= 0 && data <= std::numeric_limits<uint16_t>::max());
+        return static_cast<uint16_t>(data);
+    }
+
     inline static double parseDouble(const string &token) {
         return std::stod(token.c_str());
     }
@@ -1207,6 +1214,7 @@ void METHOD(const vector<string> &, const string &)
 
     DECLARE_PARSE_METHOD(parseGEMM);
     DECLARE_PARSE_METHOD(parseAccMemset);
+    DECLARE_PARSE_METHOD(parseCopyAcc2Buf);
 
 #undef DECLARE_PARSE_METHOD
 
@@ -1219,6 +1227,7 @@ MicroCodeParser::initialize_dispatch() {
 
     table.insert({"NNPU.GEMM", &MicroCodeParser::parseGEMM});
     table.insert({"NNPU.AccMemset", &MicroCodeParser::parseAccMemset});
+    table.insert({"NNPU.CopyAccToBuffer", &MicroCodeParser::parseCopyAcc2Buf});
 
     return table;
 }
@@ -1260,7 +1269,7 @@ void MicroCodeParser::parseGEMM(const vector<string> &tokens, const string &inst
     CHECK_EQ(tokens.size(), 13) << ", invalid micro-code syntax" << instr;
 
     current_kernel().emplace_back(
-        GEMMMCode{parseUInt(tokens[1]), parseUInt(tokens[2]), parseUInt(tokens[3]),
+        GEMMMCode{parseUShort(tokens[1]), parseUShort(tokens[2]), parseUShort(tokens[3]),
                 parseCompositeOp(tokens[4]), parseUInt(tokens[5]),
                 parseCompositeOp(tokens[6]), parseUInt(tokens[7]),
                 parseCompositeOp(tokens[8]), parseUInt(tokens[9]),
@@ -1272,8 +1281,16 @@ void MicroCodeParser::parseAccMemset(const vector<string> &tokens, const string 
 
     current_kernel().emplace_back(
         AccMemsetMCode{ parseCompositeOp(tokens[1]), parseUInt(tokens[2]),
-                        parseUInt(tokens[3]), parseUInt(tokens[4]),
+                        parseUShort(tokens[3]), parseUShort(tokens[4]),
                         parseDouble(tokens[5]), ModeFromInt(parseUInt(tokens[6])) } );
+}
+
+void MicroCodeParser::parseCopyAcc2Buf(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 5) << ", invalid micro-code syntax" << instr;
+
+    current_kernel().emplace_back(
+        CopyAcc2BufMCode{ parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]),
+                          parseUInt(tokens[3]), ModeFromInt(parseUInt(tokens[4])) } );
 }
 
 }  // end namespace nnpu
