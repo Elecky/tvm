@@ -84,7 +84,7 @@ with ScheduleProcHelper():
 
     s[out_buf].compute_at(s[out_host], yoi)
     s[out_acc].compute_at(s[out_host], yoi)
-    s[out_acc].unroll(s[out_acc].leaf_iter_vars[2])
+    # s[out_acc].unroll(s[out_acc].leaf_iter_vars[2])
 
     print(nnpu.lower(s, [a, b, out_host], simple_mode=True))
 

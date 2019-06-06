@@ -92,8 +92,8 @@ with ScheduleProcHelper():
     print(nnpu.lower(s, [feature, kernel, res_host], simple_mode=True))
 
     func = nnpu.build(s, [feature, kernel, res_host], 'nnpu', 'llvm', 'nnpu_conv')
-    print('------------------- device module 1 asm code: ')
-    print(func.imported_modules[0].get_source('asm'))
+    print('------------------- device module 1 IR: ')
+    print(func.imported_modules[0].get_source('ir'))
 
     ctx = tvm.nd.TVMContext(13, 0)
     fm_np = np.random.randint(size=shape, dtype=feature.dtype, low = -16, high = 16)

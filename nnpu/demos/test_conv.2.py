@@ -154,7 +154,7 @@ with ScheduleProcHelper():
     print(func.imported_modules[0].get_source('ir'))
     print('------------------- device module 1 uop: ')
     print(func.imported_modules[0].get_source('uop'))
-
+    
     ctx = tvm.nd.TVMContext(13, 0)
     fm_np = np.random.randint(size=shape, dtype=feature.dtype, low = -16, high = 16)
     fm_nd = tvm.nd.array(fm_np, ctx)
