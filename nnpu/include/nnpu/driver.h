@@ -71,7 +71,7 @@ public:
     * \param pc: program counter where execution starts.
     */
     virtual void Run(const std::vector<NNPUInsn> &insns, std::size_t pc,
-                     const std::vector<micro_kernel_t> micro_kernels) = 0;
+                     const std::vector<micro_kernel_t> &micro_kernels) = 0;
 
     virtual ~Simulator() {}
 
