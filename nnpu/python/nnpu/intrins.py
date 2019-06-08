@@ -90,7 +90,8 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_vector_compute))
-                irb.emit(make_intrin_call("void", intrin_func,
+                irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_vector_compute))
+                irb.emit(tvm.call_intrin("int32", 'NNPU.' + intrin_func,
                             get_access_ptr(dout, env, 'w'),
                             get_access_ptr(din, env, 'r'),
                             cfg['vector_unit']['size'],
@@ -171,7 +172,8 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_vector_compute))
-                irb.emit(make_intrin_call("void", intrin_func,
+                irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_vector_compute))
+                irb.emit(tvm.call_intrin("int32", 'NNPU.' + intrin_func,
                             get_access_ptr(dout, env, 'w'),
                             get_access_ptr(din, env, 'r'),
                             tvm.const(imm_value, 'float64'),
@@ -446,7 +448,8 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_vector_compute))
-                irb.emit(make_intrin_call("void", intrin_func,
+                irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_vector_compute))
+                irb.emit(tvm.call_intrin("int32", 'NNPU.' + intrin_func,
                             get_access_ptr(dout, env, 'w'),
                             get_access_ptr(din1, env, 'r'),
                             get_access_ptr(din2, env, 'r'),
@@ -532,7 +535,8 @@ class IntrinManager(object):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_vector_compute))
-                    irb.emit(make_intrin_call("void", intrin_func,
+                    irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_vector_compute))
+                    irb.emit(tvm.call_intrin("int32", 'NNPU.' + intrin_func,
                             get_access_ptr(dout, env, 'w'),
                             get_access_ptr(din, env, 'r'),
                             get_access_ptr(dout, env, 'r'),
@@ -952,8 +956,9 @@ class IntrinManager(object):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
                     irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_matrix_compute))
+                    irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_matrix_compute))
                     ptr_mode = 'rw' if doAcc else 'w'
-                    irb.emit(make_intrin_call("void", intrin_func,
+                    irb.emit(tvm.call_intrin("int32", 'NNPU.' + intrin_func,
                                 get_access_ptr(dout, env, ptr_mode),
                                 get_access_ptr(din1, env, 'r'),
                                 din1.strides[0] * dtype_bytes(dtype_in),
@@ -1199,7 +1204,8 @@ class IntrinManager(object):
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
                 irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_vector_compute))
-                irb.emit(make_intrin_call("void", intrin_func,
+                irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_vector_compute))
+                irb.emit(tvm.call_intrin("int32", 'NNPU.' + intrin_func,
                             get_access_ptr(dout, env, 'w'),
                             get_access_ptr(din1, env, 'r'),
                             get_access_ptr(din2, env, 'r'),

@@ -222,13 +222,12 @@ private:
     // relocation records.
     vector<RelocRecord> relocRecords;
 
+    using assemble_func_p = void (NNPUAssembler::*)(const vector<string>&, const vector<string>&, const string&);
     // subscribed handlers for different instructions, use unordered_map to do dispatching.
-    std::unordered_map<string, 
-                       void (NNPUAssembler::*)(
-                                const vector<string>&,
-                                const vector<string>&,
-                                const string&)> instrHandler;
+    static std::unordered_map<string, assemble_func_p> instrHandler;
     
+    static std::unordered_map<string, assemble_func_p> initialize_handler_table();
+
     /*
      * \brief parse a register operand, return the register No.
      * \param token: register operand
@@ -312,120 +311,99 @@ private:
 const std::unordered_set<char> NNPUAssembler::tokenDelims = {',', ' ', '\t'};
 const std::unordered_set<char> NNPUAssembler::functDelims = {'.'};
 
+std::unordered_map<string, NNPUAssembler::assemble_func_p> 
+NNPUAssembler::instrHandler = NNPUAssembler::initialize_handler_table();
+
 NNPUAssembler::NNPUAssembler()
-{
-    instrHandler.insert({"Load", &NNPUAssembler::assembleLoad});
-    instrHandler.insert({"Store", &NNPUAssembler::assembleStore});
+{}
 
-    static const vector<string> aluBinaryOps 
-        { "AddU", "SubU", "MulU", "DivU", "ModU", "SLTU",
-          "SLT", "SEQ", "XOR", "And", "Or" };
-    for (auto &item : aluBinaryOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleALUBinary});
+std::unordered_map<string, NNPUAssembler::assemble_func_p> NNPUAssembler::initialize_handler_table() {
+    std::unordered_map<string, NNPUAssembler::assemble_func_p> table;
+
+    table.insert({"Load", &NNPUAssembler::assembleLoad});
+    table.insert({"Store", &NNPUAssembler::assembleStore});
+
+    for (auto &item : vector<string> { "AddU", "SubU", "MulU", "DivU", "ModU", 
+                                        "SLTU", "SLT", "SEQ", "XOR", "And", "Or" }) {
+        table.insert({item, &NNPUAssembler::assembleALUBinary});
     }
 
-    static const vector<string> aluUnaryOps
-        { "AddIU", "MulIU", "DivIU", "ModIU", "SLTIU", "SLTI",
-          "SEQI", "XORI", "AndI", "OrI", "SHLI" };
-    for (auto &item : aluUnaryOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleALUUnary});
+    for (auto &item : vector<string> { "AddIU", "MulIU", "DivIU", "ModIU", "SLTIU", "SLTI", 
+                                        "SEQI", "XORI", "AndI", "OrI", "SHLI" }) {
+        table.insert({item, &NNPUAssembler::assembleALUUnary});
     }
 
-    instrHandler.insert({"Jump", &NNPUAssembler::assembleJump});
-    instrHandler.insert({"BNEZ", &NNPUAssembler::assembleBZ});
-    instrHandler.insert({"BEZ", &NNPUAssembler::assembleBZ});
+    table.insert({"Jump", &NNPUAssembler::assembleJump});
+    table.insert({"BNEZ", &NNPUAssembler::assembleBZ});
+    table.insert({"BEZ", &NNPUAssembler::assembleBZ});
 
-    instrHandler.insert({"DMALoad", &NNPUAssembler::assembleDMA});
-    instrHandler.insert({"DMAStore", &NNPUAssembler::assembleDMA});
+    table.insert({"DMALoad", &NNPUAssembler::assembleDMA});
+    table.insert({"DMAStore", &NNPUAssembler::assembleDMA});
 
-    instrHandler.insert({"ScratchpadLoad", &NNPUAssembler::assembleBufferLS});
-    instrHandler.insert({"ScratchpadStore", &NNPUAssembler::assembleBufferLS});
+    table.insert({"ScratchpadLoad", &NNPUAssembler::assembleBufferLS});
+    table.insert({"ScratchpadStore", &NNPUAssembler::assembleBufferLS});
 
-    instrHandler.insert({"DMABufLoad", &NNPUAssembler::assembleDMA2Buffer});
-    instrHandler.insert({"DMABufStore", &NNPUAssembler::assembleDMA2Buffer});
+    table.insert({"DMABufLoad", &NNPUAssembler::assembleDMA2Buffer});
+    table.insert({"DMABufStore", &NNPUAssembler::assembleDMA2Buffer});
 
-    static const vector<string> vctrBinaryOps
-        { "VAddV", "VSubV", "VMulV", "VDivV", "VGTMV" };
-    for (auto &item : vctrBinaryOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleVctrBinary});
+    for (auto &item : vector<string> { "VAddV", "VSubV", "VMulV", "VDivV", "VGTMV" }) {
+        table.insert({item, &NNPUAssembler::assembleVctrBinary});
     }
 
-    instrHandler.insert({"ret", &NNPUAssembler::assembleRet});
+    table.insert({"ret", &NNPUAssembler::assembleRet});
 
-    instrHandler.insert({"Memset", &NNPUAssembler::assembleMemset});
+    table.insert({"Memset", &NNPUAssembler::assembleMemset});
 
-    instrHandler.insert({"VDotV", &NNPUAssembler::assembleVDotV});
+    table.insert({"VDotV", &NNPUAssembler::assembleVDotV});
 
-    instrHandler.insert({"GEMM", &NNPUAssembler::assembleGEMM});
+    table.insert({"GEMM", &NNPUAssembler::assembleGEMM});
 
-    instrHandler.insert({"AccMemset", &NNPUAssembler::assembleAccMemset});
+    table.insert({"AccMemset", &NNPUAssembler::assembleAccMemset});
 
-    instrHandler.insert({"CopyAccToBuffer", &NNPUAssembler::assembleCopyAccToBuffer});
+    table.insert({"CopyAccToBuffer", &NNPUAssembler::assembleCopyAccToBuffer});
 
-    static const vector<string> matImmOps
-        { "MAddI", "MMulI", "ISubM" };
-    for (auto &item : matImmOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleMatImm});
+    for (auto &item : vector<string> { "MAddI", "MMulI", "ISubM" }) {
+        table.insert({item, &NNPUAssembler::assembleMatImm});
     }
 
-    static const vector<string> vctrImmOps
-        { "VAddI", "VSubI", "VMulI", "VDivI", "VGTMI", "ISubV",
-          "IDivV" };
-    for (auto &item : vctrImmOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleVctrImm});
+    for (auto &item : vector<string> { "VAddI", "VSubI", "VMulI", "VDivI", "VGTMI", "ISubV", "IDivV" }) {
+        table.insert({item, &NNPUAssembler::assembleVctrImm});
     }
 
-    instrHandler.insert({"MReduceSumRow", &NNPUAssembler::assembleMatReduce});
+    table.insert({"MReduceSumRow", &NNPUAssembler::assembleMatReduce});
 
-    static const vector<string> vctrSclrOps
-        { "VAddS", "VSubS", "VMulS", "VDivS", "VGTMS", "SSubV", "SDivV"};
-    for (auto &item : vctrSclrOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleVctrSclr});
+    for (auto &item : vector<string> { "VAddS", "VSubS", "VMulS", "VDivS", "VGTMS", "SSubV", "SDivV"}) {
+        table.insert({item, &NNPUAssembler::assembleVctrSclr});
     }
 
-    static const vector<string> vctrUnaryOps
-        { "VExp", "VLog" };
-    for (auto &item : vctrUnaryOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleVctrUnary});
+    for (auto &item : vector<string> { "VExp", "VLog" }) {
+        table.insert({item, &NNPUAssembler::assembleVctrUnary});
     }
 
-    static const vector<string> vctrReduceOps
-        { "VReduceSum", "VReduceMax", "VReduceMin" };
-    for (auto &item : vctrReduceOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleVctrReduce});
+    for (auto &item : vector<string> { "VReduceSum", "VReduceMax", "VReduceMin" }) {
+        table.insert({item, &NNPUAssembler::assembleVctrReduce});
     }
 
-    instrHandler.insert({"MRowDot", &NNPUAssembler::assembleMatRowDot});
+    table.insert({"MRowDot", &NNPUAssembler::assembleMatRowDot});
 
-    static const vector<string> matBinaryOps
-        {"MAddM", "MSubM", "MMulM"};
-    for (auto &item : matBinaryOps)
-    {
-        instrHandler.insert({item, &NNPUAssembler::assembleMatBinary});
+    for (auto &item : vector<string> { "MAddM", "MSubM", "MMulM" }) {
+        table.insert({item, &NNPUAssembler::assembleMatBinary});
     }
 
-    instrHandler.insert({"ScratchpadCopy", &NNPUAssembler::assembleCopy});
+    table.insert({"ScratchpadCopy", &NNPUAssembler::assembleCopy});
 
-    static const vector<string> matVctrOps
-        {"MAddV", "MSubV", "MMulV"};
-    for (auto &item : matVctrOps)
+    for (auto &item : vector<string> { "MAddV", "MSubV", "MMulV" })
     {
-        instrHandler.insert({item, &NNPUAssembler::assembleMatVctr});
+        table.insert({item, &NNPUAssembler::assembleMatVctr});
     }
 
-    instrHandler.insert({"DependPush", &NNPUAssembler::assembleDependPush});
-    instrHandler.insert({"DependPop", &NNPUAssembler::assembleDependPop});
+    table.insert({"DependPush", &NNPUAssembler::assembleDependPush});
+    table.insert({"DependPop", &NNPUAssembler::assembleDependPop});
 
-    instrHandler.insert({"SetPipelineReg", &NNPUAssembler::assembleSetPipelineReg});
-    instrHandler.insert({"LaunchMicroKernel", &NNPUAssembler::assembleLaunchMicroKernel});
+    table.insert({"SetPipelineReg", &NNPUAssembler::assembleSetPipelineReg});
+    table.insert({"LaunchMicroKernel", &NNPUAssembler::assembleLaunchMicroKernel});
+
+    return table;
 }
 
 // void NNPU_VReduceKey(uint32_t out1Addr, uint32_t out2Addr, uint32_t inAddr, uint32_t size, uint32_t mode)
@@ -1215,6 +1193,9 @@ void METHOD(const vector<string> &, const string &)
     DECLARE_PARSE_METHOD(parseGEMM);
     DECLARE_PARSE_METHOD(parseAccMemset);
     DECLARE_PARSE_METHOD(parseCopyAcc2Buf);
+    DECLARE_PARSE_METHOD(parseVectorBinary);
+    DECLARE_PARSE_METHOD(parseVectorUnary);
+    DECLARE_PARSE_METHOD(parseVectorImm);
 
 #undef DECLARE_PARSE_METHOD
 
@@ -1228,6 +1209,18 @@ MicroCodeParser::initialize_dispatch() {
     table.insert({"NNPU.GEMM", &MicroCodeParser::parseGEMM});
     table.insert({"NNPU.AccMemset", &MicroCodeParser::parseAccMemset});
     table.insert({"NNPU.CopyAccToBuffer", &MicroCodeParser::parseCopyAcc2Buf});
+
+    for (string &item : vector<string> { "VAddV", "VSubV", "VMulV", "VDivV", "VGTMV" }) {
+        table.insert({"NNPU." + item, &MicroCodeParser::parseVectorBinary});
+    }
+
+    for (string &item : vector<string> { "VExp", "VLog" }) {
+        table.insert({"NNPU." + item, &MicroCodeParser::parseVectorUnary});
+    }
+
+    for (string &item : vector<string> { "VAddI", "VSubI", "VMulI", "VDivI", "VGTMI", "ISubV", "IDivV" }) {
+        table.insert({"NNPU." + item, &MicroCodeParser::parseVectorImm});
+    }
 
     return table;
 }
@@ -1291,6 +1284,56 @@ void MicroCodeParser::parseCopyAcc2Buf(const vector<string> &tokens, const strin
     current_kernel().emplace_back(
         CopyAcc2BufMCode{ parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]),
                           parseUInt(tokens[3]), ModeFromInt(parseUInt(tokens[4])) } );
+}
+
+void MicroCodeParser::parseVectorBinary(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 6) << ", invalid micro-code syntax" << instr;
+
+    using type = VctrBinaryMCode::OpType;
+    static const std::unordered_map<string, type> Ops
+        { {"NNPU.VAddV", type::VAddV}, {"NNPU.VSubV", type::VSubV},
+          {"NNPU.VMulV", type::VMulV}, {"NNPU.VDivV", type::VDivV},
+          {"NNPU.VGTMV", type::VGTMV} };
+    auto it = Ops.find(tokens[0]);
+
+    CHECK(it != Ops.end()) << ", invalid op-code: " << tokens[0];
+
+    current_kernel().emplace_back(
+        VctrBinaryMCode{ parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]), parseCompositeOp(tokens[3]),
+                         parseUInt(tokens[4]), ModeFromInt(parseUInt(tokens[5])), it->second } );
+}
+
+void MicroCodeParser::parseVectorUnary(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 5) << ", invalid micro-code syntax" << instr;
+
+    using type = VctrUnaryMCode::OpType;
+    static const std::unordered_map<string, type> Ops
+        { {"NNPU.VExp", type::VExp}, {"NNPU.VLog", type::VLog} };
+    auto it = Ops.find(tokens[0]);
+
+    CHECK(it != Ops.end()) << ", invalid op-code: " << tokens[0];
+
+    current_kernel().emplace_back(
+        VctrUnaryMCode { parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]), 
+                         parseUInt(tokens[3]), ModeFromInt(parseUInt(tokens[4])) } );
+}
+
+void MicroCodeParser::parseVectorImm(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 6) << ", invalid micro-code syntax" << instr;
+
+    using type = VctrImmMCode::OpType;
+    static const std::unordered_map<string, type> Ops
+        { { "NNPU.VAddI", type::VAddI }, { "NNPU.VSubI", type::VSubI }, 
+          { "NNPU.VMulI", type::VMulI }, { "NNPU.VDivI", type::VDivI }, 
+          { "NNPU.VGTMI", type::VGTMI }, { "NNPU.ISubV", type::ISubV }, 
+          { "NNPU.IDivV", type::IDivV } };
+    auto it = Ops.find(tokens[0]);
+
+    CHECK(it != Ops.end()) << ", invalid op-code: " << tokens[0];
+
+    current_kernel().emplace_back(
+        VctrImmMCode { parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]),
+                       parseDouble(tokens[3]), parseUInt(tokens[4]), ModeFromInt(parseUInt(tokens[5])) } );
 }
 
 }  // end namespace nnpu

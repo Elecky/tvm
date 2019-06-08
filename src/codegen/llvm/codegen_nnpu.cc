@@ -282,7 +282,12 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_uop_template_init =
           std::ifstream file(path);
           string micro_code, args_format;
           while (file >> micro_code >> args_format) {
-            micro_code_templates.insert({micro_code, args_format});
+            string insn_name;
+            std::istringstream ss(micro_code);
+            /* split MICRO_CODE by '|', each part is an instruction. */
+            while (std::getline(ss, insn_name, '|')) {
+              micro_code_templates.insert({insn_name, args_format});
+            }
           }
         });
 

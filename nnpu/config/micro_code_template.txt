@@ -1,3 +1,6 @@
 NNPU.GEMM iiiciciciiuu
 NNPU.AccMemset ciiifi
 NNPU.CopyAccToBuffer ccii
+NNPU.VAddV|NNPU.VSubV|NNPU.VMulV|NNPU.VDivV|NNPU.VGTMV cccii
+NNPU.VExp|NNPU.VLog ccii
+NNPU.VAddI|NNPU.VSubI|NNPU.VMulI|NNPU.VDivI|NNPU.VGTMI|NNPU.ISubV|NNPU.IDivV| ccfii
