@@ -35,7 +35,7 @@ with ScheduleProcHelper():
 
     k = tvm.reduce_axis((0, factor), 'k0')
 
-    prod_shape = (shape1[1] / factor, shape1[0], shape2[0])
+    prod_shape = (shape1[1] // factor, shape1[0], shape2[0])
     k = tvm.reduce_axis((0, factor), 'k0')
     prod_buf = tvm.compute(prod_shape, 
                         lambda j, i, l: tvm.sum(a_buf[i, j * factor + k].astype(dtype_w) * 

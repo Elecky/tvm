@@ -69,8 +69,8 @@ def test():
     s[pooling_buf].reorder( i, j, k1, ko, xo, ki, xi)
     s[pooling_buf].tensorize(ki, env.intrins.get(str_op, scope_out='buffer0', mode='w'))
     # unroll
-    s[pooling_buf].unroll(ko)
-    s[pooling_buf].unroll(xo)
+    # s[pooling_buf].unroll(ko)
+    # s[pooling_buf].unroll(xo)
     #==================================#
     # ------ this ends the scheduling ------
     #==================================#

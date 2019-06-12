@@ -1315,7 +1315,7 @@ void MicroCodeParser::parseVectorUnary(const vector<string> &tokens, const strin
 
     current_kernel().emplace_back(
         VctrUnaryMCode { parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]), 
-                         parseUInt(tokens[3]), ModeFromInt(parseUInt(tokens[4])) } );
+                         parseUInt(tokens[3]), ModeFromInt(parseUInt(tokens[4])), it->second } );
 }
 
 void MicroCodeParser::parseVectorImm(const vector<string> &tokens, const string &instr) {
@@ -1333,7 +1333,7 @@ void MicroCodeParser::parseVectorImm(const vector<string> &tokens, const string 
 
     current_kernel().emplace_back(
         VctrImmMCode { parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]),
-                       parseDouble(tokens[3]), parseUInt(tokens[4]), ModeFromInt(parseUInt(tokens[5])) } );
+                       parseDouble(tokens[3]), parseUInt(tokens[4]), ModeFromInt(parseUInt(tokens[5])), it->second } );
 }
 
 }  // end namespace nnpu

@@ -52,6 +52,7 @@ def test():
                                         axis=[k1, k2]),
                               'pooling_buf')
     sph.MarkScope(pooling_buf)
+    sum_host, _ = nnpu.utils.CopyBufToH(pooling_buf, 'step3', sph)
     
     # stage 2, divide by cell_shape^2, to compute average.
     Imm = tvm.const(cell_shape*cell_shape, env.cfg['dtype_w'])
@@ -69,7 +70,7 @@ def test():
     # ------ begin scheduling ------
     #==================================#
 
-    s = tvm.create_schedule(step3_host.op)
+    s = tvm.create_schedule([step3_host.op, sum_host.op])
     sph.Transform(s)
 
     #tensorize
@@ -84,37 +85,52 @@ def test():
     s[pooling_buf].reorder( i, j, k1, ko, xo, ki, xi)
     s[pooling_buf].tensorize(ki, env.intrins.get('VAddMerge',  mode='w'))
     # unroll
-    s[pooling_buf].unroll(xo)
-    s[pooling_buf].unroll(ko)
+    # s[pooling_buf].unroll(xo)
+    # s[pooling_buf].unroll(ko)
     
     # split and tensorize.
     xo2, xi2 = s[step3_buf].split(step3_buf.op.axis[2], factor=nvctr_unit)
     s[step3_buf].reorder( step3_buf.op.axis[0], step3_buf.op.axis[1], xo2, xi2)
     s[step3_buf].tensorize(xi2, env.intrins.get('VDivI',imm_value=Imm.value,  mode='w'))
-    s[step3_buf].unroll(xo2)
+    # s[step3_buf].unroll(xo2)
     #==================================#
     # ------ this ends the scheduling ------
     #==================================#
 
-    print(nnpu.lower(s, [a, step3_host], simple_mode=True))
+    print(nnpu.lower(s, [a, sum_host, step3_host], simple_mode=True))
     # exit()
-    func = nnpu.build(s, [a, step3_host], 'nnpu', 'llvm', name='nnpu_func')
+    func = nnpu.build(s, [a, sum_host, step3_host], 'nnpu', 'llvm', name='nnpu_func')
+
+    print('------------------- device module 1 TVM IR: ')
+    print(func.imported_modules[0].get_source('ir'))
+    print('------------------- device module 1 uop: ')
+    print(func.imported_modules[0].get_source('uop'))
 
     ctx = tvm.nd.TVMContext(13, 0)
     a_np = np.random.randint(size=in_shape, dtype=a.dtype, low = -128, high = 127)
     a_nd = tvm.nd.array(a_np, ctx)
 
     c_nd = tvm.nd.array(np.zeros(out_shape, dtype=step3_host.dtype), ctx)
+    s_nd = tvm.nd.array(np.zeros(out_shape, dtype=step3_host.dtype), ctx)
 
-    func(a_nd, c_nd)
-    # print("pooling-mean")
-    # print(c_nd.asnumpy())
+    func(a_nd, s_nd, c_nd)
+
+    # gt = mean_pooling_sum(in_shape, out_shape, cell_shape, a_np, a.dtype)
+    # np.testing.assert_allclose(s_nd.asnumpy(), gt)
+    # print('sum is ok')
     
-    # print("nppooling-mean")
     gt=mean_pooling(in_shape,out_shape,cell_shape,a_np,a.dtype)
-    # print(gt)
     np.testing.assert_allclose(c_nd.asnumpy(), gt)
     print('test passed')
+
+def mean_pooling_sum(inshape,outshape,cell_shape,innp,outdetype):
+  ret=np.zeros(outshape, dtype=outdetype)
+  for w in range(outshape[0]):
+    for h in range(outshape[1]):
+      for j in range(cell_shape):
+        for k in range(cell_shape):
+          ret[w][h]=ret[w][h]+innp[w*cell_shape+j][h*cell_shape+k]
+  return ret
 
 def mean_pooling(inshape,outshape,cell_shape,innp,outdetype):
   ret=np.zeros(outshape, dtype=outdetype)

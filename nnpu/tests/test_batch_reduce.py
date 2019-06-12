@@ -58,8 +58,8 @@ def test():
 
     gtm_nd = tvm.nd.array(np.zeros((16,)).astype(gtm_host.dtype), ctx)
     
-    print('------------------- device module 1 asm code: ')
-    print(func.imported_modules[0].get_source('asm'))
+    print('------------------- device module 1 IR code: ')
+    print(func.imported_modules[0].get_source('ir'))
     func(a_nd, add_nd,gtm_nd)
 
     print('a = ')

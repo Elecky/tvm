@@ -48,11 +48,16 @@ def test():
     xo, xi = s[gtm_buf].split(gtm_buf.op.axis[0], factor=nvctr_unit)
     s[gtm_buf].tensorize(xi, env.intrins.get('VGTMV', mode='n', scope_in2=b_scope))
 
-
     print(nnpu.lower(s, [a, b, c_host, mul_host, gtm_host], simple_mode=True))
     # exit()
     func = nnpu.build(s, [a, b, c_host, mul_host, gtm_host], 'nnpu', 'llvm', name='nnpu_exp')
-    print(nnpu.top.get_iter_type_str(s[c_buf].iter_var_attrs[ s[c_buf].leaf_iter_vars[1] ].iter_type))
+    print('------------------- device module 1 IR: ')
+    print(func.imported_modules[0].get_source('ir'))
+
+    print('------------------- device module 1 micro code: ')
+    print(func.imported_modules[0].get_source('uop'))
+
+    print(s[c_buf].op.axis[0].dom)
     # exit()
 
     ctx = tvm.nd.TVMContext(13, 0)

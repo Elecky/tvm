@@ -31,7 +31,7 @@ with ScheduleProcHelper():
     b_buf, b_dram = nnpu.utils.CopyHtoBuf(b, 'b')
 
     k = tvm.reduce_axis((0, factor), 'k0')
-    prod_shape = (shape[1] / factor, shape[0])
+    prod_shape = (shape[1] // factor, shape[0])
     prod_buf = tvm.compute(prod_shape,
                         lambda i, j: tvm.sum(a_buf[j, i * factor + k].astype(dtype_w) * 
                                         b_buf[i * factor + k].astype(dtype_w), axis=k),
