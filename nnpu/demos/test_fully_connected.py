@@ -108,11 +108,15 @@ with ScheduleProcHelper():
     # ------ this ends the scheduling ------
     #==================================#
 
-    print(nnpu.lower(s, [weight, data, bias, res_host], simple_mode=True))
+    # with nnpu.build_config(dump_pass_ir=True):
+    with nnpu.build_config():
+        print(nnpu.lower(s, [weight, data, bias, res_host], simple_mode=True))
 
     func = nnpu.build(s, [weight, data, bias, res_host], 'nnpu', 'llvm', name='nnpu_func')
-    # print('------------------- device module 1 asm code: ')
-    # print(func.imported_modules[0].get_source('asm'))
+    print('------------------- device module 1 TVM IR: ')
+    print(func.imported_modules[0].get_source('ir'))
+    print('------------------- device module 1 uop: ')
+    print(func.imported_modules[0].get_source('uop'))
 
     ctx = tvm.nd.TVMContext(13, 0)
     a_np = np.random.randint(size=weight_shape, dtype=weight.dtype, low = -32, high = 32)

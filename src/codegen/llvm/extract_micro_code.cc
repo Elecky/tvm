@@ -200,6 +200,8 @@ public:
 
     Expr Mutate_(const Call *op, const Expr &expr) final;
 
+    Stmt Mutate_(const LetStmt *op, const Stmt &s) final;
+
 private:
     /* micro-code loop variables */
     Array<Var> loop_vars_;
@@ -238,11 +240,19 @@ private:
     /**!
      * \brief allocate a pipeline register to EXPR.
     */
-    inline int allocate_register(const Expr &expr) {
+    inline int allocate_register(Expr expr) {
+        expr = Simplify(expr);
         if (is_zero(expr)) {
             return 0;
         }
-        // TODO: use deep comparasion to compare already allocated expression to current one.
+        /* first look at the INPUT_EXPRS list, see if this expression is already in it. */
+        // TODO: is there any other way than a deep comparasion?
+        for (std::size_t idx = 1; idx < input_exprs.size(); ++idx) {
+            if (Equal(input_exprs[idx], expr)) {
+                return static_cast<int>(idx);
+            }
+        }
+        /* if not found, allocate another local register. */
         input_exprs.push_back(expr);
         return static_cast<int>(input_exprs.size() - 1);
     }
@@ -318,6 +328,10 @@ Stmt micro_code_expander::unroll(const For *op, const Stmt &s) {
         }
     }
     return unrolled;
+}
+
+Stmt micro_code_expander::Mutate_(const LetStmt *op, const Stmt &s) {
+    throw cannot_expand_error("unhandled stmt LetStmt", true);
 }
 
 Expr micro_code_expander::Mutate_(const Call *op, const Expr &expr) {

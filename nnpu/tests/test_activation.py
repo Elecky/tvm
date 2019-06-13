@@ -56,6 +56,12 @@ with (ScheduleProcHelper()):
     print(nnpu.lower(s, [a, sigmoid_host], simple_mode=True))
 
     func = nnpu.build(s, [a, sigmoid_host], 'nnpu', 'llvm', 'nnpu_func')
+    print('------------------- device module 1 IR: ')
+    print(func.imported_modules[0].get_source('ir'))
+
+    print('------------------- device module 1 micro code: ')
+    print(func.imported_modules[0].get_source('uop'))
+    # exit()
 
     ctx = tvm.nd.TVMContext(13, 0)
     a_np = np.random.random(shape).astype(a.dtype) * 2
