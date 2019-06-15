@@ -303,6 +303,7 @@ private:
     DeclareAssembleFunc(assembleDependPop);
     DeclareAssembleFunc(assembleSetPipelineReg);
     DeclareAssembleFunc(assembleLaunchMicroKernel);
+    DeclareAssembleFunc(assembleMoveFromBuf);
 
     static const std::unordered_set<char> tokenDelims;
     static const std::unordered_set<char> functDelims;
@@ -323,13 +324,14 @@ std::unordered_map<string, NNPUAssembler::assemble_func_p> NNPUAssembler::initia
     table.insert({"Load", &NNPUAssembler::assembleLoad});
     table.insert({"Store", &NNPUAssembler::assembleStore});
 
-    for (auto &item : vector<string> { "AddU", "SubU", "MulU", "DivU", "ModU", 
-                                        "SLTU", "SLT", "SEQ", "XOR", "And", "Or" }) {
+    for (auto &item : vector<string> { 
+                        "AddU", "SubU", "MulU", "Div", "Mod", "SLTU", 
+                        "SLT", "SEQ", "XOR", "And", "Or", "Max", "Min" }) {
         table.insert({item, &NNPUAssembler::assembleALUBinary});
     }
 
-    for (auto &item : vector<string> { "AddIU", "MulIU", "DivIU", "ModIU", "SLTIU", "SLTI", 
-                                        "SEQI", "XORI", "AndI", "OrI", "SHLI" }) {
+    for (auto &item : vector<string> { "AddIU", "MulIU", "DivI", "ModI", "SLTIU", "SLTI", 
+                                        "SEQI", "XORI", "AndI", "OrI", "SHLI", "SRLI" }) {
         table.insert({item, &NNPUAssembler::assembleALUUnary});
     }
 
@@ -402,6 +404,7 @@ std::unordered_map<string, NNPUAssembler::assemble_func_p> NNPUAssembler::initia
 
     table.insert({"SetPipelineReg", &NNPUAssembler::assembleSetPipelineReg});
     table.insert({"LaunchMicroKernel", &NNPUAssembler::assembleLaunchMicroKernel});
+    table.insert({"MoveFromBuf", &NNPUAssembler::assembleMoveFromBuf});
 
     return table;
 }
@@ -639,10 +642,11 @@ void NNPUAssembler::assembleALUBinary(
     static const std::unordered_map<string, ALUBinaryOp> Ops 
         {   {"AddU", ALUBinaryOp::Add}, {"SLT", ALUBinaryOp::SLT},
             {"SubU", ALUBinaryOp::Sub}, {"MulU", ALUBinaryOp::Mul},
-            {"DivU", ALUBinaryOp::DivU}, {"ModU", ALUBinaryOp::ModU},
+            {"Div", ALUBinaryOp::Div}, {"Mod", ALUBinaryOp::Mod},
             {"SLTU", ALUBinaryOp::SLTU}, {"SEQ", ALUBinaryOp::SEQ},
             {"XOR", ALUBinaryOp::XOR}, {"And", ALUBinaryOp::And},
-            {"Or", ALUBinaryOp::Or}
+            {"Or", ALUBinaryOp::Or}, {"Max", ALUBinaryOp::Max},
+            {"Min", ALUBinaryOp::Min}
         };
 
     CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;;
@@ -661,11 +665,11 @@ void NNPUAssembler::assembleALUUnary(
 {
     static const std::unordered_map<string, ALURegImmOp> Ops
         {   {"AddIU", ALURegImmOp::AddIU}, {"MulIU", ALURegImmOp::MulIU},
-            {"DivIU", ALURegImmOp::DivIU}, {"ModIU", ALURegImmOp::ModIU},
+            {"DivI", ALURegImmOp::DivI},   {"ModI", ALURegImmOp::ModI},
             {"SLTIU", ALURegImmOp::SLTIU}, {"SLTI", ALURegImmOp::SLTI},
             {"SEQI", ALURegImmOp::SEQI},   {"XORI", ALURegImmOp::XORI},
             {"AndI", ALURegImmOp::AndI},   {"OrI", ALURegImmOp::OrI},
-            {"SHLI", ALURegImmOp::SHLI}
+            {"SHLI", ALURegImmOp::SHLI},   {"SRLI", ALURegImmOp::SRLI}
         };
     
     CHECK_EQ(tokens.size(), 4) << ", ilegal syntax: " << instr;
@@ -1146,6 +1150,16 @@ void NNPUAssembler::assembleLaunchMicroKernel(
             LaunchMicroKernelInsn(static_cast<pipeline_id>(pid), parseInt(tokens[2]), parseReg(tokens[3]), parseReg(tokens[4])));
 }
 
+void NNPUAssembler::assembleMoveFromBuf(
+        const vector<string> &functs, 
+        const vector<string> &tokens,
+        const string &instr) {
+    CHECK_EQ(tokens.size(), 4) << ", illegal syntax: " << instr;
+
+    insns.emplace_back(
+        MoveFromBufInsn(parseReg(tokens[1]), parseReg(tokens[2]), ModeFromInt(parseInt(tokens[3]))));
+}
+
 class MicroCodeParser {
 public:
     vector<micro_kernel_t> parse(const string &kernel_str);
@@ -1442,7 +1456,7 @@ extern "C" void NNPU_AssembleAndRun(
     // os << "begin assembling\n";
 
     auto sim = nnpu::Simulator::ThreadLocal();
-
+    CHECK(sim != nullptr) << "device not set";
     CHECK_EQ(core_extent, sim->GetCoreExtent())
         << ", the core extent of simulator and compiled NNPU device function doesn't match";
 

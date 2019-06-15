@@ -37,6 +37,8 @@ public:
 
   llvm::Value *VisitExpr_(const Call *op) final;
 
+  void InitTarget(llvm::TargetMachine* tm) final;
+
   // WARNING: CodeGenLLVM has no virtual destructor, so we shouldn't add any field member!!
   //          since it's common to save a pointer to CodeGenLLVM derivate in unique_ptr.
 
@@ -98,6 +100,16 @@ void CodeGenNNPU::AddFunction(const LoweredFunc &f)
   else
   {
     builder_->CreateRet(ConstInt32(0));
+  }
+}
+
+void CodeGenNNPU::InitTarget(llvm::TargetMachine* tm) {
+  module_->setTargetTriple(tm->getTargetTriple().str());
+  module_->setDataLayout(tm->createDataLayout());
+  data_layout_.reset(new llvm::DataLayout(module_.get()));
+  target_machine_ = tm;
+  if (native_vector_bits_ == 0) {
+    native_vector_bits_ = 32;
   }
 }
 
@@ -178,8 +190,9 @@ void CodeGenNNPU::Optimize() {
 #else
   builder.Inliner = llvm::createFunctionInliningPass(builder.OptLevel, 0);
 #endif
-  builder.LoopVectorize = true;
-  builder.SLPVectorize = true;
+  /* NNPU backend don't support vector for integers. */
+  builder.LoopVectorize = false;
+  builder.SLPVectorize = false;
   this->InitPassManagerBuilder(&builder);
 
 #if TVM_LLVM_VERSION >= 50
