@@ -396,13 +396,13 @@ class StorageFlattener : public IRMutator {
       CHECK_EQ(tuple->args.size(), be.bounds.size() * 2);
       for (size_t i = 0; i < be.buffer->shape.size(); ++i) {
         begins.push_back(
-            arith::ComputeExpr<Sub>(tuple->args[2 * i], be.bounds[i]->min));
-        extents.push_back(tuple->args[2 * i + 1]);
+            arith::ComputeExpr<Sub>(Mutate(tuple->args[2 * i]), be.bounds[i]->min));
+        extents.push_back(Mutate(tuple->args[2 * i + 1]));
       }
     } else {
       for (size_t i = 0; i < tuple->args.size(); i += 2) {
-        begins.push_back(tuple->args[i]);
-        extents.push_back(tuple->args[i + 1]);
+        begins.push_back(Mutate(tuple->args[i]));
+        extents.push_back(Mutate(tuple->args[i + 1]));
       }
     }
     Buffer slice = be.buffer.MakeSlice(begins, extents);

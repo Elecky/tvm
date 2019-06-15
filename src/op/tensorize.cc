@@ -10,11 +10,24 @@
 #include "op_util.h"
 #include "compute_op.h"
 #include "../schedule/message_passing.h"
+#include <tvm/ir_visitor.h>
 
 namespace tvm {
 
 using namespace ir;
 using namespace op;
+using std::vector;
+using std::pair;
+
+/**!
+ * \brief detect nested loads (call node) that is invariant to variables in VARIANT_VARS
+*/
+Operation DetectInvariantNestedLoad(
+    const ComputeOpNode* self, 
+    const std::unordered_map<const Variable*, IntSet> &var_doms,
+    vector< pair<Var, Expr> > &in_vars);
+
+Array<Tensor> GetTensorizedInputs(const ComputeOpNode *self);
 
 // Detect the region of input and output to be tensrized.
 // out_dom: the domain of root iter vars in output op
@@ -22,10 +35,11 @@ using namespace op;
 // return The location of the tensorized scope start.
 size_t InferTensorizeRegion(
     const ComputeOpNode* self,
-    const Stage& stage,
+    Stage& stage,
     const std::unordered_map<IterVar, Range>& dom_map,
     std::unordered_map<IterVar, Range>* out_dom,
-    std::unordered_map<Tensor, Array<Range> >* in_region) {
+    std::unordered_map<Tensor, Array<Range> >* in_region,
+    vector< pair<Var, Expr> > &vars_nested_call) {
   // Get the bound of the tensorized scope.
   bool found_point = false;
   size_t loc_scope = 0;
@@ -63,17 +77,36 @@ size_t InferTensorizeRegion(
   CHECK(found_point);
   // Get domain of the tensorized scope.
   schedule::PassUpDomain(stage, dom_map, &up_state);
-  // Get domains if inputs
+  // Get domains of inputs
   std::unordered_map<Tensor, TensorDom> in_dom;
   std::unordered_map<const Variable*, IntSet> temp_dmap;
-  Array<Tensor> inputs = self->InputTensors();
-  for (Tensor t : inputs) {
-    in_dom.emplace(t, TensorDom(t.ndim()));
-  }
   for (IterVar iv : self->root_iter_vars()) {
     IntSet iset = up_state.at(iv);
     (*out_dom)[iv] = iset.cover_range(dom_map.at(iv));
     temp_dmap[iv->var.get()] = iset;
+  }
+  /* detect nested loads (call node) and casts in compute body that is invariant in tensorized scope. */
+  Operation new_op = DetectInvariantNestedLoad(self, temp_dmap, vars_nested_call);
+  if (new_op.defined()) {
+    /* if any nested invariant loads are detected, it means the body of Op is changed. */
+    self = new_op.as<ComputeOpNode>();
+    /* and we copy the modify the stage itself. */
+    auto stage_node = make_node<StageNode>();
+    CHECK(stage_node != nullptr);
+    auto ori_node = stage.as<StageNode>();
+    CHECK(ori_node != nullptr);
+    *stage_node = *ori_node;
+    stage_node->op = new_op;
+    stage = Stage(stage_node);
+    /* we also have to add the newly created variable in VARS_NESTED_CALL into temp_dmap, for further input domain detection. */
+    for (const auto &item : vars_nested_call) {
+      temp_dmap.insert({item.first.get(), IntSet::single_point(item.first)});
+    }
+  }
+  Array<Tensor> inputs = self->InputTensors();
+  
+  for (Tensor t : inputs) {
+    in_dom.emplace(t, TensorDom(t.ndim()));
   }
   // Input domains
   self->PropBoundToInputs(stage->op, temp_dmap, &in_dom);
@@ -170,8 +203,8 @@ class TensorIntrinMatcher final : public IRMutator {
   }
 
   Expr Mutate_(const Reduce* op, const Expr& e) final {
-    Expr expr = IRMutator::Mutate_(op, e);
-    op = expr.as<Reduce>();
+    // NOTE: since Mutate_ will change variables in reduce axies's extends, we must use original axis to do mapping.
+    // IT IS VERY CONFUSING why this happens, since axes var outside tensorized scope has a range with extend 1 and min is itself.
     Array<IterVar> axis;
     for (size_t i = 0; i < op->axis.size(); ++i) {
       auto it = axis_remap_.find(op->axis[i]);
@@ -179,6 +212,8 @@ class TensorIntrinMatcher final : public IRMutator {
         axis.push_back(it->second);
       }
     }
+    Expr expr = IRMutator::Mutate_(op, e);
+    op = expr.as<Reduce>();
     return Reduce::make(
         op->combiner, op->source, axis, op->condition, op->value_index);
   }
@@ -191,7 +226,8 @@ class TensorIntrinMatcher final : public IRMutator {
             Map<Var, Range>* compute_intrin_iter_space) {
     CHECK(self == stage->op.get());
     // input remap.
-    Array<Tensor> inputs = self->InputTensors();
+    // Array<Tensor> inputs = self->InputTensors();
+    Array<Tensor> inputs = GetTensorizedInputs(self);
     CHECK_EQ(inputs.size(), intrin->inputs.size());
     for (size_t i = 0; i < inputs.size(); ++i) {
       InputEntry e;
@@ -323,12 +359,20 @@ void VerifyTensorizeBody(
 }
 
 Stmt MakeTensorize(const ComputeOpNode* self,
-                   const Stage& stage,
+                   const Stage& stage_ori,
                    const std::unordered_map<IterVar, Range>& dom_map,
                    bool debug_keep_trivial_loop) {
   std::unordered_map<IterVar, Range> out_dom;
   std::unordered_map<Tensor, Array<Range> > in_region;
-  size_t tloc = InferTensorizeRegion(self, stage, dom_map, &out_dom, &in_region);
+  Operation op;
+  vector< pair<Var, Expr> > vars_nested_call;
+  /* copy Stage argument, since we may want to mutate the stage and compute */
+  Stage stage = stage_ori;
+  size_t tloc = InferTensorizeRegion(self, stage, dom_map, &out_dom, &in_region, vars_nested_call);
+  if (!stage.same_as(stage_ori)) {
+    self = stage->op.as<ComputeOpNode>();
+    CHECK(self != nullptr);
+  }
   TensorIntrin intrin = stage->iter_var_attrs.at(
       stage->leaf_iter_vars[tloc])->tensor_intrin;
   CHECK(intrin.defined());
@@ -338,7 +382,8 @@ Stmt MakeTensorize(const ComputeOpNode* self,
   // Start bind data.
   Stmt nop = Evaluate::make(0);
   std::vector<Stmt> input_bind_nest, output_bind_nest;
-  Array<Tensor> inputs = self->InputTensors();
+  // Array<Tensor> inputs = self->InputTensors();
+  Array<Tensor> inputs = GetTensorizedInputs(self);
   CHECK_EQ(inputs.size(), intrin->inputs.size())
       << "Tensorize failed: input size mismatch ";
   // input binding
@@ -371,7 +416,7 @@ Stmt MakeTensorize(const ComputeOpNode* self,
     tuple.push_back(it->second->extent);
   }
   for (size_t i = intrin->inputs.size(); i < intrin->buffers.size(); ++i) {
-    Tensor tensor = stage->op.output(i - intrin->inputs.size());
+    Tensor tensor = stage_ori->op.output(i - intrin->inputs.size());
     Buffer buffer = intrin->buffers[i];
     Array<NodeRef> bind_spec{buffer, tensor};
     output_bind_nest.emplace_back(AttrStmt::make(
@@ -401,6 +446,11 @@ Stmt MakeTensorize(const ComputeOpNode* self,
     binder.Bind(target->dom->extent, it->second->extent,
                 "tensir_intrin.reduction.extent");
   }
+  /* create let stmts for vars_nested_call */
+  std::vector<Stmt> lets;
+  for (const auto & item : vars_nested_call) {
+    lets.emplace_back(LetStmt::make(item.first, item.second, Evaluate::make(0)));
+  }
   if (tloc <= n.num_common_loop) {
     // Do no need to split reduction
     std::vector<std::vector<Stmt> > nest(
@@ -411,6 +461,7 @@ Stmt MakeTensorize(const ComputeOpNode* self,
         << "Normal store op for intrin " << intrin << " is not defined";
     Stmt body = MergeNest(output_bind_nest, intrin->body);
     body = MergeNest(input_bind_nest, body);
+    body = MergeNest(lets, body);
     body = Substitute(body, vmap);
     body = MergeNest(binder.asserts(), body);
     body = Substitute(body, n.main_vmap);
@@ -438,10 +489,12 @@ Stmt MakeTensorize(const ComputeOpNode* self,
       // The update
       Stmt update = MergeNest(output_bind_nest, intrin->reduce_update);
       update = MergeNest(input_bind_nest, update);
+      update = MergeNest(lets, update);
       update = Substitute(update, vmap);
       update = MergeNest(binder.asserts(), update);
-      update = Substitute(update, n.main_vmap);
       update = MergeNest(update_nest, update);
+      /* move the Substitude down here, because update_nest may also access main_loop vars. */
+      update = Substitute(update, n.main_vmap);
       return MergeNest(common, Block::make(init, update));
     } else {
       // When init op is not available, use body op for reset in the first iter.
@@ -469,10 +522,12 @@ TVM_REGISTER_API("test.op.InferTensorizeRegion")
     std::unordered_map<IterVar, Range> out_dom;
     std::unordered_map<Tensor, Array<Range> > in_region;
     CHECK(stage->op.as<ComputeOpNode>());
+    vector< pair<Var, Expr> > vars_nested_call;
     InferTensorizeRegion(stage->op.as<ComputeOpNode>(),
                          stage,
                          as_unordered_map(dmap),
-                         &out_dom, &in_region);
+                         &out_dom, &in_region,
+                         vars_nested_call);
     *ret = Array<NodeRef>{Map<IterVar, Range>(out_dom),
                           Map<Tensor, Array<Range> >(in_region)};
   });
@@ -492,4 +547,145 @@ TVM_REGISTER_API("test.op.MatchTensorizeBody")
                               intrin,
                               &vrange);
   });
+
+class NestedLoadDetector : public IRMutator {
+public:
+  NestedLoadDetector(const std::unordered_map<const Variable*, IntSet> &var_doms,
+                     vector< pair<Var, Expr> > &in_vars) :
+    var_doms_(var_doms),
+    in_vars_(in_vars)
+  {}
+
+  Expr Mutate_(const Call *op, const Expr &e) final;
+  Expr Mutate_(const Cast *op, const Expr &e) final;
+
+private:
+  const std::unordered_map<const Variable*, IntSet> &var_doms_;
+  vector< pair<Var, Expr> > &in_vars_;
+  bool inNested;
+
+  /**!
+   * \brief check if an expression is invariant given VAR_DOMS as variable domain.
+  */
+  bool isInvariant(const Expr &e) const {
+    bool result {true};
+    auto fvisit = [this, &result](const NodeRef& n) {
+      auto *variable = n.as<Variable>();
+      if (variable != nullptr) {
+        auto it = this->var_doms_.find(variable);
+        if (it == this->var_doms_.end() || !it->second.is_single_point()) {
+          /* if we don't know the domain, or we are sure it's not single point. */
+          result = false;
+        }
+      }
+    };
+    ir::PostOrderVisit(e, fvisit);
+    return result;
+  }
+
+  /**!
+   * \brief replace an expression with a variable.
+   * \note this is intended to be used by variables that is invariant.
+  */
+  Var replaceWithVar(const Expr &expr) {
+    for (const auto &item : in_vars_) {
+      if (Equal(expr, item.second)) {
+        return item.first;
+      }
+    }
+
+    /* if this expression has not been found, add it into IN_VARS. */
+    std::stringstream ss;
+    ss << "cst_var" << in_vars_.size();
+    in_vars_.emplace_back(Var(ss.str(), expr.type()), expr);
+    return in_vars_.back().first;
+  }
+};
+
+Expr NestedLoadDetector::Mutate_(const Call *call, const Expr &e) {
+  if (call->func.defined()) {
+    if (!inNested) {
+      /* if this is not a nested load(call) */
+      inNested = true;
+      Expr ret = IRMutator::Mutate_(call, e);
+      inNested = false;
+      return ret;
+    }
+    else {
+      /* now we know it is an nested call (multi-dim load) */
+      if (!isInvariant(e)) {
+        /* if the call is not invariant, return un-touched. */
+        return e;
+      }
+      /* if all arguments are invariant in VAR_DOMS, replace it as a variable */
+      return replaceWithVar(e);
+    }
+  }
+  else {
+    return IRMutator::Mutate_(call, e);
+  }
+}
+
+Expr NestedLoadDetector::Mutate_(const Cast *op, const Expr &e) {
+  if (!inNested) {
+    return IRMutator::Mutate_(op, e);
+  }
+  else {
+    /* now we know it is an nested call (multi-dim load) */
+    if (!isInvariant(e)) {
+      /* if the call is not invariant, return un-touched. */
+      return e;
+    }
+    /* if all arguments are invariant in VAR_DOMS, replace it as a variable */
+    return replaceWithVar(e);
+  }
+}
+
+Operation DetectInvariantNestedLoad(
+            const ComputeOpNode* self, 
+            const std::unordered_map<const Variable*, IntSet> &var_doms,
+            vector< pair<Var, Expr> > &in_vars) {
+  in_vars.clear();
+  NestedLoadDetector detector(var_doms, in_vars);
+  /* the bodies after conversion. */
+  Array<Expr> bodies;
+  for (const Expr &item : self->body) {
+    bodies.push_back(detector.Mutate(item));
+  }
+  if (in_vars.empty()) {
+    /* if no nested call is detected. */
+    return Operation();
+  }
+
+  return ComputeOpNode::make(self->name, self->tag, self->attrs, self->axis, bodies);
+}
+
+Array<Tensor> GetTensorizedInputs(const ComputeOpNode *self) {
+  Array<Tensor> ret;
+  std::unordered_set<Tensor> visited;
+  auto fvisit = 
+      [&ret, &visited](const NodeRef& n) {
+        const ir::Call *call = n.as<ir::Call>();
+        if (call != nullptr && call->func.defined()) {
+          Tensor t = Operation(call->func.node_).output(call->value_index);
+          if (!visited.count(t)) {
+            ret.push_back(t);
+            visited.insert(t);
+          }
+        }
+      };
+  for (auto& e : self->body) {
+    if (const Reduce *op = e.as<Reduce>()) {
+      /* for Reduce node, only consider Tensors in source as inputs. */
+      for (const Expr &e : op->source) {
+        ir::PostOrderVisit(e, fvisit);
+      }
+    }
+    else {
+      ir::PostOrderVisit(e, fvisit);
+    }
+  }
+  return ret;
+}
+
 }  // namespace tvm
