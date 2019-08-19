@@ -26,7 +26,7 @@ with ScheduleProcHelper():
     #==================================#
 
     # the input image and kernel shapes.
-    shape = (32, 18, 32)     # layout: HWC
+    shape = (34, 18, 32)     # layout: HWC, padded
     kshape = (3, 3, 64, 32)  # layout: HWOI
     # convolution stride.
     stride_h, stride_w = 1, 1
@@ -102,16 +102,26 @@ with ScheduleProcHelper():
                                         kernel_buf[kh_reduce, kw_reduce, oco, co_reduce, oci, ci_reduce].astype(dtype_w), 
                                         axis=[kh_reduce, kw_reduce, co_reduce, ci_reduce]),
                            'conv_acc')
-
-    # reshape output. 
-    # this is done when copying from accumulation buffer to scratchpad.
+    # copying from accumulation buffer to scratchpad.
+    conv_buf = tvm.compute(conv_acc_shape, lambda *i: conv_acc(*i), 'conv_buf')
+    # reshape convolution. 
     conv = tvm.compute(conv_shape,
-                       lambda ph, pw, oc: conv_acc[ph, pw / n_row, oc / n_col, pw % n_row, oc % n_col],
+                       lambda ph, pw, oc: conv_buf[ph, pw / n_row, oc / n_col, pw % n_row, oc % n_col],
                        'conv')
+    # conv_host = tvm.compute(conv_shape, lambda *i: conv(*i))
+    # max pooling, windows size = 2, stride = 2
+    k1 = tvm.reduce_axis((0,2), 'k1')
+    k2 = tvm.reduce_axis((0,2), 'k2')
+    pool_shape = (conv_shape[0] // 2, conv_shape[1] // 2, conv_shape[2])
+    print(pool_shape)
+    pooling_buf = tvm.compute(pool_shape, 
+                        lambda i,j,k: 
+                         tvm.max(conv[i * 2 + k1, j * 2 + k2, k],
+                                 axis=[k1, k2]),
+                       'pooling_buf')
     # indentity computation.
-    conv_host = tvm.compute(conv_shape, lambda *i: conv(*i))
-
-    res_host = conv_host
+    pool_host = tvm.compute(pool_shape, lambda *i: pooling_buf(*i))
+    res_host = pool_host
 
     # ------ this ends the computation description. ------
 
@@ -125,7 +135,9 @@ with ScheduleProcHelper():
     nnpu.utils.MarkScope(kernel_buf, 'buffer1')
     # the GEMM output is on accumulation buffer.
     nnpu.utils.MarkScope(conv_acc, 'acc')
-    nnpu.utils.MarkScope(conv, 'buffer0')
+    nnpu.utils.MarkScope(conv_buf, 'buffer2')
+    nnpu.utils.MarkScope(conv, 'buffer2')
+    nnpu.utils.MarkScope(pooling_buf, 'buffer2')
 
     s = nnpu.create_schedule(res_host.op)
     # reorder the GEMM compute stage.
@@ -143,31 +155,47 @@ with ScheduleProcHelper():
     # use compute_at to attach GEMM stage into CopyAcc2Buf stage(copying from accumulation buffer to scratchpad).
     # because accumulation buffer may be quiet small, so we copy output into scratchpad 
     #   once GEMM finished computing one row of output.
-    s[conv_acc].compute_at(s[conv], s[conv].op.axis[0])
+    s[conv_acc].compute_at(s[conv_buf], s[conv_buf].op.axis[0])
+    # s[conv_buf].compute_at(s[conv], s[conv].op.axis[0])
 
     # split copy, to eliminate division and modolar arithmetic.
     s[conv].tile(conv.op.axis[1], conv.op.axis[2], n_row, n_col)
 
+    # tensorize pooling
+    i, j, k = pooling_buf.op.axis
+    k1, k2 = pooling_buf.op.reduce_axis
+    ko, ki = s[pooling_buf].split(k2, factor=1)
+    xo, xi = s[pooling_buf].split(k, factor=16)
+    # reorder axes.
+    # put xo right before ki to eliminate memory dependency between two consecutive VGTMV instruction
+    s[pooling_buf].reorder(i, j, k1, ko, xo, ki, xi)
+    s[pooling_buf].tensorize(ki, env.intrins.get('VGTMMerge', scope_in='buffer2', scope_out='buffer2', mode='w'))
+
     # split output
     ph, pw, oc = res_host.op.axis
     # factors is the size of output to generate every block
-    factors = [15, 8, 64]
+    factors = [8, 8, 32]
     assert factors[1] % n_row == 0 and factors[2] % n_col == 0, 'after split, still should be able to be tensorized'
     pho, phi = s[res_host].split(ph, factors[0])
     pwo, pwi = s[res_host].split(pw, factors[1])
+    # pwi_vo, pwi_vi = s[res_host].split(pwi, 2)
     oco, oci = s[res_host].split(oc, factors[2])
+    s[res_host].bind(oco, tvm.thread_axis("cthread"))
     s[res_host].reorder(oco, pho, pwo, phi, pwi, oci)
 
     # compute_at
-    s[conv].compute_at(s[res_host], s[res_host].leaf_iter_vars[2])
+    s[conv_buf].compute_at(s[res_host], pwo)
     s[kernel_buf].compute_at(s[res_host], oco)
     s[feature_buf].compute_at(s[res_host], pwo)
+    s[conv].compute_at(s[res_host], pwo)
+    s[pooling_buf].compute_at(s[res_host], pwi)
 
     # add copy pragma.
     s[feature_buf].pragma(feature_buf.op.axis[-1], env.dma_copy_to_buf)
     s[kernel_buf].pragma(kernel_buf.op.axis[-1], env.dma_copy_to_buf)
-    s[res_host].pragma(phi, env.dma_copy_from_buf)
-    s[conv].pragma(s[conv].leaf_iter_vars[-2], env.copy_acc2buf)
+    s[res_host].pragma(oci, env.dma_copy_from_buf)
+    s[conv_buf].pragma(conv_buf.op.axis[1], env.copy_acc2buf)
+    s[conv].pragma(s[conv].leaf_iter_vars[-2], env.scratchpad_copy)
     #==================================#
     # ------ this ends the scheduling ------
     #==================================#
@@ -182,6 +210,7 @@ with ScheduleProcHelper():
     print(func.imported_modules[0].get_source('ir'))
     print('------------------- device module 1 uop: ')
     print(func.imported_modules[0].get_source('uop'))
+    exit(0)
 
     ctx = tvm.nd.TVMContext(13, 0)
     fm_np = np.random.randint(size=shape, dtype=feature.dtype, low = -16, high = 16)

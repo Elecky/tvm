@@ -1201,8 +1201,7 @@ private:
         return micro_kernels.back();
     }
 
-#define DECLARE_PARSE_METHOD(METHOD) \
-void METHOD(const vector<string> &, const string &)
+#define DECLARE_PARSE_METHOD(METHOD) void METHOD(const vector<string> &, const string &)
 
     DECLARE_PARSE_METHOD(parseGEMM);
     DECLARE_PARSE_METHOD(parseAccMemset);
@@ -1210,6 +1209,9 @@ void METHOD(const vector<string> &, const string &)
     DECLARE_PARSE_METHOD(parseVectorBinary);
     DECLARE_PARSE_METHOD(parseVectorUnary);
     DECLARE_PARSE_METHOD(parseVectorImm);
+    DECLARE_PARSE_METHOD(parseVectorReduce);
+    DECLARE_PARSE_METHOD(parseMReduceSum);
+    DECLARE_PARSE_METHOD(parseVctrSclr);
 
 #undef DECLARE_PARSE_METHOD
 
@@ -1236,7 +1238,17 @@ MicroCodeParser::initialize_dispatch() {
         table.insert({"NNPU." + item, &MicroCodeParser::parseVectorImm});
     }
 
-    return table;
+    for (string &item : vector<string> { "VReduceSum", "VReduceMax", "VReduceMin" }) {
+        table.insert({"NNPU." + item, &MicroCodeParser::parseVectorReduce});
+    }
+
+    table.insert({"NNPU.MReduceSumRow", &MicroCodeParser::parseMReduceSum});
+
+    for (string &item : vector<string> { "VDivS", "VAddS", "VSubS", "VMulS", "VGTMS", "SSubV", "SDivV" }) {
+        table.insert({"NNPU." + item, &MicroCodeParser::parseVctrSclr});
+    }
+
+    return std::move(table);
 }
 
 unordered_map<string, MicroCodeParser::parse_method_t> 
@@ -1300,6 +1312,17 @@ void MicroCodeParser::parseCopyAcc2Buf(const vector<string> &tokens, const strin
                           parseUInt(tokens[3]), ModeFromInt(parseUInt(tokens[4])) } );
 }
 
+void MicroCodeParser::parseMReduceSum(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 9) << ", invalid micro-code syntax" << instr;
+
+    current_kernel().emplace_back(
+        MReduceSumMCode{ parseCompositeOp(tokens[1]),
+                         parseCompositeOp(tokens[2]), parseUInt(tokens[3]),
+                         static_cast<uint16_t>(parseUInt(tokens[4])), static_cast<uint16_t>(parseUInt(tokens[5])),
+                         ModeFromInt(parseUInt(tokens[6])),
+                         parseBool(tokens[7]), parseBool(tokens[8])} );
+}
+
 void MicroCodeParser::parseVectorBinary(const vector<string> &tokens, const string &instr) {
     CHECK_EQ(tokens.size(), 6) << ", invalid micro-code syntax" << instr;
 
@@ -1336,11 +1359,11 @@ void MicroCodeParser::parseVectorImm(const vector<string> &tokens, const string 
     CHECK_EQ(tokens.size(), 6) << ", invalid micro-code syntax" << instr;
 
     using type = VctrImmMCode::OpType;
-    static const std::unordered_map<string, type> Ops
-        { { "NNPU.VAddI", type::VAddI }, { "NNPU.VSubI", type::VSubI }, 
-          { "NNPU.VMulI", type::VMulI }, { "NNPU.VDivI", type::VDivI }, 
-          { "NNPU.VGTMI", type::VGTMI }, { "NNPU.ISubV", type::ISubV }, 
-          { "NNPU.IDivV", type::IDivV } };
+    static const std::unordered_map<string, type> Ops { 
+        { "NNPU.VAddI", type::VAddI }, { "NNPU.VSubI", type::VSubI }, 
+        { "NNPU.VMulI", type::VMulI }, { "NNPU.VDivI", type::VDivI }, 
+        { "NNPU.VGTMI", type::VGTMI }, { "NNPU.ISubV", type::ISubV }, 
+        { "NNPU.IDivV", type::IDivV } };
     auto it = Ops.find(tokens[0]);
 
     CHECK(it != Ops.end()) << ", invalid op-code: " << tokens[0];
@@ -1348,6 +1371,39 @@ void MicroCodeParser::parseVectorImm(const vector<string> &tokens, const string 
     current_kernel().emplace_back(
         VctrImmMCode { parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]),
                        parseDouble(tokens[3]), parseUInt(tokens[4]), ModeFromInt(parseUInt(tokens[5])), it->second } );
+}
+
+void MicroCodeParser::parseVectorReduce(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 5) << ", invalid micro-code syntax" << instr;
+    using type = VctrReduceMCode::OpType;
+    static const std::unordered_map<string, type> Ops {
+        { "NNPU.VReduceSum", type::Sum}, { "NNPU.VReduceMax", type::Max },
+        { "NNPU.VReduceMin", type::Min} };
+    auto it = Ops.find(tokens[0]);
+    CHECK(it != Ops.end()) << ", invalid op-code: " << tokens[0];
+
+    current_kernel().emplace_back(
+        VctrReduceMCode { parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]), 
+                          parseUInt(tokens[3]), ModeFromInt(parseUInt(tokens[4])),
+                          it->second } );
+}
+
+void MicroCodeParser::parseVctrSclr(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 6) << ", invalid micro-code syntax" << instr;
+    using type = VctrSclrMCode::OpType;
+    static const std::unordered_map<string, type> Ops {
+        { "NNPU.VDivS", type::Div }, { "NNPU.VAddS", type::Add },
+        { "NNPU.VSubS", type::Sub }, { "NNPU.VMulS", type::Mul },
+        { "NNPU.VGTMS", type::GTM }, { "NNPU.SSubV", type::RSub },
+        { "NNPU.SDivV", type::RDiv } };
+    auto it = Ops.find(tokens[0]);
+    CHECK(it != Ops.end()) << ", invalid op-code: " << tokens[0];
+
+    current_kernel().emplace_back(
+        VctrSclrMCode { parseCompositeOp(tokens[1]),
+                        parseCompositeOp(tokens[2]), parseCompositeOp(tokens[3]),
+                        parseUInt(tokens[4]), ModeFromInt(parseUInt(tokens[5])),
+                        it->second } );
 }
 
 }  // end namespace nnpu
