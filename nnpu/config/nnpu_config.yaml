@@ -62,8 +62,8 @@ scratchpad0:
   # log size in byte of every channel
   log_size_per_channel: 18
   # read and write delays in cycle
-  r_delay: 2
-  w_delay: 2
+  r_delay: 1
+  w_delay: 1
   # memory address map policy
   map_policy: interleaved
 
@@ -75,8 +75,8 @@ scratchpad1:
   # log size in byte of every channel
   log_size_per_channel: 18
   # read and write delays in cycle
-  r_delay: 2
-  w_delay: 2
+  r_delay: 1
+  w_delay: 1
 
 scratchpad2:
   enable: true
@@ -94,7 +94,7 @@ scratchpad3:
 
 # accumulation buffer in matrix unit.
 acc_buffer:
-  nchannel: 4
+  nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
@@ -128,8 +128,8 @@ vector_unit:
 matrix_unit:
   set_up_cycle: false  # need one cycle to calculate and set up read/write access.
                       # this simply adds one cycle on every instruction's read/write phase.
-  multiplier_delay: 2  # 
-  adder_tree_delay: 2
+  multiplier_delay: 1  # 
+  adder_tree_delay: 1
   adder_delay: 1
   opcodes_need_multiply: ['GEMM', 'MMulM', 'MMulI', 'MMulV', 'MRowDot']
   opcodes_nned_adder_tree: ['GEMM', 'MRowDot', 'MReduceSumRow']
@@ -144,4 +144,4 @@ DMA:
 
 delay_modeling_switch:
   DMA: true
-  scratchpad_ls: true
+  scratchpad_ls: false
