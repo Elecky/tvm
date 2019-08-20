@@ -1214,6 +1214,7 @@ private:
     DECLARE_PARSE_METHOD(parseVctrSclr);
     DECLARE_PARSE_METHOD(parseDMACopy);
     DECLARE_PARSE_METHOD(parseBufCopy);
+    DECLARE_PARSE_METHOD(parseMemset);
 
 #undef DECLARE_PARSE_METHOD
 
@@ -1253,6 +1254,8 @@ MicroCodeParser::initialize_dispatch() {
     table.insert({"NNPU.DMABufLoad", &MicroCodeParser::parseDMACopy});
     table.insert({"NNPU.DMABufStore", &MicroCodeParser::parseDMACopy});
     table.insert({"NNPU.ScratchpadCopy", &MicroCodeParser::parseBufCopy});
+
+    table.insert({"NNPU.Memset", &MicroCodeParser::parseMemset});
     return std::move(table);
 }
 
@@ -1434,6 +1437,13 @@ void MicroCodeParser::parseBufCopy(const vector<string> &tokens, const string &i
         BufCopyMCode {  parseCompositeOp(tokens[1]), parseUInt(tokens[2]),
                         parseCompositeOp(tokens[3]), parseUInt(tokens[4]),
                         parseUInt(tokens[5]), parseUInt(tokens[6]) } );
+}
+
+void MicroCodeParser::parseMemset(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 6) << ", invalid micro-code syntax" << instr;
+    current_kernel().emplace_back(
+        MemsetMCode { parseCompositeOp(tokens[1]), parseUInt(tokens[2]), parseUInt(tokens[4]),
+                      parseDouble(tokens[4]), ModeFromInt(parseUInt(tokens[5])) });
 }
 
 }  // end namespace nnpu

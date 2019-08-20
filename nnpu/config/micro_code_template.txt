@@ -9,3 +9,4 @@ NNPU.MReduceSumRow cciiiiuu
 NNPU.VDivS|NNPU.VAddS|NNPU.VSubS|NNPU.VMulS|NNPU.VGTMS|NNPU.SSubV|NNPU.SDivV cccii
 NNPU.DMABufLoad|NNPU.DMABufStore hciciii
 NNPU.ScratchpadCopy ciciii
+NNPU.Memset ciifi

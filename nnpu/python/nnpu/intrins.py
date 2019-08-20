@@ -1275,8 +1275,9 @@ class IntrinManager(object):
         env = self.env
         irb = tvm.ir_builder.create()
         irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
-        irb.scope_attr(self.env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_scratchpad_copy))
-        irb.emit(make_intrin_call("void", 'Memset',
+        irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_scratchpad_copy))
+        irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_scratchpad_copy))
+        irb.emit(tvm.call_intrin("int32", 'NNPU.Memset',
                                 addr, nUnit, stride,
                                 val, self.get_mode_code(mode)
                     ))

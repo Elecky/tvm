@@ -45,7 +45,7 @@ def test():
                          tvm.max(a_buf[i * cell_shape + k1, j * cell_shape + k2, k],
                                  axis=[k1, k2]),
                        'pooling_buf')
-    sph.MarkScope(pooling_buf, 'buffer0')
+    sph.MarkScope(pooling_buf, 'buffer1')
     
     # copy back to host.    
     step2_host, step2_dram = nnpu.utils.CopyBufToH(pooling_buf, 'pooling',sph)
@@ -67,7 +67,7 @@ def test():
     # reorder axes.
     # put xo right before ki to eliminate memory dependency between two consecutive VGTMV instruction
     s[pooling_buf].reorder( i, j, k1, ko, xo, ki, xi)
-    s[pooling_buf].tensorize(ki, env.intrins.get(str_op, scope_out='buffer0', mode='w'))
+    s[pooling_buf].tensorize(ki, env.intrins.get(str_op, scope_out='buffer1', mode='w'))
     # unroll
     # s[pooling_buf].unroll(ko)
     # s[pooling_buf].unroll(xo)
