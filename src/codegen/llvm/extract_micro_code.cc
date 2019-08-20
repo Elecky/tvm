@@ -150,6 +150,8 @@ void micro_code_asm_printer::Visit_(const Call *op) {
             CHECK_LT(arg_idx, args.size()) << ", too small arguments than that specified in template";
             outs << get_value<FloatImm>(args[arg_idx++]);
             break;
+        case 'h':
+            /* fall through */
         case 'c':
             CHECK_LT(arg_idx + num_loop_levels_ + 1, args.size()) << ", too small arguments than that specified in template";
             /* the format of a composite argument is:
@@ -279,7 +281,6 @@ micro_code_expander::expand(const Stmt &s) {
         Stmt expanded = Mutate(s);
         /* simplify expanded stmt, making sure all constants are folded. */
         expanded = Simplify(expanded);
-        
         micro_code_asm_printer printer(uop_templates_, num_loop_levels_);
         auto res = printer.print(expanded);
         return make_tuple(true, move(res.second), move(input_exprs), res.first);
@@ -394,8 +395,7 @@ Expr micro_code_expander::Mutate_(const Call *op, const Expr &expr) {
             }
             break;
 
-        case 'c':
-        {
+        case 'c': {
             // 'c' means
             /* COEF_IMM is the coefficient of loop_vars, they are integer immediates. */
             Array<Expr> coef_imm;
@@ -418,6 +418,17 @@ Expr micro_code_expander::Mutate_(const Call *op, const Expr &expr) {
             }
             args.push_back(f_unrool_vars);
             args.push_back(IntImm::make(Int(32), tail_reg));
+            break;
+        }
+
+        case 'h': {
+            // 'h' means a handle to device memory
+            const Variable *handle = arg.as<Variable>();
+            CHECK(handle->type.is_handle()) << ", bad argument type, a handle expected";
+            for (unsigned i = 0; i < 3; ++i)
+                args.push_back(make_zero(Int(32)));
+            int handle_reg = allocate_register(arg);
+            args.push_back(IntImm::make(Int(32), handle_reg));
             break;
         }
 
@@ -536,7 +547,7 @@ Stmt loop_folder::Mutate_(const For *op, const Stmt &s) {
     micro_code_expander expander(loop_vars, 2, uop_templates_);
     auto res = expander.expand(body);
     // TODO: I limited the micro-code count to be less than 256, is there any beeter way to do limitation?
-    if (std::get<0>(res) && std::get<3>(res) < 256) {
+    if (std::get<0>(res) && std::get<3>(res) < 128) {
         /* insert this micro-kernel into list. */
         micro_kernels.push_back(move(std::get<1>(res)));
         /* build statements to set local register and launch micro-kernel */

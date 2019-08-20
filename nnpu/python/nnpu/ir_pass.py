@@ -121,7 +121,7 @@ def _fold(src_shape, src_strides, dst_shape, dst_strides, pad_before = None, pad
 
 def _build_copy(dst, src,
                 src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
-                create_copy_ir, create_memset):
+                create_copy_ir, create_memset, memcpy_dim=1):
     '''
     create_copy_ir: a function that creates memory copy ir, has signature:
         void(dst_idx /*index of destination*/,
@@ -143,14 +143,22 @@ def _build_copy(dst, src,
             dst_base: index of destination (in element count)
             level: the recursive level, also indicates the axis.
         '''
-        if (level == ndim - 1):
-            body = create_copy_ir(
+        if (level >= ndim - memcpy_dim):
+            if (level == ndim - 1):
+                # if it's the last dimension, use scalar arguments
+                body = create_copy_ir(
                         dst_base,
                         dst_strides[-1],
                         src_base,
                         src_strides[-1],
-                        dst_shape[-1])
-
+                        src_shape[-1])
+            else:
+                body = create_copy_ir(
+                        dst_base,
+                        dst_strides[-memcpy_dim:],
+                        src_base,
+                        src_strides[-memcpy_dim:],
+                        src_shape[-memcpy_dim:])
             body = tvm.make.Evaluate(body)
             return body
         else:
@@ -293,19 +301,26 @@ def inject_dmacopy2buf_intrin(stmt_in):
             src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
 
+            def create_ir(dst_idx, dst_strides, src_idx, src_strides, extends):
+                if (not isinstance(extends, list)):
+                    return tvm.call_intrin(
+                                'int32', "NNPU.DMABufLoad",
+                                src.data, (src_idx + src.elem_offset) * dtype_bytes, 0,
+                                get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes, 0,
+                                extends * dtype_bytes, 1)
+                else:
+                    assert len(extends) == 2, 'only 1 or 2 dimension DMA copy is supported'
+                    return tvm.call_intrin(
+                                'int32', "NNPU.DMABufLoad",
+                                src.data, (src_idx + src.elem_offset) * dtype_bytes, src_strides[0] * dtype_bytes,
+                                get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes, dst_strides[0] * dtype_bytes,
+                                extends[1] * dtype_bytes, extends[0])
             body = _build_copy(
                         dst, src,
                         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
                         # lambda to create DMALoad IR:
-                        lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
-                            tvm.call_llvm_intrin_with_side_effect(
-                                'void', "llvm.NNPU.DMABufLoad", tvm_zero,
-                                src.data, (src_idx + src.elem_offset) * dtype_bytes,
-                                get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes,
-                                nUnit * dtype_bytes),
-                        _error
-                        )
-            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy))
+                        create_ir, _error, 2)
+            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy), True)
             return body
         elif (env.is_scratchpad_scope(src.scope) and dst.scope == 'global'):
             assert not (pad_after or pad_before), \
@@ -313,18 +328,26 @@ def inject_dmacopy2buf_intrin(stmt_in):
             src_shape, src_strides, dst_shape, dst_strides, _, _ = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides)
             
+            def create_ir(dst_idx, dst_strides, src_idx, src_strides, extends):
+                if (not isinstance(extends, list)):
+                    return tvm.call_intrin(
+                                'int32', "NNPU.DMABufStore",
+                                dst.data, (dst_idx + dst.elem_offset) * dtype_bytes, 0,
+                                get_access_ptr(src, env, 'r') + src_idx * dtype_bytes, 0,
+                                extends * dtype_bytes, 1)
+                else:
+                    assert len(extends) == 2, 'only 1 or 2 dimension DMA copy is supported'
+                    return tvm.call_intrin(
+                                'int32', "NNPU.DMABufStore",
+                                dst.data, (dst_idx + dst.elem_offset) * dtype_bytes, dst_strides[0] * dtype_bytes,
+                                get_access_ptr(src, env, 'w') + src_idx * dtype_bytes, src_strides[0] * dtype_bytes,
+                                extends[1] * dtype_bytes, extends[0])
+
             body = _build_copy(
                         dst, src,
                         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
-                        lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
-                            tvm.call_llvm_intrin_with_side_effect(
-                                'void', "llvm.NNPU.DMABufStore", tvm_zero,
-                                dst.data, (dst_idx + dst.elem_offset) * dtype_bytes,
-                                get_access_ptr(src, env, 'r') + src_idx * dtype_bytes,
-                                nUnit * dtype_bytes),
-                        _error
-                        )
-            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy))
+                        create_ir, _error, 2)
+            body = mark_coproc_scope(body, env.get_pid(env.pid_dma_copy), True)
             return body
         else:
             raise ValueError('donnot support copy from {0} to {1}'.format(
@@ -429,18 +452,34 @@ def inject_scratchpad_copy(stmt_in):
         
         src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after = \
                 _fold(src.shape, src.strides, dst.shape, dst.strides, pad_before, pad_after)
-
+        compact = util.equal_const_int(src.strides[-1], 1) and util.equal_const_int(dst.strides[-1], 1)        
+        def create_ir(dst_idx, dst_strides, src_idx, src_strides, extends):
+            if (not isinstance(extends, list)):
+                if (util.equal_const_int(src_strides, 1) and util.equal_const_int(dst_strides, 1)):
+                    # if it's actually compact
+                    return tvm.call_intrin(
+                            'int32', "NNPU.ScratchpadCopy",
+                            get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes, 0,
+                            get_access_ptr(src, env, 'r') + src_idx * dtype_bytes, 0,
+                            dtype_bytes * extends, 1)
+                else:
+                    return tvm.call_intrin(
+                                'int32', "NNPU.ScratchpadCopy",
+                                get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes, dst_strides * dtype_bytes,
+                                get_access_ptr(src, env, 'r') + src_idx * dtype_bytes, src_strides * dtype_bytes,
+                                dtype_bytes, extends)
+            else:
+                assert len(extends) == 2, 'only 1 or 2 dimension DMA copy is supported'
+                assert compact, 'only when last dimension is compact can do 2D copy'
+                return tvm.call_intrin(
+                            'int32', "NNPU.ScratchpadCopy",
+                            get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes, dst_strides[0] * dtype_bytes,
+                            get_access_ptr(src, env, 'w') + src_idx * dtype_bytes, src_strides[0] * dtype_bytes,
+                            extends[1] * dtype_bytes, extends[0])
         body = _build_copy(
                     dst, src,
                     src_shape, src_strides, dst_shape, dst_strides, pad_before, pad_after,
-                    lambda dst_idx, dst_stride, src_idx, src_stride, nUnit:
-                        tvm.call_llvm_intrin_with_side_effect(
-                            'void', "llvm.NNPU.ScratchpadCopy", tvm_zero,
-                            get_access_ptr(dst, env, 'w') + dst_idx * dtype_bytes, 
-                            dst_stride * dtype_bytes,
-                            get_access_ptr(src, env, 'r') + src_idx * dtype_bytes, 
-                            src_stride * dtype_bytes,
-                            dtype_bytes, nUnit),
+                    create_ir,
                     lambda index, nUnit, stride:
                         tvm.call_llvm_intrin_with_side_effect(
                             "void", 'llvm.NNPU.Memset', tvm_zero,
@@ -449,10 +488,10 @@ def inject_scratchpad_copy(stmt_in):
                             stride * dtype_bytes,
                             pad_value, 
                             get_mode_code(dst.dtype)
-                        )
-                    )
+                        ),
+                    2 if compact else 1)
 
-        body = mark_coproc_scope(body, env.get_pid(env.pid_scratchpad_copy))
+        body = mark_coproc_scope(body, env.get_pid(env.pid_scratchpad_copy), True)
         return body
     
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.scratchpad_copy, _inject_copy)

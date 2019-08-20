@@ -164,8 +164,8 @@ with ScheduleProcHelper():
     s[feature_buf].compute_at(s[res_host], pwo)
 
     # add copy pragma.
-    s[feature_buf].pragma(feature_buf.op.axis[-1], env.dma_copy_to_buf)
-    s[kernel_buf].pragma(kernel_buf.op.axis[-1], env.dma_copy_to_buf)
+    s[feature_buf].pragma(feature_buf.op.axis[0], env.dma_copy_to_buf)
+    s[kernel_buf].pragma(kernel_buf.op.axis[0], env.dma_copy_to_buf)
     s[res_host].pragma(phi, env.dma_copy_from_buf)
     s[conv].pragma(s[conv].leaf_iter_vars[-2], env.copy_acc2buf)
     #==================================#
@@ -182,6 +182,7 @@ with ScheduleProcHelper():
     print(func.imported_modules[0].get_source('ir'))
     print('------------------- device module 1 uop: ')
     print(func.imported_modules[0].get_source('uop'))
+    # exit()
 
     ctx = tvm.nd.TVMContext(13, 0)
     fm_np = np.random.randint(size=shape, dtype=feature.dtype, low = -16, high = 16)

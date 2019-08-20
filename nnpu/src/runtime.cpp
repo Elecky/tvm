@@ -1212,6 +1212,8 @@ private:
     DECLARE_PARSE_METHOD(parseVectorReduce);
     DECLARE_PARSE_METHOD(parseMReduceSum);
     DECLARE_PARSE_METHOD(parseVctrSclr);
+    DECLARE_PARSE_METHOD(parseDMACopy);
+    DECLARE_PARSE_METHOD(parseBufCopy);
 
 #undef DECLARE_PARSE_METHOD
 
@@ -1248,6 +1250,9 @@ MicroCodeParser::initialize_dispatch() {
         table.insert({"NNPU." + item, &MicroCodeParser::parseVctrSclr});
     }
 
+    table.insert({"NNPU.DMABufLoad", &MicroCodeParser::parseDMACopy});
+    table.insert({"NNPU.DMABufStore", &MicroCodeParser::parseDMACopy});
+    table.insert({"NNPU.ScratchpadCopy", &MicroCodeParser::parseBufCopy});
     return std::move(table);
 }
 
@@ -1404,6 +1409,31 @@ void MicroCodeParser::parseVctrSclr(const vector<string> &tokens, const string &
                         parseCompositeOp(tokens[2]), parseCompositeOp(tokens[3]),
                         parseUInt(tokens[4]), ModeFromInt(parseUInt(tokens[5])),
                         it->second } );
+}
+
+void MicroCodeParser::parseDMACopy(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 8) << ", invalid micro-code syntax" << instr;
+    DMACopyMCode::MemcpyKind kind;
+    if (tokens[0] == "NNPU.DMABufLoad") {
+        kind = DMACopyMCode::MemcpyKind::Load;
+    }
+    else {
+        kind = DMACopyMCode::MemcpyKind::Store;
+    }
+
+    current_kernel().emplace_back(
+        DMACopyMCode {  kind, 
+                        parseCompositeOp(tokens[1]), parseCompositeOp(tokens[2]), parseUInt(tokens[3]),
+                        parseCompositeOp(tokens[4]), parseUInt(tokens[5]),
+                        parseUInt(tokens[6]), parseUInt(tokens[7]) } );
+}
+
+void MicroCodeParser::parseBufCopy(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 7) << ", invalid micro-code syntax" << instr;
+    current_kernel().emplace_back(
+        BufCopyMCode {  parseCompositeOp(tokens[1]), parseUInt(tokens[2]),
+                        parseCompositeOp(tokens[3]), parseUInt(tokens[4]),
+                        parseUInt(tokens[5]), parseUInt(tokens[6]) } );
 }
 
 }  // end namespace nnpu

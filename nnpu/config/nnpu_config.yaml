@@ -79,7 +79,15 @@ scratchpad1:
   w_delay: 2
 
 scratchpad2:
-  enable: false
+  enable: true
+  nchannel: 2
+  # qeuivalent width in bits of every channel, has to be the power of 2
+  width_per_channel: 128
+  # log size in byte of every channel
+  log_size_per_channel: 18
+  # read and write delays in cycle
+  r_delay: 2
+  w_delay: 2
 
 scratchpad3:
   enable: false

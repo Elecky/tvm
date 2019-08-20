@@ -27,7 +27,7 @@ with (ScheduleProcHelper()):
     env = nnpu.get_env()
     dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
 
-    a = tvm.placeholder((32, 32), dtype_w, 'a')
+    a = tvm.placeholder((8, 8), dtype_w, 'a')
     
     #=================================================================#
     # ------ begin compute describing. ------
@@ -37,7 +37,7 @@ with (ScheduleProcHelper()):
 
     # here we simply use some helper function to do the reshape and transpose.
     trans_buf = nnpu.utils.transpose(a_buf, (1, 0))
-    re_buf = nnpu.utils.reshape(trans_buf, (2, 16, 2, 16))
+    re_buf = nnpu.utils.reshape(trans_buf, (2, 4, 2, 4))
     tile_buf = nnpu.utils.transpose(re_buf, (0, 2, 1, 3))
     # copy back to host.
     tile_host, _ = nnpu.utils.CopyBufToH(tile_buf, 'tile')
@@ -58,23 +58,29 @@ with (ScheduleProcHelper()):
     print(tvm.lower(s, [a, tile_host], simple_mode=True))
     print(nnpu.lower(s, [a, tile_host], simple_mode=True))
     func = nnpu.build(s, [a, tile_host], 'nnpu', 'llvm', name='nnpu_func')
+    print('------------------- device module 1 TVM IR: ')
+    print(func.imported_modules[0].get_source('ir'))
+    print('------------------- device module 1 uop: ')
+    print(func.imported_modules[0].get_source('uop'))
+    # exit()
 
     ctx = tvm.nd.TVMContext(13, 0)
-    a_np = np.random.randint(size=(32, 32), dtype=a.dtype, low = -10000, high = 10000)
+    a_np = np.random.randint(size=(8, 8), dtype=a.dtype, low = -10000, high = 10000)
     a_nd = tvm.nd.array(a_np, ctx)
 
     #b_np = np.random.randint(size=(4, 32), dtype=b.dtype, low = -10000, high = 10000)
     #b_nd = tvm.nd.array(b_np, ctx)
 
-    re_nd = tvm.nd.array(np.zeros((2, 2, 16, 16), dtype=tile_host.dtype), ctx)
+    re_nd = tvm.nd.array(np.zeros((2, 2, 4, 4), dtype=tile_host.dtype), ctx)
     
     func(a_nd, re_nd)
 
     #print(a_nd)
-    #print(re_nd.asnumpy())
+    # print(re_nd.asnumpy())
     gt = np.transpose(a_np, (1, 0))
-    gt = np.reshape(gt, (2, 16, 2, 16))
+    gt = np.reshape(gt, (2, 4, 2, 4))
     gt = np.transpose(gt, (0, 2, 1, 3))
+    # print(gt)
     np.testing.assert_allclose(re_nd.asnumpy(), gt)
 
     print('test passed')

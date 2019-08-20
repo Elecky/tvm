@@ -7,3 +7,5 @@ NNPU.VAddI|NNPU.VSubI|NNPU.VMulI|NNPU.VDivI|NNPU.VGTMI|NNPU.ISubV|NNPU.IDivV ccf
 NNPU.VReduceSum|NNPU.VReduceMax|NNPU.VReduceMin ccii
 NNPU.MReduceSumRow cciiiiuu
 NNPU.VDivS|NNPU.VAddS|NNPU.VSubS|NNPU.VMulS|NNPU.VGTMS|NNPU.SSubV|NNPU.SDivV cccii
+NNPU.DMABufLoad|NNPU.DMABufStore hciciii
+NNPU.ScratchpadCopy ciciii

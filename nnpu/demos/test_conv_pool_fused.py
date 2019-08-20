@@ -210,7 +210,7 @@ with ScheduleProcHelper():
     print(func.imported_modules[0].get_source('ir'))
     print('------------------- device module 1 uop: ')
     print(func.imported_modules[0].get_source('uop'))
-    exit(0)
+    # exit(0)
 
     ctx = tvm.nd.TVMContext(13, 0)
     fm_np = np.random.randint(size=shape, dtype=feature.dtype, low = -16, high = 16)
@@ -219,7 +219,7 @@ with ScheduleProcHelper():
     k_np = np.random.randint(size=kshape, dtype=kernel.dtype, low = -16, high = 16)
     k_nd = tvm.nd.array(k_np, ctx)
 
-    res_nd = tvm.nd.array(np.zeros(conv_shape, dtype=res_host.dtype), ctx)
+    res_nd = tvm.nd.array(np.zeros(pool_shape, dtype=res_host.dtype), ctx)
 
     nnpu.set_dump(False)
 
