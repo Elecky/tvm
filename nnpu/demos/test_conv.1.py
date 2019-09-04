@@ -121,11 +121,11 @@ with ScheduleProcHelper():
 
     # set the memory scopes of tensors that should be on accelerator.
     # here we put keature and kernel on buffer0 and buffer1 respectively.
-    nnpu.utils.MarkScope(feature_buf, 'buffer0')
-    nnpu.utils.MarkScope(kernel_buf, 'buffer1')
+    nnpu.utils.MarkScope(feature_buf, 'buffer1')
+    nnpu.utils.MarkScope(kernel_buf, 'buffer2')
     # the GEMM output is on accumulation buffer.
     nnpu.utils.MarkScope(conv_acc, 'acc')
-    nnpu.utils.MarkScope(conv, 'buffer0')
+    nnpu.utils.MarkScope(conv, 'buffer3')
 
     s = nnpu.create_schedule(res_host.op)
     # reorder the GEMM compute stage.
@@ -133,7 +133,7 @@ with ScheduleProcHelper():
     ph, pw_o, oco, pw_i, oci = conv_acc.op.axis
     s[conv_acc].reorder(ph, pw_o, kh_reduce, kw_reduce, co_reduce, oco, pw_i, oci ,ci_reduce)
     # tensorize
-    s[conv_acc].tensorize(pw_i, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_in2='buffer1',
+    s[conv_acc].tensorize(pw_i, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_in1='buffer1', scope_in2='buffer2',
                                               scope_out='acc'))
     # unroll some axes, to eliminate loop overhead.
     # s[conv_acc].unroll(co_reduce)

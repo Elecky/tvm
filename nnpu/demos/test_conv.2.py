@@ -104,8 +104,8 @@ with ScheduleProcHelper():
 
     # set the memory scopes of tensors that should be on accelerator.
     # here we put keature and kernel on buffer0 and buffer1 respectively.
-    nnpu.utils.MarkScope(feature_buf, 'buffer0')
-    nnpu.utils.MarkScope(kernel_buf, 'buffer1')
+    nnpu.utils.MarkScope(feature_buf, 'buffer1')
+    nnpu.utils.MarkScope(kernel_buf, 'buffer2')
     # the GEMM output is on accumulation buffer.
     nnpu.utils.MarkScope(conv_acc, 'acc')
     nnpu.utils.MarkScope(conv, 'buffer0')
@@ -118,7 +118,7 @@ with ScheduleProcHelper():
     h, wo, oco, wi, oci = s[conv_acc].op.axis
     s[conv_acc].reorder(h, wo, oco, kh_reduce, kw_reduce, co_reduce, wi, oci, ci_reduce)
     # tensorize
-    s[conv_acc].tensorize(wi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_in2='buffer1',
+    s[conv_acc].tensorize(wi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_in1='buffer1', scope_in2='buffer2',
                                               scope_out='acc'))
 
     # use compute_at to attach GEMM stage into CopyAcc2Buf stage(copying from accumulation buffer to scratchpad).

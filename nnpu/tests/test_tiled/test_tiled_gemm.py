@@ -38,7 +38,7 @@ with ScheduleProcHelper():
 
     a_buf, a_dram = nnpu.utils.CopyHtoBuf(a, 'a')
     b_buf, b_dram = nnpu.utils.CopyHtoBuf(b, 'b')
-    bias_buf, _ = nnpu.utils.CopyHtoBuf(bias, 'bias')
+    # bias_buf, _ = nnpu.utils.CopyHtoBuf(bias, 'bias')
 
     ko = tvm.reduce_axis((0, shape1_tiled[0]), 'k0')
     ki = tvm.reduce_axis((0, factor), 'k0')
@@ -50,15 +50,17 @@ with ScheduleProcHelper():
     nnpu.utils.MarkScope(res_acc, 'acc')
 
     res_buf = nnpu.utils.CopyAccToBuf(res_acc, 'res')
+    res_host, _ = nnpu.utils.CopyBufToH(res_buf, 'res')
 
-    res = tvm.compute(res_shape, 
-                      lambda i, j: res_buf[i, j] + bias_buf[j],
-                      'out')
-    nnpu.utils.MarkScope(res, 'buffer0')
+    # res = tvm.compute(res_shape, 
+    #                   lambda i, j: res_buf[i, j] + bias_buf[j],
+    #                   'out')
+    # nnpu.utils.MarkScope(res, 'buffer0')
 
-    res_host, _ = nnpu.utils.CopyBufToH(res, 'res')
+    # res_host, _ = nnpu.utils.CopyBufToH(res, 'res')
 
     s = nnpu.create_schedule(res_host.op)
+    print(tvm.lower(s, [a, b, res_host], simple_mode=True))
     
     # tensorize
     xi, xj = s[res_acc].op.axis
@@ -66,14 +68,17 @@ with ScheduleProcHelper():
     s[res_acc].reorder(ko, xi, xj, ki)
     s[res_acc].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_out='acc'))
 
-    oco, oci = s[res].split(res.op.axis[1], 16)
-    s[res].tensorize(oci, env.intrins.get("VAddV", mode='w'))
+    # oco, oci = s[res].split(res.op.axis[1], 16)
+    # s[res].tensorize(oci, env.intrins.get("VAddV", mode='w'))
 
-    print(nnpu.lower(s, [a, b, bias, res_host], simple_mode=True))
-    exit()
+    print(nnpu.lower(s, [a, b, res_host], simple_mode=True))
+    # exit()
     func = nnpu.build(s, [a, b, res_host], 'nnpu', 'llvm', 'nnpu_func')
-    print('------------------- device module 1 asm code: ')
-    print(func.imported_modules[0].get_source('asm'))
+    print('------------------- device module 1 TVM IR: ')
+    print(func.imported_modules[0].get_source('ir'))
+    print('------------------- device module 1 uop: ')
+    print(func.imported_modules[0].get_source('uop'))
+    exit()
 
     ctx = tvm.nd.TVMContext(13, 0)
     a_np = np.random.randint(size=shape1_tiled, dtype=a.dtype, low = -32, high = 32)
