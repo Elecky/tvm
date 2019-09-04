@@ -19,22 +19,22 @@ register_file:
 predictBranchTaken: true
 
 dispatch_queue:
-  size: 8  # number of dispatch queue slots
+  size: 16  # number of dispatch queue slots
   issue_width: 2  # how many insns can be fetched and dispatched on every cycle.
 
 ReservationStations:  # the number of slot of each reservation station.
-  ALU: 8
-  load_store_unit: 4
-  dma_pipeline: 4
-  matrix_compute_pipeline: 4
-  vector_compute_pipeline: 4
-  memcpy_memset_pipeline: 4
+  ALU: 16
+  load_store_unit: 16
+  dma_pipeline: 16
+  matrix_compute_pipeline: 16
+  vector_compute_pipeline: 16
+  memcpy_memset_pipeline: 16
 
 memory_queues: 
-  vector_unit: 4
-  matrix_unit: 6
-  edram_dma_unit: 2
-  memcpy_memset_unit: 2
+  vector_unit: 8
+  matrix_unit: 8
+  # edram_dma_unit: 2
+  # memcpy_memset_unit: 2
 
 #-------- configs follows are related to storage structure. --------#
 # dram configs
@@ -56,49 +56,61 @@ scratchpad_design: unified
 # unified scratchpad configs
 scratchpad0:
   enable: true
-  nchannel: 4
+  nchannel: 32
   # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 128
+  width_per_channel: 64
   # log size in byte of every channel
-  log_size_per_channel: 18
-  # read and write delays in cycle
-  r_delay: 1
-  w_delay: 1
-  # memory address map policy
-  map_policy: interleaved
-
-scratchpad1:
-  enable: true
-  nchannel: 4
-  # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 128
-  # log size in byte of every channel
-  log_size_per_channel: 18
-  # read and write delays in cycle
-  r_delay: 1
-  w_delay: 1
-
-scratchpad2:
-  enable: true
-  nchannel: 2
-  # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 128
-  # log size in byte of every channel
-  log_size_per_channel: 18
+  log_size_per_channel: 15
   # read and write delays in cycle
   r_delay: 2
   w_delay: 2
+  # memory address map policy
+  map_policy: interleaved
+  type: one_port
+
+scratchpad1:
+  enable: true
+  nchannel: 32
+  # qeuivalent width in bits of every channel, has to be the power of 2
+  width_per_channel: 64
+  # log size in byte of every channel
+  log_size_per_channel: 10
+  # read and write delays in cycle
+  r_delay: 1
+  w_delay: 1
+  type: two_port
+
+scratchpad2:
+  enable: true
+  nchannel: 32
+  # qeuivalent width in bits of every channel, has to be the power of 2
+  width_per_channel: 64
+  # log size in byte of every channel
+  log_size_per_channel: 10
+  # read and write delays in cycle
+  r_delay: 1
+  w_delay: 1
+  type: two_port
 
 scratchpad3:
-  enable: false
-
-# accumulation buffer in matrix unit.
-acc_buffer:
-  nchannel: 8
+  enable: true
+  nchannel: 32
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
-  log_size_per_channel: 10
+  log_size_per_channel: 12
+  # read and write delays in cycle
+  r_delay: 1
+  w_delay: 1
+  type: two_port
+
+# accumulation buffer in matrix unit.
+acc_buffer:
+  nchannel: 32
+  # qeuivalent width in bits of every channel, has to be the power of 2
+  width_per_channel: 128
+  # log size in byte of every channel
+  log_size_per_channel: 12
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -139,8 +151,8 @@ misc_delays:
   address_generation: 1  # number of cycles needed to calculate memory dependency, ie, the delay in AGU.
 
 DMA:
-  start_up_time: 1  # the time in cycles needed to start a DMA.
-  speed: 8  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
+  start_up_time: 0  # the time in cycles needed to start a DMA.
+  speed: 32  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
 
 delay_modeling_switch:
   DMA: true

@@ -10,6 +10,7 @@ import yaml
 
 from .intrins import IntrinManager
 from .intrins import make_intrin_call
+from .helper import convert_scope
 
 class Environment(object):
     """Hardware configuration object.
@@ -80,6 +81,9 @@ class Environment(object):
     def scratchpad_scope(self, scratchpad_id = 0):
         assert scratchpad_id < 4, 'scratchpad_id should be less than 4'
         return self.scratchpad_scope_prefix + str(scratchpad_id)
+
+    def get_scope(self, name):
+        return convert_scope(self, name, True)
 
     def scratchpad_scope_to_idx(self, scope):
         assert self.is_scratchpad_scope(scope), \
