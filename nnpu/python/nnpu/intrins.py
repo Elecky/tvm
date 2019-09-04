@@ -1,6 +1,6 @@
 import struct
 import tvm
-from .helper import dtype_bytes, convert_scope, get_access_ptr
+from .helper import dtype_bytes, convert_scope, get_access_ptr, addr_to_idx
 
 def make_intrin_call(dtype, name, *args, **kwargs):
     """ Build a llvm.NNPU intrinsic function call who has side-effect.
@@ -529,7 +529,7 @@ class IntrinManager(object):
                 dout = outs[0]
 
                 init = self.emit_memset(get_access_ptr(dout, env, 'w'), shape_out[-1], 
-                            dtype_bytes(dtype_out), num , mode)
+                            dtype_bytes(dtype_out), num , mode, scope_out)
 
                 def comp():
                     irb = tvm.ir_builder.create()
@@ -880,7 +880,7 @@ class IntrinManager(object):
                 dout = outs[0]
 
                 init = self.emit_memset(get_access_ptr(dout, env, 'w'), shape_out[0]*shape_out[1], 
-                            dtype_bytes(dtype_out), num, mode)
+                            dtype_bytes(dtype_out), num, mode, scope_out)
 
                 def comp():
                     irb = tvm.ir_builder.create()
@@ -1269,14 +1269,14 @@ class IntrinManager(object):
                     res.append(din)
         return res
     
-    def emit_memset(self, addr, nUnit, stride, val, mode):
+    def emit_memset(self, addr, nUnit, stride, val, mode, scope):
         if (not val is tvm.expr.FloatImm):
             val = tvm.const(val, 'float64')
         env = self.env
         irb = tvm.ir_builder.create()
         irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
-        irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_scratchpad_copy))
-        irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_scratchpad_copy))
+        irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_scratchpad_copy(scope)))
+        irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_scratchpad_copy(scope)))
         irb.emit(tvm.call_intrin("int32", 'NNPU.Memset',
                                 addr, nUnit, stride,
                                 val, self.get_mode_code(mode)

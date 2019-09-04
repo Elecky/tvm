@@ -491,7 +491,7 @@ def inject_scratchpad_copy(stmt_in):
                         ),
                     2 if compact else 1)
 
-        body = mark_coproc_scope(body, env.get_pid(env.pid_scratchpad_copy), True)
+        body = mark_coproc_scope(body, env.get_pid(env.pid_scratchpad_copy(dst.scope)), True)
         return body
     
     return tvm.ir_pass.InjectCopyIntrin(stmt_in, env.scratchpad_copy, _inject_copy)

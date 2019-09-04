@@ -53,7 +53,8 @@ class Environment(object):
     pid_matrix_compute = 2
     pid_acc2buf_copy = 2
     pid_vector_compute = 3
-    pid_scratchpad_copy = 4
+    def pid_scratchpad_copy(self, dst):
+        return 4 + self.scratchpad_scope_to_idx(dst)
 
     def __init__(self, cfg_path):
         self.cfg = {}
@@ -90,7 +91,7 @@ class Environment(object):
             '{0} is not a scratchpad scope name'
         id = scope[len(self.scratchpad_scope_prefix):]
         id = int(id)
-        assert id < 4, 'scratchpad_id should be less than 4'
+        assert id < 8, 'scratchpad_id should be less than 8'
         return id
 
     def is_scratchpad_scope(self, scope):
@@ -151,7 +152,7 @@ def get_scratchpad_memory_info(env, scratchpad_idx):
     else:
         raise ValueError('scratchpad buffer "{0}" is not enabled, please check config file'.format(scope))
 
-@tvm.register_func("tvm.info.mem.{0}".format(Environment.uni_scratchpad_scope))
+@tvm.register_func("tvm.info.mem.{0}{1}".format(Environment.scratchpad_scope_prefix, '0'))
 def mem_info_scratchpad():
     spec = get_env()
     return get_scratchpad_memory_info(spec, 0)

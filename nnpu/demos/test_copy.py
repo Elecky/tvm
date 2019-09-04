@@ -37,8 +37,8 @@ with (ScheduleProcHelper()):
 
     # here we simply use some helper function to do the reshape and transpose.
     trans_buf = nnpu.utils.transpose(a_buf, (1, 0))
-    re_buf = nnpu.utils.reshape(trans_buf, (2, 4, 2, 4))
-    tile_buf = nnpu.utils.transpose(re_buf, (0, 2, 1, 3))
+    re_buf = nnpu.utils.reshape(trans_buf, (2, 4, 2, 4), dst_scope='buffer1')
+    tile_buf = nnpu.utils.transpose(re_buf, (0, 2, 1, 3), dst_scope='buffer2')
     # copy back to host.
     tile_host, _ = nnpu.utils.CopyBufToH(tile_buf, 'tile')
     # ------ this ends the computation description. ------
