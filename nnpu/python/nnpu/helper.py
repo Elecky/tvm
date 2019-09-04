@@ -29,7 +29,8 @@ def convert_scope(env, scope_str, include_acc=False):
     else:
         return scope
 
-scratchpad_base_addr = { 0: 0x0, 1: 0x20000000, 2: 0x40000000, 3: 0x60000000 }
+scratchpad_base_addr = { 0: 0x0, 1: 0x10000000, 2: 0x20000000, 3: 0x30000000, 
+                         4: 0x40000000, 5: 0x50000000, 6: 0x60000000, 7: 0x70000000 }
 
 def get_access_ptr(buffer, env, *args):
     '''

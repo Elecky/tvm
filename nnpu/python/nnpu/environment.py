@@ -79,7 +79,7 @@ class Environment(object):
         #set_device(Environment.current)
 
     def scratchpad_scope(self, scratchpad_id = 0):
-        assert scratchpad_id < 4, 'scratchpad_id should be less than 4'
+        assert scratchpad_id < 8, 'scratchpad_id should be less than 8'
         return self.scratchpad_scope_prefix + str(scratchpad_id)
 
     def get_scope(self, name):
@@ -146,7 +146,7 @@ def get_scratchpad_memory_info(env, scratchpad_idx):
         return tvm.make.node("MemoryInfo",
                             unit_bits=8,
                             max_simd_bits=buffer_cfg['width_per_channel'],
-                            max_num_bits=buffer_cfg['nchannel'] * (1 << buffer_cfg['log_size_per_channel']) * 8,
+                            max_num_bits=(1 << buffer_cfg['log_size']) * 8,
                             head_address=None)
     else:
         raise ValueError('scratchpad buffer "{0}" is not enabled, please check config file'.format(scope))
@@ -171,6 +171,26 @@ def mem_info_scratchpad():
     spec = get_env()
     return get_scratchpad_memory_info(spec, 3)
 
+@tvm.register_func("tvm.info.mem.{0}{1}".format(Environment.scratchpad_scope_prefix, '4'))
+def mem_info_scratchpad():
+    spec = get_env()
+    return get_scratchpad_memory_info(spec, 4)
+
+@tvm.register_func("tvm.info.mem.{0}{1}".format(Environment.scratchpad_scope_prefix, '5'))
+def mem_info_scratchpad():
+    spec = get_env()
+    return get_scratchpad_memory_info(spec, 5)
+
+@tvm.register_func("tvm.info.mem.{0}{1}".format(Environment.scratchpad_scope_prefix, '6'))
+def mem_info_scratchpad():
+    spec = get_env()
+    return get_scratchpad_memory_info(spec, 6)
+
+@tvm.register_func("tvm.info.mem.{0}{1}".format(Environment.scratchpad_scope_prefix, '7'))
+def mem_info_scratchpad():
+    spec = get_env()
+    return get_scratchpad_memory_info(spec, 7)
+
 #################################
 # register accumulation buffer. #
 #################################
@@ -181,7 +201,7 @@ def mem_info_acc():
     return tvm.make.node("MemoryInfo",
                          unit_bits=8,
                          max_simd_bits=acc_cfg['width_per_channel'],
-                         max_num_bits=acc_cfg['nchannel'] * (1 << acc_cfg['log_size_per_channel']) * 8,
+                         max_num_bits=(1 << acc_cfg['log_size']) * 8,
                          head_address=None)
 
 

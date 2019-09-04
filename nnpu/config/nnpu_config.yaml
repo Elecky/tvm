@@ -56,11 +56,12 @@ scratchpad_design: unified
 # unified scratchpad configs
 scratchpad0:
   enable: true
-  nchannel: 32
+  nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64
   # log size in byte of every channel
   log_size_per_channel: 15
+  log_size: 20
   # read and write delays in cycle
   r_delay: 2
   w_delay: 2
@@ -70,11 +71,12 @@ scratchpad0:
 
 scratchpad1:
   enable: true
-  nchannel: 32
+  nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64
   # log size in byte of every channel
   log_size_per_channel: 10
+  log_size: 16
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -82,11 +84,11 @@ scratchpad1:
 
 scratchpad2:
   enable: true
-  nchannel: 32
+  nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64
   # log size in byte of every channel
-  log_size_per_channel: 10
+  log_size: 17
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -94,11 +96,12 @@ scratchpad2:
 
 scratchpad3:
   enable: true
-  nchannel: 32
+  nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
   log_size_per_channel: 12
+  log_size: 17
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -106,11 +109,11 @@ scratchpad3:
 
 # accumulation buffer in matrix unit.
 acc_buffer:
-  nchannel: 32
+  nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
-  log_size_per_channel: 12
+  log_size: 15
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
