@@ -1007,7 +1007,7 @@ class IntrinManager(object):
 
             def expr_template(mat, vctr, func):
                 if (mode == 'inc'):
-                    return lambda i, j: func(mat[i, j].astype(dtype_out), vctr[j])
+                    return lambda i, j: func(mat[i, j].astype(dtype_out), vctr[j].astype(dtype_out))
                 elif (mode == 'dec'):
                     return lambda i, j: func(mat[i, j], vctr[j]).astype(dtype_out)
                 else:
@@ -1037,8 +1037,9 @@ class IntrinManager(object):
 
                 irb = tvm.ir_builder.create()
                 irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
-                irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_matrix_compute))
-                irb.emit(make_intrin_call("void", intrin_func,
+                irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_vector_compute))
+                irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_vector_compute))
+                irb.emit(tvm.call_intrin("int32", 'NNPU.' + intrin_func,
                             get_access_ptr(dout, env, 'w'),
                             dout.strides[0] * dtype_bytes(dtype_out),
                             get_access_ptr(din1, env, 'r'),

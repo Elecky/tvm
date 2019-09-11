@@ -1215,6 +1215,7 @@ private:
     DECLARE_PARSE_METHOD(parseDMACopy);
     DECLARE_PARSE_METHOD(parseBufCopy);
     DECLARE_PARSE_METHOD(parseMemset);
+    DECLARE_PARSE_METHOD(parseMatVctr);
 
 #undef DECLARE_PARSE_METHOD
 
@@ -1256,6 +1257,10 @@ MicroCodeParser::initialize_dispatch() {
     table.insert({"NNPU.ScratchpadCopy", &MicroCodeParser::parseBufCopy});
 
     table.insert({"NNPU.Memset", &MicroCodeParser::parseMemset});
+
+    for (string &item : vector<string> { "MAddV", "MSubV", "MMulV" }) {
+        table.insert({"NNPU." + item, &MicroCodeParser::parseMatVctr});
+    }
     return std::move(table);
 }
 
@@ -1444,6 +1449,24 @@ void MicroCodeParser::parseMemset(const vector<string> &tokens, const string &in
     current_kernel().emplace_back(
         MemsetMCode { parseCompositeOp(tokens[1]), parseUInt(tokens[2]), parseUInt(tokens[4]),
                       parseDouble(tokens[4]), ModeFromInt(parseUInt(tokens[5])) });
+}
+
+void MicroCodeParser::parseMatVctr(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 9) << ", invalid micro-code syntax" << instr;
+    using type = MatVctrMCode::OpType;
+    static const std::unordered_map<string, type> Ops {
+        { "NNPU.MAddV", type::Add }, { "NNPU.MSubV", type::Sub },
+        { "NNPU.MMulV", type::Mul } };
+    auto it = Ops.find(tokens[0]);
+    CHECK(it != Ops.end()) << ", invalid op-code: " << tokens[0];
+
+    current_kernel().emplace_back(
+        MatVctrMCode { parseCompositeOp(tokens[1]), parseUInt(tokens[2]),
+                       parseCompositeOp(tokens[3]), parseUInt(tokens[4]),
+                       parseCompositeOp(tokens[5]),
+                       parseUInt(tokens[6]), parseUInt(tokens[7]),
+                       ModeFromInt(parseUInt(tokens[8])),
+                       it->second } );
 }
 
 }  // end namespace nnpu

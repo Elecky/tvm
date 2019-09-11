@@ -10,3 +10,4 @@ NNPU.VDivS|NNPU.VAddS|NNPU.VSubS|NNPU.VMulS|NNPU.VGTMS|NNPU.SSubV|NNPU.SDivV ccc
 NNPU.DMABufLoad|NNPU.DMABufStore hciciii
 NNPU.ScratchpadCopy ciciii
 NNPU.Memset ciifi
+NNPU.MAddV|NNPU.MSubV|NNPU.MMulV ciciciii

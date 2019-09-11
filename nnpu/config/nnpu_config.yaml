@@ -88,7 +88,7 @@ scratchpad2:
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64
   # log size in byte of every channel
-  log_size: 17
+  log_size: 16
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -98,7 +98,20 @@ scratchpad3:
   enable: true
   nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 128
+  width_per_channel: 64
+  # log size in byte of every channel
+  log_size_per_channel: 12
+  log_size: 17
+  # read and write delays in cycle
+  r_delay: 1
+  w_delay: 1
+  type: two_port
+
+scratchpad4:
+  enable: true
+  nchannel: 2
+  # qeuivalent width in bits of every channel, has to be the power of 2
+  width_per_channel: 64
   # log size in byte of every channel
   log_size_per_channel: 12
   log_size: 17
@@ -155,7 +168,7 @@ misc_delays:
 
 DMA:
   start_up_time: 0  # the time in cycles needed to start a DMA.
-  speed: 32  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
+  speed: 16  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
 
 delay_modeling_switch:
   DMA: true
