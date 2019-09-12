@@ -309,7 +309,8 @@ class IntrinManager(object):
                                 nRowOut, nColOut, out_row_stride, mode, 0)
                     return calc(True, False), init, calc(True, True)
                 else:
-                    return calc(False, False)
+                    init = self.emit_memset(get_access_ptr(dout, env, 'w'), nRowOut, nColOut, out_row_stride, 0.0, mode, scope_out)
+                    return calc(False, False), init, calc(False, True)
 
             return tvm.decl_tensor_intrin(out.op, lower_func,
                                           name=name,
@@ -949,9 +950,6 @@ class IntrinManager(object):
                 din1 = ins[0]
                 dout = outs[0]
 
-                init = self.emit_acc_init(get_access_ptr(dout, env, 'w'), 1, nRow, 0, 
-                                mode, 0.0)
-
                 def calc(toAccBuf, doAcc):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
@@ -969,9 +967,12 @@ class IntrinManager(object):
                     return irb.get()
                 
                 if (scope_out == env.acc_scope):
+                    init = self.emit_acc_init(get_access_ptr(dout, env, 'w'), 1, nRow, 0, 
+                                mode, 0.0)
                     return calc(True, False), init, calc(True, True)
                 else:
-                    return calc(False, False)
+                    init = self.emit_memset(get_access_ptr(dout, env, 'w'), 1, nRow, 0, 0.0, mode, scope_out)
+                    return calc(False, False), init, calc(False, True)
 
             return tvm.decl_tensor_intrin(out.op, lower_func,
                                           name=name,
@@ -1102,9 +1103,6 @@ class IntrinManager(object):
                 din1, din2 = ins[0], ins[1]
                 dout = outs[0]
 
-                init = self.emit_acc_init(get_access_ptr(dout, env, 'w'),
-                                    1, nRow, 0, mode, 0.0)
-
                 def calc(toAccBuf, doAcc):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
@@ -1124,8 +1122,11 @@ class IntrinManager(object):
                     return irb.get()
                 
                 if (scope_out == env.acc_scope):
+                    init = self.emit_acc_init(get_access_ptr(dout, env, 'w'),
+                                    1, nRow, 0, mode, 0.0)
                     return calc(True, False), init, calc(True, True)
                 else:
+                    init = self.emit_memset(get_access_ptr(dout, env, 'w'), 1, nRow, 0, 0.0, mode, scope_out)
                     return calc(False, False)
 
             return tvm.decl_tensor_intrin(out.op, lower_func,
