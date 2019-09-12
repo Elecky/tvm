@@ -1445,10 +1445,11 @@ void MicroCodeParser::parseBufCopy(const vector<string> &tokens, const string &i
 }
 
 void MicroCodeParser::parseMemset(const vector<string> &tokens, const string &instr) {
-    CHECK_EQ(tokens.size(), 6) << ", invalid micro-code syntax" << instr;
+    CHECK_EQ(tokens.size(), 7) << ", invalid micro-code syntax" << instr;
     current_kernel().emplace_back(
-        MemsetMCode { parseCompositeOp(tokens[1]), parseUInt(tokens[2]), parseUInt(tokens[4]),
-                      parseDouble(tokens[4]), ModeFromInt(parseUInt(tokens[5])) });
+        MemsetMCode { parseCompositeOp(tokens[1]), 
+                      parseUInt(tokens[2]), parseUInt(tokens[3]), parseUInt(tokens[4]),
+                      parseDouble(tokens[5]), ModeFromInt(parseUInt(tokens[6])) });
 }
 
 void MicroCodeParser::parseMatVctr(const vector<string> &tokens, const string &instr) {

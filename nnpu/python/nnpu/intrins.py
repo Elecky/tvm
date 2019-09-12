@@ -285,9 +285,6 @@ class IntrinManager(object):
                     out_row_stride = dout.strides[0]
                 out_row_stride = out_row_stride * dtype_bytes(dtype_out)
 
-                init = self.emit_acc_init(get_access_ptr(dout, env, 'w'),
-                                nRowOut, nColOut, out_row_stride, mode, 0)
-
                 def calc(toAccBuf, doAcc):
                     irb = tvm.ir_builder.create()
                     irb.scope_attr(env.nnpu_axis, "nnpu_function", 0)
@@ -308,6 +305,8 @@ class IntrinManager(object):
                     return irb.get()
                 
                 if (scope_out == env.acc_scope):
+                    init = self.emit_acc_init(get_access_ptr(dout, env, 'w'),
+                                nRowOut, nColOut, out_row_stride, mode, 0)
                     return calc(True, False), init, calc(True, True)
                 else:
                     return calc(False, False)
@@ -528,8 +527,8 @@ class IntrinManager(object):
                 din = ins[0]
                 dout = outs[0]
 
-                init = self.emit_memset(get_access_ptr(dout, env, 'w'), shape_out[-1], 
-                            dtype_bytes(dtype_out), num , mode, scope_out)
+                init = self.emit_memset(get_access_ptr(dout, env, 'w'), 1, shape_out[-1], 0,
+                                        num , mode, scope_out)
 
                 def comp():
                     irb = tvm.ir_builder.create()
@@ -879,8 +878,8 @@ class IntrinManager(object):
                 din = ins[0]
                 dout = outs[0]
 
-                init = self.emit_memset(get_access_ptr(dout, env, 'w'), shape_out[0]*shape_out[1], 
-                            dtype_bytes(dtype_out), num, mode, scope_out)
+                init = self.emit_memset(get_access_ptr(dout, env, 'w'), 1, shape_out[0]*shape_out[1], 0,
+                                        num, mode, scope_out)
 
                 def comp():
                     irb = tvm.ir_builder.create()
@@ -1270,7 +1269,7 @@ class IntrinManager(object):
                     res.append(din)
         return res
     
-    def emit_memset(self, addr, nUnit, stride, val, mode, scope):
+    def emit_memset(self, addr, nRow, nCol, rowStride, val, mode, scope):
         if (not val is tvm.expr.FloatImm):
             val = tvm.const(val, 'float64')
         env = self.env
@@ -1279,7 +1278,7 @@ class IntrinManager(object):
         irb.scope_attr(env.nnpu_axis, "coproc_scope", env.get_pid(env.pid_scratchpad_copy(scope)))
         irb.scope_attr(env.nnpu_axis, "coproc_uop_scope", env.get_pid(env.pid_scratchpad_copy(scope)))
         irb.emit(tvm.call_intrin("int32", 'NNPU.Memset',
-                                addr, nUnit, stride,
+                                addr, nRow, nCol, rowStride,
                                 val, self.get_mode_code(mode)
                     ))
         return irb.get()
