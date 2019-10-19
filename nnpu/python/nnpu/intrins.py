@@ -389,7 +389,7 @@ class IntrinManager(object):
         self.intrin_ctors['ISubM'] = mat_imm
         
         def vctr_binary(intrin_op, scope_in1 = 'buffer0', scope_in2 = 'buffer0', 
-                 scope_out = 'buffer0', mode='n'):
+                 scope_out = 'buffer0', mode='n', size=16):
             env = self.env
             cfg = self.env.cfg
 
@@ -404,9 +404,7 @@ class IntrinManager(object):
 
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
-
-            shape = (cfg['vector_unit']['size'], )
-
+            shape = (size, )
             in1 = tvm.placeholder(shape, dtype_in, 'in1')
             in2 = tvm.placeholder(shape, dtype_in, 'in2')
 
@@ -471,7 +469,7 @@ class IntrinManager(object):
         self.intrin_ctors['VDivV'] = vctr_binary
         self.intrin_ctors['VGTMV'] = vctr_binary
 
-        def vctr_merge(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', mode='n', nDim=2):
+        def vctr_merge(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', mode='n', nDim=2, size=16):
             env = self.env
             cfg = self.env.cfg
 
@@ -489,10 +487,10 @@ class IntrinManager(object):
                 return self.intrin_cache[name]
 
             shape_in = [1] * (nDim - 1)
-            shape_in.append(cfg['vector_unit']['size'])
+            shape_in.append(size)
             #shape_in = tuple(shape_in)
             shape_out = [1] * (nDim - 2)
-            shape_out.append(cfg['vector_unit']['size'])
+            shape_out.append(size)
             #shape_out = (cfg['vector_unit']['size'], )
 
             in1 = tvm.placeholder(shape_in, dtype_in, 'in1')
