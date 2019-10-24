@@ -1646,3 +1646,19 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
                                 static_cast<int>(args[3]),
                                 dev_args);
         });
+
+#include <nnpusim/common/profile.h>
+
+static TVM_ATTRIBUTE_UNUSED auto &__register_set_profile_ =
+    ::tvm::runtime::Registry::Register("nnpu.set_profile", true)
+        .set_body([](TVMArgs args, TVMRetValue *rv) {
+            CHECK_GE(args.num_args, 1) << ", ecpected at least 1 arguments";
+            CHECK_EQ(args.type_codes[0], kDLInt)
+                << ", expecting 1st argument to be profile flag [int]";
+            nnpu::profile_flag = static_cast<nnpu::profile_flag_t>(static_cast<uint64_t>(args[0]));
+            if (args.num_args >= 2) {
+                CHECK_EQ(args.type_codes[1], kStr)
+                    << ", expecting 2nd argument to be a directory [string]";
+                nnpu::profile_dir = args[1].operator std::__cxx11::string();
+            }
+        });

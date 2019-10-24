@@ -4,6 +4,7 @@ find_program(PYTHON NAMES python python3 python3.6)
 if(PYTHON)
   set (CMAKE_PREFIX_PATH /opt/systemc)
   find_package(SystemCLanguage CONFIG REQUIRED)
+  find_package(RapidJSON)
 
   set(RUNTIME_SRC nnpu/src/)
   set(NNPU_RUNTIME_SRCS ${RUNTIME_SRC}/device_api.cpp ${RUNTIME_SRC}/runtime.cpp 
@@ -13,7 +14,8 @@ if(PYTHON)
   set(NNPU_SIM_COMMON ${SIM_SRC}/common/bit_packer.cpp    ${SIM_SRC}/common/bit_packer_factory.cpp
                       ${SIM_SRC}/common/bit_wrapper.cpp   ${SIM_SRC}/common/data_types.cpp
                       ${SIM_SRC}/insn.cpp                 ${SIM_SRC}/misc/semaphore.cpp
-                      ${SIM_SRC}/insn_ctors.cpp           ${SIM_SRC}/insn_functors.cpp)
+                      ${SIM_SRC}/insn_ctors.cpp           ${SIM_SRC}/insn_functors.cpp
+                      ${SIM_SRC}/common/profile.cpp)
 
   set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/S0Simulator.cpp)
   set(NNPU_S1SIM_SRC ${SIM_SRC}/insn_wrapper.cpp 
@@ -64,9 +66,10 @@ if(PYTHON)
   add_library(nnpu SHARED ${NNPU_RUNTIME_SRCS} ${NNPU_SIM_COMMON} ${NNPU_S0SIM_SRC}
                           ${NNPU_S1SIM_SRC} ${NNPU_SCSIM_SRCS})
   target_include_directories(nnpu PUBLIC nnpu/include /usr/local/include nnpu/NNPUSim/include
-                              /opt/systemc/include)
+                             /opt/systemc/include ${RAPIDJSON_INCLUDE_DIR})
   target_link_libraries(nnpu -lyaml-cpp)
   target_link_libraries(nnpu SystemC::systemc)
+  # target_link_libraries(nnpu RapidJSON)
 else()
   message(STATUS "Cannot found python in env, NNPU build is skipped..")
 endif()

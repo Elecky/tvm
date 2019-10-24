@@ -123,6 +123,24 @@ def set_dump(value):
     if (func):
         func(value)
 
+def set_profile(profiles, dir=None):
+    func = tvm.get_global_func('nnpu.set_profile', False)
+    flags = {'timeline': 0x1, 'memory_access_latency': 0x2}
+    flag = 0
+    for item in profiles:
+        if (item in flags):
+            flag = flag | flags[item]
+    if (dir is not None):
+        import os, errno
+        try:
+            os.makedirs(dir)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+        func(flag, dir)
+    else:
+        func(flag)
+
 def get_env():
     return Environment.current
 

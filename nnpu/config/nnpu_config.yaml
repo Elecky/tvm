@@ -67,7 +67,7 @@ scratchpad0:
 
 scratchpad1:
   enable: true
-  nchannel: 8
+  nchannel: 12
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64
   # log size in byte of every channel
@@ -75,7 +75,7 @@ scratchpad1:
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
-  type: two_port
+  type: one_port
 
 scratchpad2:
   enable: true

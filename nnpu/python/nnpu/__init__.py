@@ -1,5 +1,5 @@
 from .libinfo import _load_lib
-from .environment import Environment, get_env, set_device, set_dump
+from .environment import Environment, get_env, set_device, set_dump, set_profile
 from .build_module import lower, build, build_config
 from .utils import *
 from .utils import create_schedule
