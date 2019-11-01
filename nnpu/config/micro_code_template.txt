@@ -11,3 +11,4 @@ NNPU.DMABufLoad|NNPU.DMABufStore hciciii
 NNPU.ScratchpadCopy ciciii
 NNPU.Memset ciiifi
 NNPU.MAddV|NNPU.MSubV|NNPU.MMulV ciciciii
+NNPU.Im2Col ciiciii

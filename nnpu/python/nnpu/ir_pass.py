@@ -11,6 +11,26 @@ from .intrins import make_intrin_call
 
 tvm_zero = tvm.const(0, 'uint32')
 
+def _match_pragma(stmt, key):
+    """Internal helper to match stmt to pragma stmt.
+
+    Parameters
+    ----------
+    stmt : Stmt
+        The AttrStmt
+
+    key : str
+        The pragma key
+    """
+    return ((stmt.attr_key == "pragma_" + key) or
+            (stmt.attr_key == "pragma_scope" and stmt.value.value == key))
+
+def to_const_ints(exprs):
+    ret = list()
+    for expr in exprs:
+        ret.append(util.get_const_int(expr))
+    return ret
+
 # some helper functions
 def mark_coproc_scope(stmt, pid, is_uop=False):
     irb = tvm.ir_builder.create()
@@ -716,3 +736,382 @@ def load_cast_rewrite(stmt_in):
 
     return tvm.ir_pass.IRTransform(
             stmt_in, find_nnpu_device_ir, None, ["AttrStmt"])
+
+'''
+passes to do custom tensorize
+'''
+mode2code = {'n': 0, 'inc': 1, 'dec': 2, 'w': 3}
+def get_mode_code(dtype_in, dtype_out):
+    env = get_env()
+    dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
+    if (dtype_in == dtype_n):
+        if (dtype_out == dtype_n):
+            return mode2code['n']
+        elif (dtype_out == dtype_w):
+            return mode2code['inc']
+    elif (dtype_in == dtype_w):
+        if (dtype_out == dtype_n):
+            return mode2code['dec']
+        elif (dtype_out == dtype_w):
+            return mode2code['w']
+    raise ValueError('invalid dtype')
+
+def create_access_ptr(dtype, buffer_var, index, extent, access_mask):
+    e_dtype = tvm.call_pure_intrin(dtype, 'type_annotation')
+    data = buffer_var
+    mask = 0
+    for value in access_mask:
+        if value == "r":
+            mask = mask | 1
+        elif value == "w":
+            mask = mask | 2
+        else:
+            raise ValueError('invalid mask')
+    ptr = tvm.call_intrin('int32', 'tvm_access_ptr', e_dtype, data, index, extent, mask)
+    return ptr
+
+def annotate_coproc_scope(stmt_in):
+    """Pass to insert ALU instruction.
+
+    Parameters
+    ----------
+    stmt_in : Stmt
+        Input statement
+
+    Returns
+    -------
+    stmt_out : Stmt
+        Transformed statement
+    """
+    env = get_env()
+    def _do_fold(stmt):
+        if _match_pragma(stmt, "nnpu.vector"):
+            return mark_coproc_scope(stmt, env.get_pid(env.pid_vector_compute), True)
+        elif _match_pragma(stmt, 'nnpu.im2col'):
+            return mark_coproc_scope(stmt, env.get_pid(env.pid_scratchpad_copy(env.get_scope('buffer0'))), True)
+        return stmt
+
+    stmt_out = tvm.ir_pass.IRTransform(
+        stmt_in, None, _do_fold, ["AttrStmt"])
+
+    return stmt_out
+
+def custom_tensorize(stmt_in):
+    import ast
+
+    def binary_(stmt, params):
+        # assert stmt.for_type == 1, 'loop must be parallel'
+        # stmt = tvm.ir_pass.CanonicalSimplify(stmt)
+        # stmt = tvm.ir_pass.Simplify(stmt)
+        # print (stmt)
+        loop_var = stmt.loop_var
+        indices = [loop_var]
+        ext = util.get_const_int(stmt.extent)
+        if ext != params['size']:
+            raise RuntimeError('invalid AST, loop with extent {0} is exptected, got {1}'.format(params['size'], ext))
+        body = stmt.body
+        if (not isinstance(body, tvm.stmt.Store)):
+            raise RuntimeError('invalid AST, Store expected')
+        dst_var = body.buffer_var
+        dst_idx = body.index
+        assert util.equal_const_int(body.predicate, 1) or not body.predicate.defined(), 'predicate is not supported'
+        src = body.value
+        cast = src
+        if (isinstance(src, tvm.expr.Cast)):
+            cast = src
+            src = cast.Value
+        # print(src)
+        if (isinstance(src, tvm.expr.Add)):
+            uop = 'NNPU.VAddV'
+        elif (isinstance(src, tvm.expr.Sub)):
+            uop = 'NNPU.VSubV'
+        elif (isinstance(src, tvm.expr.Mul)):
+            uop = 'NNPU.VMulV'
+        elif (isinstance(src, tvm.expr.Div)):
+            uop = 'NNPU.VDivV'
+        elif (isinstance(src, tvm.expr.Max)):
+            uop = 'NNPU.VGTMV'
+        else:
+            raise RuntimeError('invalid AST, unhandled op')
+        lhs = src.a
+        if isinstance(lhs, tvm.expr.Cast):
+            lhs = lhs.value
+        rhs = src.b
+        if isinstance(rhs, tvm.expr.Cast):
+            rhs = rhs.value
+        if (not isinstance(lhs, tvm.expr.Load) or not isinstance(rhs, tvm.expr.Load)):
+            raise RuntimeError('invalid AST, Load expected')
+        dst_coef = tvm.arith.DetectLinearEquation(dst_idx, indices)
+        lhs_coef = tvm.arith.DetectLinearEquation(lhs.index, indices)
+        rhs_coef = tvm.arith.DetectLinearEquation(rhs.index, indices)
+        # do stride checking
+        if not util.equal_const_int(dst_coef[0], 1) or not util.equal_const_int(lhs_coef[0], 1) or not util.equal_const_int(rhs_coef[0], 1):
+            raise RuntimeError('invalid AST, stride is not 1')
+        
+        # do type checking
+        dst_type = cast.dtype
+        lhs_type = lhs.dtype
+        rhs_type = rhs.dtype
+        if not lhs_type == rhs_type:
+            raise RuntimeError('invalid AST, difference source type')
+        body = tvm.call_intrin("int32", uop,
+                                create_access_ptr(dst_type, dst_var, dst_coef[-1], ext, 'w'),
+                                create_access_ptr(lhs_type, lhs.buffer_var, lhs_coef[-1], ext, 'r'),
+                                create_access_ptr(rhs_type, rhs.buffer_var, rhs_coef[-1], ext, 'r'),
+                                ext,
+                                get_mode_code(lhs_type, dst_type)
+                                )
+        return tvm.stmt.Evaluate(body)
+
+    def transform_(stmt):
+        if (_match_pragma(stmt, 'nnpu.vector')):
+            params = ast.literal_eval(stmt.value.value)
+            body = None
+            if (params['code'] == 'binary'):
+                body = binary_(stmt.body, params)
+            # print(body)
+            return body
+        return None
+
+    return tvm.ir_pass.IRTransform(
+            stmt_in, transform_, None, ["AttrStmt"])
+
+def im2col_transform(stmt):
+    def transform_(stmt):
+        if (_match_pragma(stmt, 'nnpu.im2col')):
+            env = get_env()
+
+            stmt = stmt.body
+            # print(stmt)
+            ph_loop = stmt.body
+            pw_loop = ph_loop.body
+            kh_loop = pw_loop.body
+            kw_loop = kh_loop.body
+            c_loop = kw_loop.body
+            store = c_loop.body
+            dst_idx = store.index
+            load = store.value
+            assert isinstance(load, tvm.expr.Load), 'no casting is allowed'
+            src_idx = load.index
+            dtype = load.dtype
+            # TODO: do some checking on loop scopes
+            patch_h, patch_w = util.get_const_int(ph_loop.extent), util.get_const_int(pw_loop.extent)
+            kernel_h, kernel_w = util.get_const_int(kh_loop.extent), util.get_const_int(kw_loop.extent)
+            src_coefs = tvm.arith.DetectLinearEquation(src_idx, [ph_loop.loop_var, pw_loop.loop_var, kh_loop.loop_var, kw_loop.loop_var])
+            # TODO: do some checking!!
+            stride_h, stride_w = util.get_const_int(src_coefs[0] // src_coefs[2]), util.get_const_int(src_coefs[1] // src_coefs[3])
+            assert stride_h == 1 and stride_w == 1, 'only unit strides are implemented now'
+            # corner_h and corner_w are the corners at two sides.
+            corner_h, corner_w = kernel_h - 1, kernel_w - 1
+            builder = tvm.ir_builder.create()
+            with builder.for_range(stmt.min, stmt.min + stmt.extent, stmt.loop_var.name) as i1:
+                # the domain of (i_patch_h + i_kernel_h) and (i_patch_w + i_kernel_w), split into two groups
+                # the domain of normal ranges, in the form of [begin, end)
+                normal_range_h = [corner_h, stride_h * patch_h + kernel_h - stride_h - corner_h]
+                normal_range_w = [corner_w, stride_w * patch_w + kernel_w - stride_w - corner_w]
+                # the domain of coners
+                corner_range_h = list(range(0, corner_h))
+                corner_range_h.extend(range(stride_h * patch_h + kernel_h - stride_h - corner_h, stride_h * patch_h + kernel_h - stride_h))
+                corner_range_w = list(range(0, corner_w))
+                corner_range_w.extend(range(stride_w * patch_w + kernel_w - stride_w - corner_w, stride_w * patch_w + kernel_w - stride_w))
+                # the normal cases
+                with builder.for_range(0, normal_range_h[1] - normal_range_h[0], 'ppkh') as i_ppkh_shift:
+                    with builder.for_range(0, normal_range_w[1] - normal_range_w[0], 'ppkw') as i_ppkw_shift:
+                        i_kh = tvm.var('chan_kernel_h')
+                        i_kw = tvm.var('chan_kernel_w')
+                        i_ci = tvm.var('ci')
+                        i_ppkh = i_ppkh_shift + corner_h
+                        i_ppkw = i_ppkw_shift + corner_w
+                        ph1 = (i_ppkh - i_kh) / stride_h
+                        pw1 = (i_ppkw - i_kw) / stride_w
+                        # variable replacement dict
+                        var_dict = {stmt.loop_var: i1, 
+                                    ph_loop.loop_var: ph1, pw_loop.loop_var: pw1,
+                                    kh_loop.loop_var: i_kh, kw_loop.loop_var: i_kw,
+                                    c_loop.loop_var: i_ci}
+                        body = tvm.ir_pass.Substitute(store, var_dict)
+
+                        src_coefs = tvm.arith.DetectLinearEquation(body.value.index, [i_kh, i_kw, i_ci])
+                        dst_coefs = tvm.arith.DetectLinearEquation(body.index, [i_kh, i_kw, i_ci])
+                        assert util.equal_const_int(src_coefs[0], 0) and util.equal_const_int(src_coefs[1], 0), \
+                                    'unreachable, the coefficients should be zero after substitute'
+                        assert util.equal_const_int(src_coefs[2], 1), 'the last dimension should be compact'
+                        assert util.equal_const_int(dst_coefs[2], 1), 'the last dimension should be compact'
+                        # the extents, strides of 3 loops: kernel_h, kernel_w, inner_channel
+                        extents = to_const_ints([kernel_h, kernel_w, c_loop.extent])
+                        strides = to_const_ints([dst_coefs[0], dst_coefs[1], 1])
+                        dst_offset = 0
+                        body = tvm.call_intrin(
+                                            'int32', 'NNPU.Im2Col',
+                                            create_access_ptr(dtype, body.buffer_var, dst_coefs[3] + dst_offset, extents[2], 'w'),
+                                            strides[0], strides[1], 
+                                            create_access_ptr(dtype, body.value.buffer_var, src_coefs[3], extents[2], 'r'),
+                                            extents[0], extents[1], extents[2] * get_dtype_bytes(dtype))
+                        # print(body)
+                        builder.emit(body)
+                # the half corners
+                for ppkh in corner_range_h:
+                    with builder.for_range(0, normal_range_w[1] - normal_range_w[0], 'ppkw') as i_ppkw_shift:
+                        # calculate the kernel scope
+                        i_kh_scope = (max(0, ppkh - patch_h + 1), min(kernel_h - 1, ppkh) + 1)
+
+                        i_ppkw = i_ppkw_shift + corner_w
+                        i_kh = tvm.var('chan_kernel_h')
+                        i_kw = tvm.var('chan_kernel_w')
+                        i_ci = tvm.var('ci')
+                        ph1 = (ppkh - i_kh) / stride_h
+                        pw1 = (i_ppkw - i_kw) / stride_w
+                        # variable replacement dict
+                        var_dict = {stmt.loop_var: i1, 
+                                    ph_loop.loop_var: ph1, pw_loop.loop_var: pw1,
+                                    kh_loop.loop_var: i_kh, kw_loop.loop_var: i_kw,
+                                    c_loop.loop_var: i_ci}
+                        body = tvm.ir_pass.Substitute(store, var_dict)
+
+                        src_coefs = tvm.arith.DetectLinearEquation(body.value.index, [i_kh, i_kw, i_ci])
+                        dst_coefs = tvm.arith.DetectLinearEquation(body.index, [i_kh, i_kw, i_ci])
+                        assert util.equal_const_int(src_coefs[0], 0) and util.equal_const_int(src_coefs[1], 0), \
+                                    'unreachable, the coefficients should be zero after substitute'
+                        assert util.equal_const_int(src_coefs[2], 1), 'the last dimension should be compact'
+                        assert util.equal_const_int(dst_coefs[2], 1), 'the last dimension should be compact'
+                        # the extents, strides of 3 loops: kernel_h, kernel_w, inner_channel
+                        extents = to_const_ints([i_kh_scope[1] - i_kh_scope[0], kernel_w, c_loop.extent])
+                        strides = to_const_ints([dst_coefs[0], dst_coefs[1], 1])
+                        dst_offset = i_kh_scope[0] * strides[0]
+                        body = tvm.call_intrin(
+                                            'int32', 'NNPU.Im2Col',
+                                            create_access_ptr(body.value.dtype, body.buffer_var, dst_coefs[3] + dst_offset, extents[2], 'w'),
+                                            strides[0], strides[1], 
+                                            create_access_ptr(body.value.dtype, body.value.buffer_var, src_coefs[3], extents[2], 'r'),
+                                            extents[0], extents[1], extents[2] * get_dtype_bytes(dtype))
+                        builder.emit(body)
+                for ppkw in corner_range_w:
+                    with builder.for_range(0, normal_range_h[1] - normal_range_h[0], 'ppkh') as i_ppkh_shift:
+                        # calculate the kernel delta scope
+                        i_kw_scope = (max(0, ppkw - patch_w + 1), min(kernel_w - 1, ppkw) + 1)
+                        i_ppkh = i_ppkh_shift + corner_h
+
+                        i_kh = tvm.var('chan_kernel_h')
+                        i_kw = tvm.var('chan_kernel_w')
+                        i_ci = tvm.var('ci')
+                        ph1 = (i_ppkh - i_kh) / stride_h
+                        pw1 = (ppkw - i_kw) / stride_w
+                        # variable replacement dict
+                        var_dict = {stmt.loop_var: i1, 
+                                    ph_loop.loop_var: ph1, pw_loop.loop_var: pw1,
+                                    kh_loop.loop_var: i_kh, kw_loop.loop_var: i_kw,
+                                    c_loop.loop_var: i_ci}
+                        body = tvm.ir_pass.Substitute(store, var_dict)
+
+                        src_coefs = tvm.arith.DetectLinearEquation(body.value.index, [i_kh, i_kw, i_ci])
+                        dst_coefs = tvm.arith.DetectLinearEquation(body.index, [i_kh, i_kw, i_ci])
+                        assert util.equal_const_int(src_coefs[0], 0) and util.equal_const_int(src_coefs[1], 0), \
+                                    'unreachable, the coefficients should be zero after substitute'
+                        assert util.equal_const_int(src_coefs[2], 1), 'the last dimension should be compact'
+                        assert util.equal_const_int(dst_coefs[2], 1), 'the last dimension should be compact'
+                        # the extents, strides of 3 loops: kernel_h, kernel_w, inner_channel
+                        extents = to_const_ints([kernel_h, i_kw_scope[1] - i_kw_scope[0], c_loop.extent])
+                        strides = to_const_ints([dst_coefs[0], dst_coefs[1], 1])
+                        dst_offset = i_kw_scope[0] * strides[1]
+                        body = tvm.call_intrin(
+                                            'int32', 'NNPU.Im2Col',
+                                            create_access_ptr(body.value.dtype, body.buffer_var, dst_coefs[3] + dst_offset, extents[2], 'w'),
+                                            strides[0], strides[1], 
+                                            create_access_ptr(body.value.dtype, body.value.buffer_var, src_coefs[3], extents[2], 'r'),
+                                            extents[0], extents[1], extents[2] * get_dtype_bytes(dtype))
+                        builder.emit(body)
+                builder2 = tvm.ir_builder.create()
+                # the full corners
+                for ppkh in corner_range_h:
+                    for ppkw in corner_range_w:
+                        # calculate the kernel delta scope
+                        i_kh_scope = (max(0, ppkh - patch_h + 1), min(kernel_h - 1, ppkh) + 1)
+                        i_kw_scope = (max(0, ppkw - patch_w + 1), min(kernel_w - 1, ppkw) + 1)
+
+                        i_kh = tvm.var('chan_kernel_h')
+                        i_kw = tvm.var('chan_kernel_w')
+                        i_ci = tvm.var('ci')
+                        ph1 = (ppkh - i_kh) / stride_h
+                        pw1 = (ppkw - i_kw) / stride_w
+                        # variable replacement dict
+                        var_dict = {stmt.loop_var: i1, 
+                                    ph_loop.loop_var: ph1, pw_loop.loop_var: pw1,
+                                    kh_loop.loop_var: i_kh, kw_loop.loop_var: i_kw,
+                                    c_loop.loop_var: i_ci}
+                        body = tvm.ir_pass.Substitute(store, var_dict)
+
+                        src_coefs = tvm.arith.DetectLinearEquation(body.value.index, [i_kh, i_kw, i_ci])
+                        dst_coefs = tvm.arith.DetectLinearEquation(body.index, [i_kh, i_kw, i_ci])
+                        assert util.equal_const_int(src_coefs[0], 0) and util.equal_const_int(src_coefs[1], 0), \
+                                    'unreachable, the coefficients should be zero after substitute'
+                        assert util.equal_const_int(src_coefs[2], 1), 'the last dimension should be compact'
+                        assert util.equal_const_int(dst_coefs[2], 1), 'the last dimension should be compact'
+                        # the extents, strides of 3 loops: kernel_h, kernel_w, inner_channel
+                        extents = to_const_ints([i_kh_scope[1] - i_kh_scope[0], i_kw_scope[1] - i_kw_scope[0], c_loop.extent])
+                        strides = to_const_ints([dst_coefs[0], dst_coefs[1], 1])
+                        dst_offset = i_kh_scope[0] * strides[0] + i_kw_scope[0] * strides[1]
+                        body = tvm.call_intrin(
+                                            'int32', 'NNPU.Im2Col',
+                                            create_access_ptr(body.value.dtype, body.buffer_var, dst_coefs[3] + dst_offset, extents[2], 'w'),
+                                            strides[0], strides[1], 
+                                            create_access_ptr(body.value.dtype, body.value.buffer_var, src_coefs[3], extents[2], 'r'),
+                                            extents[0], extents[1], extents[2] * get_dtype_bytes(dtype))
+                        builder2.emit(body)
+                builder.emit(builder2.get())
+            # the version that Canonicals loop scopes, for CPU
+            # with builder.for_range(stmt.min, stmt.min + stmt.extent, stmt.loop_var.name) as i1:
+            #     corner_h, corner_w = kernel_h - 1, kernel_w - 1
+            #     # the corners
+            #     corner_range_h = list(range(0, corner_h))
+            #     corner_range_h.extend(range(stride_h * patch_h + kernel_h - stride_h - corner_h, stride_h * patch_h + kernel_h - stride_h))
+            #     corner_range_w = list(range(0, corner_w))
+            #     corner_range_w.extend(range(stride_w * patch_w + kernel_w - stride_w - corner_w, stride_w * patch_w + kernel_w - stride_w))
+            #     for ppkh in corner_range_h:
+            #         for ppkw in corner_range_w:
+            #             # calculate the kernel delta scope
+            #             i_kh_scope = (max(0, ppkh - patch_h + 1), min(kernel_h - 1, ppkh) + 1)
+            #             i_kw_scope = (max(0, ppkw - patch_w + 1), min(kernel_w - 1, ppkw) + 1)
+            #             # print(i_kh_scope, i_kw_scope)
+            #             with builder.for_range(0, tvm.const(i_kh_scope[1], 'int32') - i_kh_scope[0], 'chan_kernel_h') as i_kh_shift:
+            #                 with builder.for_range(0, tvm.const(i_kw_scope[1], 'int32') - i_kw_scope[0], 'chan_kernel_w') as i_kw_shift:
+            #                     with builder.for_range(0, c_loop.extent, 'ci') as i_ci:
+            #                         # the new patch indice
+            #                         i_kh = i_kh_shift + i_kh_scope[0]
+            #                         i_kw = i_kw_shift + i_kw_scope[0]
+            #                         ph1 = (ppkh - i_kh) / stride_h
+            #                         pw1 = (ppkw - i_kw) / stride_w
+
+            #                         with builder.if_scope(tvm.all(ph1 >= 0, ph1 < ph_loop.extent, pw1 >= 0, pw1 < pw_loop.extent)):
+            #                             # variable replacement dict
+            #                             var_dict = {stmt.loop_var: i1, 
+            #                                         ph_loop.loop_var: ph1, pw_loop.loop_var: pw1,
+            #                                         kh_loop.loop_var: i_kh, kw_loop.loop_var: i_kw,
+            #                                         c_loop.loop_var: i_ci}
+            #                             body = tvm.ir_pass.Substitute(store, var_dict)
+            #                             builder.emit(body)
+            #     with builder.for_range(0, stride_h * ph_loop.extent + kh_loop.extent - stride_h - 2 * corner_h, 'ppkh') as i_ppkh_shift:
+            #         with builder.for_range(0, stride_w * pw_loop.extent + kw_loop.extent - stride_w - 2 * corner_w, 'ppkw') as i_ppkw_shift:
+            #             with builder.for_range(0, kernel_h, 'chan_kernel_h') as i_kh:
+            #                 with builder.for_range(0, kernel_w, 'chan_kernel_w') as i_kw:
+            #                     with builder.for_range(0, c_loop.extent, 'ci') as i_ci:
+            #                         i_ppkh = i_ppkh_shift + corner_h
+            #                         i_ppkw = i_ppkw_shift + corner_w
+            #                         # condition, ph1 and pw1 should be integer
+            #                         with builder.if_scope(tvm.all(((i_ppkh - kh_loop.loop_var) % stride_h) == 0, ((i_ppkw - kw_loop.loop_var) % stride_w) == 0)):
+            #                             # the new patch indice
+            #                             ph1 = (i_ppkh - i_kh) / stride_h
+            #                             pw1 = (i_ppkw - i_kw) / stride_w
+            #                             with builder.if_scope(tvm.all(ph1 >= 0, ph1 < ph_loop.extent, pw1 >= 0, pw1 < pw_loop.extent)):
+            #                                 # variable replacement dict
+            #                                 var_dict = {stmt.loop_var: i1, 
+            #                                             ph_loop.loop_var: ph1, pw_loop.loop_var: pw1,
+            #                                             kh_loop.loop_var: i_kh, kw_loop.loop_var: i_kw,
+            #                                             c_loop.loop_var: i_ci}
+            #                                 body = tvm.ir_pass.Substitute(store, var_dict)
+            #                                 builder.emit(body)
+            # print(builder.get())
+            return builder.get()
+        return None
+
+    return tvm.ir_pass.IRTransform(
+            stmt, transform_, None, ["AttrStmt"])

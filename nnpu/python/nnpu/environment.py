@@ -159,6 +159,7 @@ def mem_info_dram():
 # register scratchpad memories. #
 #################################
 def get_scratchpad_memory_info(env, scratchpad_idx):
+    from .helper import scratchpad_base_addr
     scope = env.scratchpad_scope(scratchpad_idx)
     buffer_cfg = env.get_scope_config(scope)
     if (buffer_cfg and buffer_cfg['enable']):
@@ -166,7 +167,8 @@ def get_scratchpad_memory_info(env, scratchpad_idx):
                             unit_bits=8,
                             max_simd_bits=buffer_cfg['width_per_channel'],
                             max_num_bits=(1 << buffer_cfg['log_size']) * 8,
-                            head_address=None)
+                            head_address=None,
+                            base_address=scratchpad_base_addr[scratchpad_idx])
     else:
         raise ValueError('scratchpad buffer "{0}" is not enabled, please check config file'.format(scope))
 

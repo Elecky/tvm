@@ -307,13 +307,15 @@ class StorageAccessInfoLower : public IRMutator {
       CHECK_EQ(dtype_bits % info->unit_bits, 0);
       return cast(ptr_type,
                     ir::Simplify(offset * make_const(
-                        offset.type(), dtype_bits / info->unit_bits)));
+                        offset.type(), dtype_bits / info->unit_bits) 
+                        + make_const(offset.type(), info->base_address)));
     }
     else {
       CHECK_EQ(info->unit_bits % dtype_bits, 0);
       return cast(ptr_type,
                     ir::Simplify(offset / make_const(
-                        offset.type(), info->unit_bits / dtype_bits)));
+                        offset.type(), info->unit_bits / dtype_bits)
+                        + make_const(offset.type(), info->base_address)));
     }
   }
   // The storage entry.

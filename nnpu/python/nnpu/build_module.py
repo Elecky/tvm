@@ -46,12 +46,15 @@ def build_config(debug_flag=0, **kwargs):
                  (1, ir_pass.inject_scratchpad_copy),
                  (1, ir_pass.inject_accTobuffer),
                  (1, ir_pass.inject_dmacopy2buf_intrin),
+                 (1, ir_pass.annotate_coproc_scope),
                  (1, lambda x: tvm.ir_pass.LiftAttrScope(x, "coproc_uop_scope", True)),
                  (1, ir_pass.lift_alloc_to_scope_begin),
                  (1, lambda x: tvm.ir_pass.LiftAttrScope(x, "coproc_scope", False)),
                  (1, lambda x: tvm.ir_pass.LiftAttrScope(x, "nnpu_function", False)),
-                 (1, ir_pass.load_cast_rewrite),
                  (1, tvm.ir_pass.CoProcSync),
+                 (2, ir_pass.custom_tensorize),
+                 (2, ir_pass.im2col_transform),
+                 (2, ir_pass.load_cast_rewrite),
                  (3, ir_pass.cpu_access_rewrite)
                 ]
 

@@ -501,6 +501,7 @@ public:
     }
 
     Stmt Mutate_(const Evaluate *op, const Stmt &s) final;
+    Stmt Mutate_(const Block *op, const Stmt &s) final;
 
     inline vector<string> & get_micro_codes() {
         return micro_kernels;
@@ -524,8 +525,12 @@ Stmt loop_folder::Mutate_(const For *op, const Stmt &s) {
     /* extend of loops */
     Array<Expr> loop_exts;
     // TODO: check the lower bound of loop(s)
+    if (!is_zero(op->min)) {
+        /* lower_bound not zero, forward to IRMutator to skip this level of loop, continue to try expanding inner loops to generate micro-kernel body. */
+        return IRMutator::Mutate_(op, s);
+    }
 
-    if (const For *inner_op = op->body.as<For>()) {
+    if (const For *inner_op = op->body.as<For>() ; inner_op && is_zero(inner_op->min)) {
         /* if there are two for loops */
         Var iter_var0(op->loop_var.node_);
         loop_vars.push_back(iter_var0);
@@ -546,8 +551,8 @@ Stmt loop_folder::Mutate_(const For *op, const Stmt &s) {
 
     micro_code_expander expander(loop_vars, 2, uop_templates_);
     auto res = expander.expand(body);
-    // TODO: I limited the micro-code count to be less than 256, is there any beeter way to do limitation?
-    if (std::get<0>(res) && std::get<3>(res) < 128) {
+    // TODO: I limited the micro-code count to be less than 32, is there any beeter way to do limitation?
+    if (std::get<0>(res) && std::get<3>(res) < 32) {
         /* insert this micro-kernel into list. */
         micro_kernels.push_back(move(std::get<1>(res)));
         /* build statements to set local register and launch micro-kernel */
@@ -574,6 +579,24 @@ Stmt loop_folder::Mutate_(const Evaluate *op, const Stmt &s) {
     }
     else {
         throw std::logic_error("failed to generate kernel for a single Call Node");
+    }
+}
+
+Stmt loop_folder::Mutate_(const Block *op, const Stmt &s) {
+    /* handle the condition that a micro-code is not wrapped in any loop. */
+    micro_code_expander expander(Array<Var>()/* no loop var */, 2, uop_templates_);
+    auto res = expander.expand(s);
+    if (std::get<0>(res) && std::get<3>(res) < 32) {
+        /* insert this micro-kernel into list. */
+        micro_kernels.push_back(move(std::get<1>(res)));
+        /* build statements to set local register and launch micro-kernel */
+        Array<Expr> loop_exts;
+        loop_exts.push_back(make_const(Int(32), 1));
+        loop_exts.push_back(make_const(Int(32), 1));
+        return build_launch_kernel(loop_exts, std::get<2>(res));
+    }
+    else {
+        return IRMutator::Mutate_(op, s);
     }
 }
 

@@ -46,7 +46,4 @@ def get_access_ptr(buffer, env, *args):
     scope = buffer.scope
     if not env.is_scratchpad_scope(scope):
         return addr
-    
-    cfg = env.get_scope_config(scope)
-    idx = env.scratchpad_scope_to_idx(scope)
-    return util.simplify(addr + scratchpad_base_addr[idx])
+    return addr

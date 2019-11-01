@@ -28,12 +28,15 @@ struct MemoryInfoNode : public Node {
    *  This address can be None.
    */
   Expr head_address;
+  /*! \brief base address of the buffer */
+  int base_address = 0;
 
   void VisitAttrs(AttrVisitor* v) final {
     v->Visit("unit_bits", &unit_bits);
     v->Visit("max_num_bits", &max_num_bits);
     v->Visit("max_simd_bits", &max_simd_bits);
     v->Visit("head_address", &head_address);
+    v->Visit("base_address", &base_address);
   }
 
   static constexpr const char* _type_key = "MemoryInfo";

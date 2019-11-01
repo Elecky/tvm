@@ -1168,6 +1168,10 @@ public:
         return std::atoi(token.c_str());
     }
 
+    inline static int32_t parseInt(const string &token) {
+        return std::atoi(token.c_str());
+    }
+
     inline static uint16_t parseUShort(const string &token) {
         auto data = std::atoi(token.c_str());
         assert(data >= 0 && data <= std::numeric_limits<uint16_t>::max());
@@ -1216,6 +1220,7 @@ private:
     DECLARE_PARSE_METHOD(parseBufCopy);
     DECLARE_PARSE_METHOD(parseMemset);
     DECLARE_PARSE_METHOD(parseMatVctr);
+    DECLARE_PARSE_METHOD(parseIm2Col);
 
 #undef DECLARE_PARSE_METHOD
 
@@ -1261,6 +1266,9 @@ MicroCodeParser::initialize_dispatch() {
     for (string &item : vector<string> { "MAddV", "MSubV", "MMulV" }) {
         table.insert({"NNPU." + item, &MicroCodeParser::parseMatVctr});
     }
+
+    table.insert({"NNPU.Im2Col", &MicroCodeParser::parseIm2Col});
+
     return std::move(table);
 }
 
@@ -1468,6 +1476,16 @@ void MicroCodeParser::parseMatVctr(const vector<string> &tokens, const string &i
                        parseUInt(tokens[6]), parseUInt(tokens[7]),
                        ModeFromInt(parseUInt(tokens[8])),
                        it->second } );
+}
+
+void MicroCodeParser::parseIm2Col(const vector<string> &tokens, const string &instr) {
+    CHECK_EQ(tokens.size(), 8) << ", invalid micro-code syntax" << instr;
+
+    current_kernel().emplace_back(
+        Im2ColMCode {   parseCompositeOp(tokens[1]), parseInt(tokens[2]), parseInt(tokens[3]),
+                        parseCompositeOp(tokens[4]),
+                        parseUInt(tokens[5]), parseUInt(tokens[6]),
+                        parseUInt(tokens[7]) } );
 }
 
 }  // end namespace nnpu
