@@ -223,7 +223,8 @@ def mem_info_acc():
                          unit_bits=8,
                          max_simd_bits=acc_cfg['width_per_channel'],
                          max_num_bits=(1 << acc_cfg['log_size']) * 8,
-                         head_address=None)
+                         head_address=None,
+                         base_address=0)
 
 
 def init_default_env():

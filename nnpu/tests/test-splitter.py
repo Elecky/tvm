@@ -18,7 +18,7 @@ nnpu.set_profile(['timeline', 'memory_access_latency'], profile_dir)
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    shape1 = (128, 1024)
+    shape1 = (136, 1024)
     shape2 = (128, 1024)
     gemm_shape = (8, 8, 8)
     factor = gemm_shape[1]
@@ -96,7 +96,7 @@ with ScheduleProcHelper():
     # xparts, yparts = 2, 16
     # xo, xi = s[out_host].split(xo, nparts=xparts)
     # yo, yi = s[out_host].split(yo, nparts=yparts)
-    dim_x, dim_y = 8, 16  # this the the rows of matrix loaded to faster scratchpad
+    dim_x, dim_y = 16, 16  # this the the rows of matrix loaded to faster scratchpad
     xo, yo, xi, yi = s[out_host].tile(xo, yo, dim_x, dim_y)
     factor_x, factor_y = 1, 1  # to split outter loop
     bx, by, xo, yo = s[out_host].tile(xo, yo, factor_x, factor_y)
@@ -104,7 +104,7 @@ with ScheduleProcHelper():
     s[out_host].pragma(xi, env.dma_copy_from_buf)
 
     # bind to virtual thread
-    s[out_host].bind(bx, tvm.thread_axis("cthread"))
+    # s[out_host].bind(bx, tvm.thread_axis("cthread"))
 
     # compute_at
     # s[a_buf].compute_at(s[out_host], bx)
@@ -113,7 +113,8 @@ with ScheduleProcHelper():
     s[out_buf].compute_at(s[out_host], xo)
     # s[out_acc].compute_at(s[out_host], xo)
     # s[out_acc].unroll(s[out_acc].leaf_iter_vars[2])
-
+    print(tvm.lower(s, [a, b, out_host], simple_mode=True))
+    exit()
     print(nnpu.lower(s, [a, b, out_host], simple_mode=True))
 
     func = nnpu.build(s, [a, b, out_host], 'nnpu', 'llvm', 'nnpu_func')

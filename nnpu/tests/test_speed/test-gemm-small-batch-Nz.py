@@ -13,8 +13,6 @@ args = parser.parse_args()
 
 env = nnpu.get_env()
 nnpu.set_device(env, type=args.sim)
-profile_dir = '/home/jian/Documents/nnpu_profile'
-nnpu.set_profile(['timeline', 'memory_access_latency'], profile_dir)
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
@@ -33,21 +31,21 @@ with ScheduleProcHelper():
     a = tvm.placeholder(shape1, dtype_n, 'a')
     b = tvm.placeholder(shape2, dtype_n, 'b')
 
-    shape1_tiled = (shape1[0] // gemm_shape[0], shape1[1] // factor, 
+    shape1_tiled = (shape1[1] // factor, shape1[0] // gemm_shape[0],
                     gemm_shape[0], factor)
-    shape2_tiled = (shape2[0] // gemm_shape[2], shape2[1] // factor,
+    shape2_tiled = (shape2[1] // factor, shape2[0] // gemm_shape[2],
                     gemm_shape[2], factor)
-    a_buf = tvm.compute(shape1_tiled, lambda no, ico, ni, ici: a[no * gemm_shape[0] + ni, ico * factor + ici], 'a_buf')
-    b_buf = tvm.compute(shape2_tiled, lambda oco, ico, oci, ici: b[oco * gemm_shape[2] + oci, ico * factor + ici], 'b_buf')
+    a_buf = tvm.compute(shape1_tiled, lambda ico, no, ni, ici: a[no * gemm_shape[0] + ni, ico * factor + ici], 'a_buf')
+    b_buf = tvm.compute(shape2_tiled, lambda ico, oco, oci, ici: b[oco * gemm_shape[2] + oci, ico * factor + ici], 'b_buf')
 
-    out_shape_tiled = (shape1_tiled[0], shape2_tiled[0], shape1_tiled[2], shape2_tiled[2])
+    out_shape_tiled = (shape1_tiled[1], shape2_tiled[1], shape1_tiled[2], shape2_tiled[2])
     ko = tvm.reduce_axis((0, shape1[1] // factor), 'ko')
     ki = tvm.reduce_axis((0, factor), 'ki')
 
     out_buf = tvm.compute(out_shape_tiled, 
                           lambda xo, yo, xi, yi:
-                            tvm.sum(a_buf[xo, ko, xi, ki].astype(dtype_w) 
-                                    * b_buf[yo, ko, yi, ki].astype(dtype_w),
+                            tvm.sum(a_buf[ko, xo, xi, ki].astype(dtype_w) 
+                                    * b_buf[ko, yo, yi, ki].astype(dtype_w),
                                     axis=[ko, ki]),
                           'out_buf')
     out_acc = out_buf

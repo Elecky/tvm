@@ -17,8 +17,8 @@ nnpu.set_device(env, type=args.sim)
 with ScheduleProcHelper():
     env = nnpu.get_env()
     shape1 = (8, 32)  # (8, 32) reshaped & transpoased to (4, 8, 8)
-    shape2 = (16, 32)
-    gemm_shape = (8, 8, 16)
+    shape2 = (8, 32)
+    gemm_shape = (8, 8, 8)
     factor = gemm_shape[1]
     assert shape1[1] == shape2[1], \
         'gemm do dot product between rows, so the shape[1] of inputs should match'
@@ -60,12 +60,13 @@ with ScheduleProcHelper():
     # res_host, _ = nnpu.utils.CopyBufToH(res, 'res')
 
     s = nnpu.create_schedule(res_host.op)
-    print(tvm.lower(s, [a, b, res_host], simple_mode=True))
     
     # tensorize
     xi, xj = s[res_acc].op.axis
     ko, ki = s[res_acc].op.reduce_axis
     s[res_acc].reorder(ko, xi, xj, ki)
+    print(tvm.lower(s, [a, b, res_host], simple_mode=True))
+
     s[res_acc].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_out='acc'))
 
     # oco, oci = s[res].split(res.op.axis[1], 16)
