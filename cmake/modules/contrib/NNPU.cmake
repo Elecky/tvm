@@ -17,10 +17,9 @@ if(PYTHON)
                       ${SIM_SRC}/insn_ctors.cpp           ${SIM_SRC}/insn_functors.cpp
                       ${SIM_SRC}/common/profile.cpp)
 
-  set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/S0Simulator.cpp)
+  set(NNPU_S0SIM_SRC ${SIM_SRC}/ram.cpp ${SIM_SRC}/scratchpad_holder.cpp ${SIM_SRC}/S0Simulator.cpp)
   set(NNPU_S1SIM_SRC ${SIM_SRC}/insn_wrapper.cpp 
-                     ${SIM_SRC}/address_range.cpp ${SIM_SRC}/insn_opcode.cpp
-                     ${SIM_SRC}/scratchpad_holder.cpp)
+                     ${SIM_SRC}/address_range.cpp ${SIM_SRC}/insn_opcode.cpp)
   
   set(NNPU_SCSIM_DIR ${SIM_SRC}/sc_sim)
   set(NNPU_SCSIM_EXEC_DIR ${NNPU_SCSIM_DIR}/instructions/)
@@ -52,6 +51,7 @@ if(PYTHON)
                       ${NNPU_SCSIM_DIR}/mem_copy_set_unit.cpp       ${NNPU_SCSIM_DIR}/depend_queue.cpp
                       ${NNPU_SCSIM_DIR}/depend_queue_hub.cpp        ${NNPU_SCSIM_DIR}/pipeline_controller.cpp
                       ${NNPU_SCSIM_DIR}/pipeline_controller_impl.cpp
+                      ${NNPU_SCSIM_DIR}/scratchpad_hub.cpp
                       ${NNPU_SCSIM_EXEC_SRCS})
 
   add_library(nnpu-dummy SHARED ${NNPU_SCSIM_DIR}/dummy.cpp)
