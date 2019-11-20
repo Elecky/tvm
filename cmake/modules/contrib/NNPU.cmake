@@ -51,7 +51,7 @@ if(PYTHON)
                       ${NNPU_SCSIM_DIR}/mem_copy_set_unit.cpp       ${NNPU_SCSIM_DIR}/depend_queue.cpp
                       ${NNPU_SCSIM_DIR}/depend_queue_hub.cpp        ${NNPU_SCSIM_DIR}/pipeline_controller.cpp
                       ${NNPU_SCSIM_DIR}/pipeline_controller_impl.cpp
-                      ${NNPU_SCSIM_DIR}/scratchpad_hub.cpp
+                      ${NNPU_SCSIM_DIR}/scratchpad_hub.cpp          ${NNPU_SCSIM_DIR}/scratchpad_accessor.cpp
                       ${NNPU_SCSIM_EXEC_SRCS})
 
   add_library(nnpu-dummy SHARED ${NNPU_SCSIM_DIR}/dummy.cpp)
