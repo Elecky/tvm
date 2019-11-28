@@ -1,0 +1,1088 @@
+ 
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...                                                                                                                                                                                                                             
+Tuning...
+[Task  1/ 1]  Current/Best:  592.86/1299.20 GFLOPS | Progress: (1374/3000) | 6186.13 s Done.
+tune time : 
+6186.800073862076
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.72 ms (0.05 ms)
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  580.97/1171.94 GFLOPS | Progress: (1314/3000) | 5919.33 s Done.
+tune time : 
+5919.940728664398
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.81 ms (0.05 ms)
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  324.43/1167.61 GFLOPS | Progress: (1320/3000) | 5673.29 s Done.
+tune time : 
+5673.917947053909
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.79 ms (0.05 ms)
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py   初始温度设为3
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  318.92/1413.53 GFLOPS | Progress: (1068/3000) | 5376.16 s Done.
+tune time : 
+5376.6425931453705
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.66 ms (0.00 ms)
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py     t = t * cool  
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  268.43/1290.29 GFLOPS | Progress: (1266/3000) | 5627.45 s Done.
+tune time : 
+5628.080408811569
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.72 ms (0.00 ms)
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py    if t == 1/2 : t = temp[0]
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  363.39/1465.97 GFLOPS | Progress: (2076/3000) | 9220.78 s Done.
+tune time : 
+9221.611015558243
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.63 ms (0.03 ms)
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py      if t == 1/2 : t = temp[0]
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:    0.00/1500.85 GFLOPS | Progress: (1068/3000) | 4878.77 s Done.
+tune time : 
+4879.331320524216
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.64 ms (0.04 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py    if t == 1/2 :t = temp[0]
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  493.36/1500.34 GFLOPS | Progress: (1566/3000) | 6920.49 s Done.
+tune time : 
+6921.224964618683
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.63 ms (0.00 ms)
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py      增加回火和跳转
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  325.78/1223.65 GFLOPS | Progress: (1566/3000) | 6969.68 s Done.
+tune time : 
+6970.344143152237
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.76 ms (0.00 ms)
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py   增加回火和跳转
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  523.60/1310.26 GFLOPS | Progress: (1374/3000) | 6292.80 s Done.
+tune time : 
+6293.394883394241
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.71 ms (0.05 ms)
+
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py   无变化
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  300.89/1129.18 GFLOPS | Progress: (990/3000) | 4586.71 s Done.
+tune time : 
+4587.249252080917
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.83 ms (0.04 ms)
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  763.51/1106.19 GFLOPS | Progress: (384/3000) | 1810.37 s当峰值为1461924061687.717时，迭代次数为384   if t == 1/2 :t = temp[0]
+[Task  1/ 1]  Current/Best:  435.97/1461.92 GFLOPS | Progress: (570/3000) | 2459.00 s
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  757.49/1115.92 GFLOPS | Progress: (462/3000) | 2137.07 s当峰值为1480061827092.4497时，迭代次数为462    if t == 1/2 :t = temp[0]
+[Task  1/ 1]  Current/Best:  197.71/1480.06 GFLOPS | Progress: (708/3000) | 3260.10 s当峰值为1480604182835.7837时，迭代次数为708
+[Task  1/ 1]  Current/Best:  537.53/1480.60 GFLOPS | Progress: (1308/3000) | 5898.89 s Done.
+tune time : 
+5899.485143899918
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.63 ms (0.02 ms)
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  580.84/1171.25 GFLOPS | Progress: (456/3000) | 2161.22 s当峰值为1480739760135.611时，迭代次数为456    按使用次数退火
+[Task  1/ 1]  Current/Best:  620.42/1480.74 GFLOPS | Progress: (1056/3000) | 4823.82 s Done.
+tune time : 
+4824.402919054031
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.64 ms (0.05 ms)
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py                      按使用次数退火
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  199.84/1274.66 GFLOPS | Progress: (1056/3000) | 5272.97 s Done.
+tune time : 
+5273.467985391617
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.71 ms (0.00 ms)
+
+
+111111111111111111111111111111111111111111111111111111111
+
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  562.00/1372.16 GFLOPS | Progress: (1344/3000) | 6443.67 s当峰值为1489415625247.8203时，迭代次数为1344   n_iter = 300,if t== 1/2:t = temp[0]
+[Task  1/ 1]  Current/Best:  718.24/1489.42 GFLOPS | Progress: (1944/3000) | 9212.60 s Done.
+tune time : 
+9213.477728843689
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.69 ms (0.15 ms)
+
+
+
+2222222222222222222222222222222222222222
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials$ cd autotvm
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  654.80/1361.45 GFLOPS | Progress: (420/3000) | 1861.22 s当峰值为1493803939725.736时，迭代次数为420     n_iter = 300,if t== 1/2:t = temp[0]
+[Task  1/ 1]  Current/Best:   28.66/1493.80 GFLOPS | Progress: (642/3000) | 2981.69 s当峰值为1495549504252.9873时，迭代次数为642
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  911.43/1338.96 GFLOPS | Progress: (282/3000) | 1299.22 s当峰值为1491652750594.693时，迭代次数为282    n_iter = 300,if t== 1/2:t = temp[0]
+[Task  1/ 1]  Current/Best:  722.35/1519.05 GFLOPS | Progress: (990/3000) | 4356.15 s Done.
+tune time : 
+4356.69935798645
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.63 ms (0.04 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py                n_iter = 300,if t== 1/2:t = temp[0]
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  854.08/1567.77 GFLOPS | Progress: (1578/3000) | 7065.37 s Done.
+tune time : 
+7066.109384536743
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.61 ms (0.01 ms)
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py             n_iter = 300,if t== 1/2:t = temp[0]
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  977.76/1338.36 GFLOPS | Progress: (402/3000) | 1865.17 s当峰值为1474695383224.25时，迭代次数为402
+[Task  1/ 1]  Current/Best: 1090.55/1474.70 GFLOPS | Progress: (588/3000) | 2683.07 s当峰值为1492717569555.0337时，迭代次数为588
+[Task  1/ 1]  Current/Best:  840.91/1507.50 GFLOPS | Progress: (1632/3000) | 7113.59 s Done.
+tune time : 
+7114.392001152039
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.64 ms (0.02 ms)
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  715.07/1259.72 GFLOPS | Progress: (660/3000) | 2973.05 s当峰值为1480366117116.463时，迭代次数为660           n_iter = 300,if t== 1/2:t = temp[0]
+[Task  1/ 1]  Current/Best:  677.78/1506.55 GFLOPS | Progress: (1560/3000) | 6937.20 s Done.
+tune time : 
+6937.994370222092
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.63 ms (0.02 ms)
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  884.63/1217.81 GFLOPS | Progress: (864/3000) | 4011.56 s当峰值为1484921546924.2092时，迭代次数为864         n_iter = 300,if t== 1/2:t = temp[0]  
+[Task  1/ 1]  Current/Best:  679.60/1484.92 GFLOPS | Progress: (1470/3000) | 6799.95 s Done.
+tune time : 
+6800.6864798069
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.69 ms (0.18 ms)
+
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  677.97/1368.62 GFLOPS | Progress: (768/3000) | 3473.83 s当峰值为1500619076497.0896时，迭代次数为768       n_iter = 300,按使用次数退火+回火
+[Task  1/ 1]  Current/Best:  452.29/1500.62 GFLOPS | Progress: (1368/3000) | 5997.19 s Done.
+tune time : 
+5997.894741296768
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.63 ms (0.04 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py                          
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  742.33/1362.06 GFLOPS | Progress: (1374/3000) | 6458.72 s Done.                                  n_iter = 300,按使用次数退火+回火
+tune time : 
+6459.495623588562                                                                                                                                                                                                                            
+Compile...                                                                                                                                                                                                                                   
+Evaluate inference time cost...                                                                                                                                                                                                              
+Mean inference time (std dev): 0.69 ms (0.17 ms)   
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py                                                                                                                                           
+Extract tasks...                                                                                                                                                                                                                             
+Tuning...                                                                                                                                                                                                                                    
+[Task  1/ 1]  Current/Best: 1005.85/1394.64 GFLOPS | Progress: (360/3000) | 1529.11 s当峰值为1455070650362.64时，迭代次数为360                                                                                                               
+当峰值为1455504036908.91时，迭代次数为360                                                                                                                                                                                                    
+[Task  1/ 1]  Current/Best:  694.32/1455.50 GFLOPS | Progress: (486/3000) | 2070.23 s当峰值为1455972947065.6968时，迭代次数为486            按使用次数退火                                                                                                          
+[Task  1/ 1]  Current/Best:  926.96/1606.49 GFLOPS | Progress: (1104/3000) | 4772.83 s Done.                                                                                                                                                 
+tune time :                                                                                                                                                                                                                                  
+4773.486214160919                                                                                                                                                                                                                            
+Compile...                                                                                                                                                                                                                                   
+Evaluate inference time cost...                                                                                                                                                                                                              
+Mean inference time (std dev): 0.70 ms (0.19 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py                      按使用次数退火
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  652.40/1358.04 GFLOPS | Progress: (1692/3000) | 7841.27 s Done.
+tune time : 
+7842.189496040344
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.69 ms (0.16 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  712.41/1360.81 GFLOPS | Progress: (900/3000) | 4291.26 s当峰值为1517341613885.19时，迭代次数为900           按使用次数退火
+[Task  1/ 1]  Current/Best: 1151.06/1517.34 GFLOPS | Progress: (1500/3000) | 6727.08 s Done.
+tune time : 
+6727.800575971603
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.64 ms (0.04 ms)
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  921.40/1244.48 GFLOPS | Progress: (540/3000) | 2487.93 s当峰值为1440327328224.2131时，迭代次数为540        按使用次数退火，t = 2 
+[Task  1/ 1]  Current/Best:  363.83/1440.33 GFLOPS | Progress: (708/3000) | 3259.55 s当峰值为1500643092630.5679时，迭代次数为708
+[Task  1/ 1]  Current/Best:  300.08/1500.64 GFLOPS | Progress: (834/3000) | 3775.88 s当峰值为1510922797634.156时，迭代次数为834
+[Task  1/ 1]  Current/Best:  614.09/1510.92 GFLOPS | Progress: (960/3000) | 4308.02 s当峰值为1517105735701.6035时，迭代次数为960
+[Task  1/ 1]  Current/Best: 1011.84/1517.11 GFLOPS | Progress: (1560/3000) | 6665.26 s Done.
+tune time : 
+6666.023679733276
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.63 ms (0.00 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  989.80/1355.23 GFLOPS | Progress: (588/3000) | 2582.66 s当峰值为1484546425650.7183时，迭代次数为588       按使用次数退火，t = 3
+[Task  1/ 1]  Current/Best: 1089.14/1484.55 GFLOPS | Progress: (600/3000) | 2596.51 s当峰值为1492013800295.6367时，迭代次数为600
+[Task  1/ 1]  Current/Best:  403.30/1492.01 GFLOPS | Progress: (960/3000) | 4163.87 s当峰值为1510134245377.567时，迭代次数为960
+[Task  1/ 1]  Current/Best:   23.67/1510.13 GFLOPS | Progress: (1218/3000) | 5211.38 s当峰值为1512358034920.0376时，迭代次数为1218
+[Task  1/ 1]  Current/Best:  759.96/1512.36 GFLOPS | Progress: (1818/3000) | 7584.70 s Done.
+tune time : 
+7585.594588756561
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.66 ms (0.10 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  906.50/1209.08 GFLOPS | Progress: (366/3000) | 1547.65 s当峰值为1481496577166.793时，迭代次数为366
+[Task  1/ 1]  Current/Best:  818.98/1481.50 GFLOPS | Progress: (612/3000) | 2650.82 s当峰值为1506111849443.6309时，迭代次数为612    按使用次数退火，t = 3
+[Task  1/ 1]  Current/Best:   36.67/1506.11 GFLOPS | Progress: (1218/3000) | 5347.42 s Done.
+tune time : 
+5348.097107410431
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.76 ms (0.16 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best: 1286.21/1355.32 GFLOPS | Progress: (768/3000) | 3429.42 s当峰值为1492972748697.2178时，迭代次数为768
+[Task  1/ 1]  Current/Best:   51.80/1492.97 GFLOPS | Progress: (1026/3000) | 4537.49 s当峰值为1511111260714.4646时，迭代次数为1026      按使用次数退火，t = 3
+[Task  1/ 1]  Current/Best:  862.84/1511.11 GFLOPS | Progress: (1626/3000) | 7025.85 s Done.
+tune time : 
+7026.615648031235
+Compile...
+Evaluate inference time cost...                                                                                                                                                                                                              
+Mean inference time (std dev): 0.65 ms (0.10 ms)   
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py           按使用次数退火，t = 10
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  550.96/1367.33 GFLOPS | Progress: (1434/3000) | 6503.33 s Done.
+tune time : 
+6504.0560483932495
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.69 ms (0.16 ms)
+
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  804.04/1280.79 GFLOPS | Progress: (228/3000) | 1004.53 s当峰值为1495171304985.0833时，迭代次数为228       按使用次数退火，t = 20
+[Task  1/ 1]  Current/Best: 1031.48/1495.17 GFLOPS | Progress: (462/3000) | 2123.40 s当峰值为1500175589978.1978时，迭代次数为462
+[Task  1/ 1]  Current/Best:   42.96/1500.18 GFLOPS | Progress: (708/3000) | 3257.65 s当峰值为1518579722047.387时，迭代次数为708
+[Task  1/ 1]  Current/Best:  637.41/1518.58 GFLOPS | Progress: (1308/3000) | 5758.30 s Done.
+tune time : 
+5758.96178984642
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.64 ms (0.04 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  845.40/1327.71 GFLOPS | Progress: (306/3000) | 1292.59 s当峰值为1483354670679.826时，迭代次数为306
+[Task  1/ 1]  Current/Best:  560.82/1483.35 GFLOPS | Progress: (450/3000) | 2087.80 s当峰值为1490047273881.4302时，迭代次数为450
+[Task  1/ 1]  Current/Best:  610.67/1490.05 GFLOPS | Progress: (510/3000) | 2152.40 s当峰值为1502635756978.9646时，迭代次数为510           按使用次数退火，t = 20
+[Task  1/ 1]  Current/Best:  848.28/1502.64 GFLOPS | Progress: (1110/3000) | 4969.48 s Done.
+tune time : 
+4970.054963827133
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.64 ms (0.03 ms)
+
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/projects/tvm/tutorials/autotvm$ python3 test_conv2d.py
+Extract tasks...
+Tuning...                                                                                                                                                                                                                                    
+[Task  1/ 1]  Current/Best:  888.56/1388.42 GFLOPS | Progress: (396/3000) | 1830.84 s当峰值为1505456659754.7573时，迭代次数为396                                                                                                             
+[Task  1/ 1]  Current/Best: 1238.50/1505.46 GFLOPS | Progress: (528/3000) | 2394.33 s当峰值为1505832192490.3892时，迭代次数为528          按使用次数退火，t = 20                                                                                                    
+[Task  1/ 1]  Current/Best:  585.00/1505.83 GFLOPS | Progress: (1134/3000) | 4949.47 s Done.                                                                                                                                                 
+tune time :                                                                                                                                                                                                                                  
+4950.109210014343                                                                                                                                                                                                                            
+Compile...                                                                                                                                                                                                                                   
+Evaluate inference time cost...                                                                                                                                                                                                              
+Mean inference time (std dev): 0.64 ms (0.02 ms) 
+
+songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python test_dense.py 
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  171.21/ 277.50 GFLOPS | Progress: (1206/3000) | 2618.87 s Done.
+tune time : 
+2620.190423488617
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.12 ms (0.00 ms)
+
+
+songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python test_conv2d_transpose.py 
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  681.10/1196.27 GFLOPS | Progress: (1452/3000) | 4041.91 s Done.
+tune time : 
+4043.3935720920563
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 1.78 ms (0.05 ms)
+
+单算子在整个网络上的性能(测试GPU GTX1060）
+1.vgg19(conv2d)
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python tune_relay_cuda.py
+Extract tasks...
+Tuning...
+[Task  1/ 9]  Current/Best:    0.00/ 219.28 GFLOPS | Progress: (20/20) | 74.69 s Done.
+[Task  2/ 9]  Current/Best:    0.00/3564.52 GFLOPS | Progress: (16/20) | 37.22 s Done.
+[Task  3/ 9]  Current/Best: 1881.95/3208.23 GFLOPS | Progress: (16/20) | 40.49 s Done.
+[Task  4/ 9]  Current/Best:  317.15/1909.71 GFLOPS | Progress: (12/20) | 33.46 s Done.
+[Task  5/ 9]  Current/Best:  911.30/3760.14 GFLOPS | Progress: (8/20) | 14.50 s Done.
+[Task  6/ 9]  Current/Best:  767.33/3256.11 GFLOPS | Progress: (12/20) | 40.11 s Done.
+[Task  7/ 9]  Current/Best: 1958.29/3149.83 GFLOPS | Progress: (16/20) | 45.32 s Done.
+[Task  8/ 9]  Current/Best: 1206.38/1855.19 GFLOPS | Progress: (16/20) | 28.23 s Done.
+[Task  9/ 9]  Current/Best:   29.05/1905.17 GFLOPS | Progress: (12/20) | 29.33 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 20.37 ms (0.27 ms)
+
+vgg19(dense)
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python tune_relay_cuda.py
+Extract tasks...
+Tuning...
+[Task  1/ 3]  Current/Best:   18.84/  80.35 GFLOPS | Progress: (12/20) | 13.29 s Done.
+[Task  2/ 3]  Current/Best:   76.35/  81.76 GFLOPS | Progress: (8/13) | 9.06 s Done.
+[Task  3/ 3]  Current/Best:   72.31/  80.22 GFLOPS | Progress: (12/13) | 12.72 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 20.30 ms (0.28 ms)
+
+2.mobilenet(conv2d)
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python tune_relay_cuda.py
+Extract tasks...
+Tuning...
+[Task  1/19]  Current/Best:   22.65/ 196.87 GFLOPS | Progress: (16/20) | 25.98 s Done.
+[Task  2/19]  Current/Best:    7.61/ 169.12 GFLOPS | Progress: (8/20) | 13.50 s Done.
+[Task  3/19]  Current/Best:  568.07/ 577.88 GFLOPS | Progress: (16/20) | 27.90 s Done.
+[Task  4/19]  Current/Best:    0.00/  40.12 GFLOPS | Progress: (16/20) | 8.99 s Done.
+[Task  5/19]  Current/Best:    8.03/ 875.10 GFLOPS | Progress: (12/20) | 17.30 s Done.
+[Task  6/19]  Current/Best:    0.00/  24.52 GFLOPS | Progress: (8/20) | 2.93 s Done.
+[Task  7/19]  Current/Best:    9.28/ 793.47 GFLOPS | Progress: (8/20) | 8.50 s Done.
+[Task  8/19]  Current/Best:    0.00/  42.42 GFLOPS | Progress: (20/20) | 15.92 s Done.
+[Task  9/19]  Current/Best:    7.05/ 507.07 GFLOPS | Progress: (8/20) | 18.86 s Done.
+[Task 10/19]  Current/Best:    2.89/ 196.36 GFLOPS | Progress: (12/20) | 10.65 s Done.
+[Task 11/19]  Current/Best:   38.72/ 262.80 GFLOPS | Progress: (8/20) | 13.92 s Done.
+[Task 12/19]  Current/Best:   21.04/  96.57 GFLOPS | Progress: (20/20) | 32.70 s Done.
+[Task 13/19]  Current/Best:    1.32/ 895.21 GFLOPS | Progress: (8/20) | 21.89 s Done.
+[Task 14/19]  Current/Best:   42.84/ 166.43 GFLOPS | Progress: (12/20) | 8.54 s Done.
+[Task 15/19]  Current/Best:   24.69/ 217.36 GFLOPS | Progress: (8/20) | 8.57 s Done.
+[Task 16/19]  Current/Best:    0.00/  27.05 GFLOPS | Progress: (12/20) | 8.39 s Done.
+[Task 17/19]  Current/Best:   19.06/ 367.11 GFLOPS | Progress: (12/20) | 22.53 s Done.
+[Task 18/19]  Current/Best:   15.85/ 174.98 GFLOPS | Progress: (20/20) | 22.54 s Done.
+[Task 19/19]  Current/Best:  155.16/ 204.66 GFLOPS | Progress: (16/20) | 27.26 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 5.39 ms (2.16 ms)
+
+mobilenet(dense)
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python tune_relay_cuda.py
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:   75.73/  75.73 GFLOPS | Progress: (11/11) | 14.42 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 4.70 ms (0.21 ms)
+
+单算子不同搜索算法下的实验记录（测试机GTX1060)
+conv2d+xgb
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+Tuning...                                                                              [Task  1/ 1]  Current/Best:   74.58/ 964.12 GFLOPS | Progress: (40/3000) | 82.94 sterminate called without an active exception
+[Task  1/ 1]  Current/Best: 2897.68/3025.22 GFLOPS | Progress: (1308/3000) | 11629.76 s Done.
+tune time : 
+11632.059866428375
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.65 ms (0.96 ms)
+
+conv2d+ga
+
+conv2d+random
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:   94.76/ 965.72 GFLOPS | Progress: (40/3000) | 70.66 sterminate called without an active exception
+[Task  1/ 1]  Current/Best:  397.45/1753.82 GFLOPS | Progress: (648/3000) | 1281.01 s Done.
+tune time : 
+1282.6393449306488
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.81 ms (1.77 ms)
+
+conv2d+gridsearch
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:    0.00/ 387.36 GFLOPS | Progress: (1308/3000) | 4138.40 s Done.
+tune time : 
+4139.303914070129
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.55 ms (0.03 ms)
+
+conv2d+hc
+
+
+整网络运行测试（GTX1060)
+1.resnet-18+xgb
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+[Sel Task  1/ 8]  Current/Best: 1298.94/1671.00 GFLOPS | Progress: (944/2000) | 4297.78 s Done.
+[Sel Task  2/ 8]  Current/Best: 1785.84/2426.55 GFLOPS | Progress: (980/2000) | 5526.63 s Done.
+[Sel Task  3/ 8]  Current/Best: 2848.44/3039.45 GFLOPS | Progress: (596/2000) | 3767.08 s Done.
+[Sel Task  4/ 8]  Current/Best: 1522.49/1853.79 GFLOPS | Progress: (1084/2000) | 5164.60 s
+
+(加入choose task)
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+[Sel Task  1/ 8]  Current/Best:    1.36/ 881.85 GFLOPS | Progress: (52/200) | 52.79 s Done.
+[Sel Task  2/ 8]  Current/Best:  617.40/1217.29 GFLOPS | Progress: (108/200) | 541.13 s Done.
+[Sel Task  3/ 8]  Current/Best: 1394.86/2796.43 GFLOPS | Progress: (64/200) | 603.71 s Done.
+[Sel Task  4/ 8]  Current/Best:    0.00/ 628.29 GFLOPS | Progress: (44/200) | 103.88 s Done.
+[Sel Task  5/ 8]  Current/Best:   30.23/2636.31 GFLOPS | Progress: (56/200) | 110.08 s Done.
+[Sel Task  6/ 8]  Current/Best:  594.10/2648.12 GFLOPS | Progress: (56/200) | 123.08 s Done.
+[Sel Task  7/ 8]  Current/Best:   28.74/ 372.48 GFLOPS | Progress: (60/200) | 95.61 s Done.
+[Sel Task  8/ 8]  Current/Best:    7.85/1475.83 GFLOPS | Progress: (44/200) | 82.61 s Done.
+[Other Task  1/ 4]  Current/Best:  355.42/ 355.42 GFLOPS | Progress: (1/200) | 2.28 s Done.
+[Other Task  2/ 4]  Current/Best:  132.80/ 132.80 GFLOPS | Progress: (1/200) | 2.21 s Done.
+[Other Task  3/ 4]  Current/Best:  287.91/ 287.91 GFLOPS | Progress: (1/200) | 2.16 s Done.
+[Other Task  4/ 4]  Current/Best:  345.47/ 345.47 GFLOPS | Progress: (1/200) | 2.23 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 2.49 ms (0.26 ms)
+
+（不加入choose task)
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python 0tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+[Task  1/12]  Current/Best:  274.94/ 431.09 GFLOPS | Progress: (132/200) | 297.37 s Done.
+[Task  2/12]  Current/Best:  642.23/ 766.29 GFLOPS | Progress: (200/200) | 800.50 s Done.
+[Task  3/12]  Current/Best:   24.24/ 432.15 GFLOPS | Progress: (64/200) | 350.77 s Done.
+[Task  4/12]  Current/Best: 1309.66/1410.46 GFLOPS | Progress: (200/200) | 801.71 s Done.
+[Task  5/12]  Current/Best:   21.60/1627.24 GFLOPS | Progress: (128/200) | 549.96 s Done.
+[Task  6/12]  Current/Best: 2072.68/3030.66 GFLOPS | Progress: (192/200) | 1203.27 s Done.
+[Task  7/12]  Current/Best: 1468.86/1556.06 GFLOPS | Progress: (200/200) | 749.88 s Done.
+[Task  8/12]  Current/Best: 2250.42/3005.45 GFLOPS | Progress: (140/200) | 1060.54 s Done.
+[Task  9/12]  Current/Best: 1434.67/1434.67 GFLOPS | Progress: (200/200) | 505.92 s Done.
+[Task 10/12]  Current/Best: 1318.39/2373.92 GFLOPS | Progress: (72/200) | 306.38 s Done.
+[Task 11/12]  Current/Best:  429.24/ 545.81 GFLOPS | Progress: (68/200) | 181.36 s Done.
+[Task 12/12]  Current/Best: 1488.44/1567.59 GFLOPS | Progress: (72/200) | 648.21 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 2.09 ms (0.28 ms)
+
+（try_winograd conv)
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d(%data, %weight, padding=[1, 1], channels=512, kernel_size=[3, 3])
+}
+Tuning...
+[Task  1/ 1]  Current/Best: 1370.93/3119.00 GFLOPS | Progress: (52/100) | 116.62 s Done.
+tune time : 
+117.60206317901611
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.30 ms (0.12 ms)
+
+(no try_winograd conv)
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d(%data, %weight, padding=[1, 1], channels=512, kernel_size=[3, 3])
+}
+Tuning...
+[Task  1/ 1]  Current/Best:  195.54/ 515.04 GFLOPS | Progress: (60/100) | 113.52 s Done.
+tune time : 
+114.48982453346252
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.59 ms (0.14 ms)
+
+
+winograd测试
+1.winograd+xgb
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d(%data, %weight, padding=[1, 1], channels=512, kernel_size=[3, 3])
+}
+Tuning...
+[Task  1/ 1]  Current/Best: 1291.57/3565.94 GFLOPS | Progress: (156/200) | 599.85 s Done.
+tune time : 
+601.0931880474091
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.56 ms (1.68 ms)
+
+2.winograd+ga
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d(%data, %weight, padding=[1, 1], channels=512, kernel_size=[3, 3])
+}
+Tuning...
+[Task  1/ 1]  Current/Best: 3579.66/4121.98 GFLOPS | Progress: (200/200) | 824.63 s Done.
+tune time : 
+825.7805852890015
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.24 ms (0.19 ms)
+
+3.winograd+randomsearch
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d(%data, %weight, padding=[1, 1], channels=512, kernel_size=[3, 3])
+}
+Tuning...
+[Task  1/ 1]  Current/Best:  136.04/2315.83 GFLOPS | Progress: (56/200) | 112.76 s Done.
+tune time : 
+113.75106000900269
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.23 ms (0.10 ms)
+
+4.winograd+gridsearch
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d(%data, %weight, padding=[1, 1], channels=512, kernel_size=[3, 3])
+}
+Tuning...
+[Task  1/ 1]  Current/Best:  183.43/2360.00 GFLOPS | Progress: (48/200) | 103.08 s Done.
+tune time : 
+103.98653507232666
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.24 ms (0.11 ms)
+
+5.winograd+hc
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d(%data, %weight, padding=[1, 1], channels=512, kernel_size=[3, 3])
+}
+Tuning...
+[Task  1/ 1]  Current/Best:  675.94/3633.98 GFLOPS | Progress: (80/200) | 188.48 s Done.
+tune time : 
+189.35369300842285
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.21 ms (0.00 ms)
+
+6.winograd+lgb
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d(%data, %weight, padding=[1, 1], channels=512, kernel_size=[3, 3])
+}
+Tuning...
+[Task  1/ 1]  Current/Best: 1319.23/1319.23 GFLOPS | Progress: (6/200) | 11.42 s[LightGBM] [Warning] num_threads is set=4, n_jobs=-1 will be ignored. Current value: num_threads=4
+[Task  1/ 1]  Current/Best: 2832.13/2832.13 GFLOPS | Progress: (12/200) | 19.78 s[LightGBM] [Warning] num_threads is set=4, n_jobs=-1 will be ignored. Current value: num_threads=4
+[Task  1/ 1]  Current/Best: 1105.51/2832.13 GFLOPS | Progress: (18/200) | 32.74 s[LightGBM] [Warning] num_threads is set=4, n_jobs=-1 will be ignored. Current value: num_threads=4
+[Task  1/ 1]  Current/Best: 1392.23/2832.13 GFLOPS | Progress: (24/200) | 52.91 s[LightGBM] [Warning] num_threads is set=4, n_jobs=-1 will be ignored. Current value: num_threads=4
+[Task  1/ 1]  Current/Best:  877.48/2832.13 GFLOPS | Progress: (30/200) | 72.64 s[LightGBM] [Warning] num_threads is set=4, n_jobs=-1 will be ignored. Current value: num_threads=4
+[Task  1/ 1]  Current/Best: 1145.72/2832.13 GFLOPS | Progress: (36/200) | 80.93 s[LightGBM] [Warning] num_threads is set=4, n_jobs=-1 will be ignored. Current value: num_threads=4
+[Task  1/ 1]  Current/Best:   76.69/2832.13 GFLOPS | Progress: (42/200) | 94.76 s[LightGBM] [Warning] num_threads is set=4, n_jobs=-1 will be ignored. Current value: num_threads=4
+[Task  1/ 1]  Current/Best:  314.15/2832.13 GFLOPS | Progress: (48/200) | 99.91 s[LightGBM] [Warning] num_threads is set=4, n_jobs=-1 will be ignored. Current value: num_threads=4
+[Task  1/ 1]  Current/Best: 1986.02/2832.13 GFLOPS | Progress: (54/200) | 114.58 s Done.
+tune time : 
+115.45195126533508
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.22 ms (0.00 ms)
+
+dense+xgb
+ [Task  1/ 1]  Current/Best:  316.21/ 873.03 GFLOPS [Task  1/ 1]  Current/Best:  218.25/ 873.03 GFLOPS [Task  1/ 1]  Current/Best:  224.56/ 873.03 GFLOPS | Progress: (1312/3000) | 3422.26 s Done.
+tune time : 
+3423.4957418441772
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 4.34 ms (1.84 ms)
+
+dense+ga
+[Task  1/ 1]  Current/Best:  313.06/ 879.09 GFLOPS | Progress: (672/1500) | 124.99 s Done.
+tune time : 
+126.22585129737854
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 4.88 ms (2.18 ms)
+
+dense+randomsearch
+[Task  1/ 1]  Current/Best:    0.00/ 114.82 GFLOPS | Progress: (548/1500) | 103.15 s
+tune time : 
+105.66909670829773
+DEBUG:autotvm:Finish loading 1 records
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 3.66 ms (1.17 ms)
+
+
+deconv+winograd+xgb
+[Task  1/ 1]  Current/Best: 3704.40/4409.84 GFLOPS | Progress: (1244/3000) | 3543.89 s Done.
+tune time : 
+3545.457268476486
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 0.22 ms (0.01 ms)
+
+deconv+winograd+ga
+[Task  1/ 1]  Current/Best:  831.20/1597.73 GFLOPS | Progress: (804/1500) | 1261.44 s Done.
+tune time : 
+1263.1866381168365
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 1.95 ms (0.03 ms)
+
+deconv+winograd+randomsearch
+[Task  1/ 1]  Current/Best:    0.00/1488.44 GFLOPS | Progress: (488/1500) | 700.15 s Done.
+tune time : 
+701.7493095397949
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 1.93 ms (0.03 ms)
+
+
+deconv+winograd+gridsearch
+[Task  1/ 1]  Current/Best:   53.92/ 610.55 GFLOPS | Progress: (836/1500) | 2603.42 s
+
+deconv+winograd+hc
+self.scores :  [1.42541879e+11 9.55730949e+11 0.00000000e+00 0.00000000e+00]
+ Done.
+tune time : 
+3495.8486139774323
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 2.94 ms (2.72 ms)
+
+deconv+ga
+(tvm-official-env) jian@jian-B85-HD3:~/environments/tvm-official-env/tvm-official/tvm/tutorials/autotvm$ python test_deconv.py 
+Extract tasks...
+v0.0.4
+fn (%data: Tensor[(1, 512, 14, 14), float32], %weight: Tensor[(512, 512, 3, 3), float32]) {
+  nn.conv2d_transpose(%data, %weight, channels=512, kernel_size=[3, 3], padding=[1, 1])
+}Tuning...
+[Task  1/ 1]  Current/Best:    0.00/1568.88 GFLOPS | Progress: (896/1500) | 1303.12 s Done.
+tune time : 
+1304.9292514324188
+Compile...
+
+vgg16+winograd
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+[Task  1/ 9]  Current/Best:  364.11/1811.51 GFLOPS | Progress: (1026/2000) | 3690.97 s Done.
+[Task  2/ 9]  Current/Best: 3568.92/3894.51 GFLOPS | Progress: (1002/2000) | 4477.38 [Task  2/ 9]  Current/Best: 3837.29/3894.51 GFLOPS | Progress: (1008/2000) | 4484.85 [Task  2/ 9]  Current/Best: 3578.21/3894.51 GFLOPS | Progress: (1014/2000) | 4491.94 s Done.
+[Task  3/ 9]  Current/Best: 3793.93/4805.84 GFLOPS | Progress: (726/2000) | 3451.57 s Done.
+[Task  4/ 9]  Current/Best: 5166.19/6110.57 GFLOPS | Progress: (96/2000) | 313.21 sterminate called without an active exception
+
+[Task  4/ 9]  Current/Best: 5297.53/6482.70 GFLOPS | Progress: (984/2000) | 4652.00 s Done.
+[Task  5/ 9]  Current/Best: 4125.49/6619.36 GFLOPS | Progress: (930/2000) | 4326.98 s Done.
+[Task  6/ 9]  Current/Best: 5416.07/8057.51 GFLOPS | Progress: (552/2000) | 2180.02 s Done.
+[Task  7/ 9]  Current/Best: 3695.45/5236.66 GFLOPS | Progress: (852/2000) | 3149.08 s Done.
+[Task  8/ 9]  Current/Best: 4955.27/5919.96 GFLOPS | Progress: (858/2000) | 3863.50 s Done.
+[Task  9/ 9]  Current/Best: 3286.23/4348.22 GFLOPS | Progress: (414/2000) | 833.27 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 9.17 ms (0.30 ms)
+
+vgg16(no winograd)
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+[Task  1/ 9]  Current/Best:   22.95/1737.42 GFLOPS | Progress: (1440/2000) | 2186.65 s Done.
+[Task  2/ 9]  Current/Best: 1871.23/2978.63 GFLOPS | Progress: (666/2000) | 1207.55 s Done.
+[Task  3/ 9]  Current/Best: 1007.68/3039.91 GFLOPS | Progress: (882/2000) | 1548.69 s Done.
+[Task  4/ 9]  Current/Best: 1977.76/3776.43 GFLOPS | Progress: (1482/2000) | 2584.41 s Done.
+[Task  5/ 9]  Current/Best: 2184.62/2657.60 GFLOPS | Progress: (648/2000) | 1138.42 s Done.
+[Task  6/ 9]  Current/Best: 1447.53/3640.57 GFLOPS | Progress: (1020/2000) | 1771.12 s Done.
+[Task  7/ 9]  Current/Best: 1452.66/3435.41 GFLOPS | Progress: (1098/2000) | 1812.30 s Done.
+[Task  8/ 9]  Current/Best:  267.23/3750.73 GFLOPS | Progress: (1938/2000) | 3164.56 s Done.
+[Task  9/ 9]  Current/Best: 1647.91/2934.39 GFLOPS | Progress: (1890/2000) | 2776.00 s Done.
+
+mobilenet(no winograd)
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+[Task  1/19]  Current/Best:  521.75/ 854.00 GFLOPS | Progress: (1632/2000) | 2526.47 s Done.
+[Task  2/19]  Current/Best:  230.90/ 399.17 GFLOPS | Progress: (666/2000) | 870.39 s Done.
+[Task  3/19]  Current/Best:  498.52/1148.78 GFLOPS | Progress: (492/2000) | 626.60 s Done.
+[Task  4/19]  Current/Best:   73.47/ 276.69 GFLOPS | Progress: (1212/2000) | 1487.18 s Done.
+[Task  5/19]  Current/Best:  644.40/1822.53 GFLOPS | Progress: (1122/2000) | 1546.49 s Done.
+[Task  6/19]  Current/Best:  332.75/ 413.42 GFLOPS | Progress: (1044/2000) | 1322.49 s Done.
+[Task  7/19]  Current/Best:  286.91/1552.38 GFLOPS | Progress: (510/2000) | 705.95 s Done.
+[Task  8/19]  Current/Best:  100.15/ 317.59 GFLOPS | Progress: (1194/2000) | 1530.87 s Done.
+[Task  9/19]  Current/Best:  523.86/1702.13 GFLOPS | Progress: (1104/2000) | 1514.33 s Done.
+[Task 10/19]  Current/Best:  231.10/ 362.37 GFLOPS | Progress: (636/2000) | 768.74 s Done.
+[Task 11/19]  Current/Best:  466.75/1850.55 GFLOPS | Progress: (942/2000) | 1277.91 s Done.
+[Task 12/19]  Current/Best:  229.78/ 362.28 GFLOPS | Progress: (612/2000) | 699.85 s Done.
+[Task 13/19]  Current/Best:  869.82/1271.20 GFLOPS | Progress: (510/2000) | 715.23 s Done.
+[Task 14/19]  Current/Best:  324.16/ 452.83 GFLOPS | Progress: (1554/2000) | 1993.77 s Done.
+[Task 15/19]  Current/Best:  883.13/1525.15 GFLOPS | Progress: (732/2000) | 975.36 s Done.
+[Task 16/19]  Current/Best:  210.44/ 285.22 GFLOPS | Progress: (810/2000) | 977.91 s Done.
+[Task 17/19]  Current/Best:  720.06/ 946.22 GFLOPS | Progress: (756/2000) | 1059.25 s Done.
+[Task 18/19]  Current/Best:    3.61/ 292.78 GFLOPS | Progress: (840/2000) | 1019.52 s Done.
+[Task 19/19]  Current/Best:  417.48/1109.33 GFLOPS | Progress: (834/2000) | 1075.51 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 1.10 ms (0.02 ms)
+
+dense : best record
+[('tile_by', [-1, 128]), ('tile_bx', [-1, 32])],,None,67
+
+vectoradd autotuing
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_vectormul_gpu.py 
+produce C {
+  // attr [iter_var(blockIdx.x, , blockIdx.x)] thread_extent = 16384
+  // attr [iter_var(threadIdx.x, , threadIdx.x)] thread_extent = 64
+  C[((blockIdx.x*64) + threadIdx.x)] = (A[((blockIdx.x*64) + threadIdx.x)]*B[((blockIdx.x*64) + threadIdx.x)])
+}
+
+12.811058 GFlops
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_vectormul_gpu.py 
+ConfigSpace (len=21, space_map=
+   0 tile_x: Split(policy=factors, product=1048576, num_outputs=2) len=21
+)
+Tuning...
+ Current/Best:    0.85/  12.85 GFLOPS | Progress: (21/200) | 16.09 s Done.
+
+Best config:
+[('tile_x', [-1, 128])],,None,7
+done
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_vectormul_gpu.py 
+ConfigSpace (len=21, space_map=
+   0 tile_x: Split(policy=factors, product=1048576, num_outputs=2) len=21
+)
+Tuning...
+ Current/Best:   12.82/  12.86 GFLOPS | Progress: (21/200) | 15.85 s Done.
+
+Best config:
+[('tile_x', [-1, 256])],,None,8
+done
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_vectormul_gpu.py 
+ConfigSpace (len=21, space_map=
+   0 tile_x: Split(policy=factors, product=1048576, num_outputs=2) len=21
+)
+Tuning...
+ Current/Best:   12.41/  12.78 GFLOPS | Progress: (21/200) | 13.57 s Done.
+
+Best config:
+[('tile_x', [-1, 256])],,None,8
+done
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_vectormul_gpu.py 
+ConfigSpace (len=21, space_map=
+   0 tile_x: Split(policy=factors, product=1048576, num_outputs=2) len=21
+)
+Tuning...
+ Current/Best:    0.00/  12.85 GFLOPS | Progress: (21/200) | 15.20 s Done.
+
+Best config:
+[('tile_x', [-1, 256])],,None,8
+done
+
+dense autotuing
+[Task  1/ 1]  Current/Best:  821.87/1343.63 GFLOPS | Progress: (1566/2000) | 4706.12 s Done.
+tune time : 
+4706.969352960587
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 32.22 ms (0.90 ms)
+
+
+deconv+xgb
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python test_transconv2d.py 
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best: 2682.82/3209.06 GFLOPS | Progress: (2526/3000) | 9580.19 s Done.
+tune time : 
+9581.335624217987
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 3.86 ms (0.21 ms)
+
+deconv+ga
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python test_transconv2d.py 
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:  452.22/3244.78 GFLOPS | Progress: (1968/2000) | 3788.12 s Done.
+tune time : 
+3788.8860926628113
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 4.56 ms (1.85 ms)
+
+deconv+random
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python test_transconv2d.py 
+Extract tasks...
+Tuning...
+[Task  1/ 1]  Current/Best:    0.00/2639.24 GFLOPS | Progress: (1212/2000) | 1678.42 s Done.
+tune time : 
+1678.8563432693481
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 6.26 ms (2.30 ms)
+
+conv
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python test_conv2d.py 
+Extract tasks...
+Tuning...
+ConfigSpace (len=451584000, space_map=
+   0 tile_f: Split(policy=factors, product=128, num_outputs=4) len=120
+   1 tile_y: Split(policy=factors, product=112, num_outputs=4) len=140
+   2 tile_x: Split(policy=factors, product=112, num_outputs=4) len=140
+   3 tile_rc: Split(policy=factors, product=128, num_outputs=2) len=8
+   4 tile_ry: Split(policy=factors, product=3, num_outputs=2) len=2
+   5 tile_rx: Split(policy=factors, product=3, num_outputs=2) len=2
+   6 auto_unroll_max_step: OtherOption([0, 512, 1500]) len=3
+   7 unroll_explicit: OtherOption([0, 1]) len=2
+)
+[Task  1/ 1]  Current/Best: 3283.08/3915.79 GFLOPS | Progress: (1950/2000) | 6548.29 s Done.
+tune time : 
+6549.472661495209
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 1.40 ms (0.01 ms)
+
+dense+xgb
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python test_gemm.py 
+ConfigSpace (len=144, space_map=
+   0 tile_y: Split(policy=factors, product=2048, num_outputs=2) len=12
+   1 tile_x: Split(policy=factors, product=2048, num_outputs=2) len=12
+)
+[Task  1/ 1]  Current/Best:    0.00/4032.53 GFLOPS | Progress: (144/1000) | 361.53 s Done.
+
+Best config:
+[('tile_y', [-1, 64]), ('tile_x', [-1, 64])],,None,78
+average time cost of 10 runs = 4.41078 ms, 3894.97 GOPS.
+
+inception_v3:
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+[Task 28/43]  Current/Best:  832.34/2509.06 GFLOPS | Progress: (726/2000) | 1123.52 s Done.
+[Task 29/43]  Current/Best:  413.63/1070.17 GFLOPS | Progress: (930/2000) | 1322.92 s Done.
+[Task 30/43]  Current/Best:  557.58/2091.95 GFLOPS | Progress: (1614/2000) | 2620.61 s Done.
+[Task 31/43]  Current/Best:  730.71/1026.42 GFLOPS | Progress: (738/2000) | 1105.74 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 138.40 ms (6.21 ms)
+
+
+resnet-18+dense+ga(config_space=10)(1,512)*(1000,512)
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+ConfigSpace (len=10, space_map=
+   0 tile_k: Split(policy=factors, product=512, num_outputs=2) len=10
+)
+[Task  1/ 1]  Current/Best:   60.02/  70.22 GFLOPS | Progress: (10/10) | 12.89 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 12.05 ms (0.04 ms)
+
+inception-v3 +dense(config_space=12)(1.2048)(1000.2048)
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+ConfigSpace (len=12, space_map=
+   0 tile_k: Split(policy=factors, product=2048, num_outputs=2) len=12
+)
+[Task  1/ 1]  Current/Best:   12.11/  78.21 GFLOPS | Progress: (12/12) | 14.61 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 140.87 ms (7.18 ms)
+
+mobilenet+dense(config_space=11)(1,1024)(1000,1024)
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+ConfigSpace (len=11, space_map=
+   0 tile_k: Split(policy=factors, product=1024, num_outputs=2) len=11
+)
+[Task  1/ 1]  Current/Best:   74.59/  75.15 GFLOPS | Progress: (11/11) | 14.32 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 1.74 ms (0.00 ms)
+
+vgg-16+dense
+1.["TENSOR", [1, 25088], "float32"], ["TENSOR", [4096, 25088]
+2.["TENSOR", [1, 4096], "float32"], ["TENSOR", [4096, 4096]
+3.["TENSOR", [1, 4096], "float32"], ["TENSOR", [1000, 4096]
+(tvm-env) songjinmeng@songjinmeng-MS-7B23:~/tvm/tutorials/autotvm$ python tune_relay_cuda.py 
+Extract tasks...
+Tuning...
+ConfigSpace (len=30, space_map=
+   0 tile_k: Split(policy=factors, product=25088, num_outputs=2) len=30
+)
+[Task  1/ 3]  Current/Best:   73.39/  80.97 GFLOPS | Progress: (30/30) | 25.80 s Done.
+ConfigSpace (len=13, space_map=
+   0 tile_k: Split(policy=factors, product=4096, num_outputs=2) len=13
+)
+[Task  2/ 3]  Current/Best:    0.00/  82.06 GFLOPS | Progress: (13/13) | 11.80 s Done.
+ConfigSpace (len=13, space_map=
+   0 tile_k: Split(policy=factors, product=4096, num_outputs=2) len=13
+)
+[Task  3/ 3]  Current/Best:   74.57/  80.25 GFLOPS | Progress: (13/13) | 13.22 s Done.
+Compile...
+Evaluate inference time cost...
+Mean inference time (std dev): 25.71 ms (0.03 ms)
+
+resnet18 部分conv+xgb
+[Task  1/12]  Current/Best:  270.10/ 453.37 GFLOPS | Progress: (1632/3000) | 2883.63 s Done.
+[Task  6/12]  Current/Best: 2416.46/3122.16 GFLOPS | Progress: (1566/3000) | 5376.58 s Done.
+[Task  8/12]  Current/Best: 2004.00/2561.08 GFLOPS | Progress: (2016/3000) | 7050.98 s Done.
+
+------GPU code------
+extern "C" __global__ void fused_nn_conv2d_kernel0( float* __restrict__ placeholder,  float* __restrict__ placeholder1,  float* __restrict__ compute) {
+   float compute_local[1];
+  __shared__ float pad_temp_shared[208];
+  __shared__ float placeholder_shared[512];
+  compute_local[0] = 0.000000e+00f;
+  for (int rc_outer = 0; rc_outer < 16; ++rc_outer) {
+    __syncthreads();
+    if (((((int)threadIdx.z) * 7) + ((int)threadIdx.x)) < 208) {
+      pad_temp_shared[((((int)threadIdx.z) * 7) + ((int)threadIdx.x))] = placeholder[((((rc_outer * 3136) + ((((((int)threadIdx.z) * 7) + ((int)threadIdx.x)) / 13) * 196)) + (((int)blockIdx.y) * 28)) + (((((int)threadIdx.z) * 7) + ((int)threadIdx.x)) % 13))];
+    }
+    for (int ax0_ax1_fused_ax2_fused_ax3_fused_inner_inner_inner = 0; ax0_ax1_fused_ax2_fused_ax3_fused_inner_inner_inner < 3; ++ax0_ax1_fused_ax2_fused_ax3_fused_inner_inner_inner) {
+      if (((((((int)threadIdx.x) * 3) + ax0_ax1_fused_ax2_fused_ax3_fused_inner_inner_inner) >> 4) + ((int)threadIdx.z)) < 32) {
+        if ((((((int)threadIdx.z) * 16) + (((int)threadIdx.x) * 3)) + ax0_ax1_fused_ax2_fused_ax3_fused_inner_inner_inner) < 512) {
+          if (((((int)threadIdx.x) * 3) + ax0_ax1_fused_ax2_fused_ax3_fused_inner_inner_inner) < 16) {
+            placeholder_shared[(((((int)threadIdx.z) * 16) + (((int)threadIdx.x) * 3)) + ax0_ax1_fused_ax2_fused_ax3_fused_inner_inner_inner)] = placeholder1[(((((((int)blockIdx.z) * 8192) + (((int)threadIdx.z) * 256)) + (rc_outer * 16)) + (((int)threadIdx.x) * 3)) + ax0_ax1_fused_ax2_fused_ax3_fused_inner_inner_inner)];
+          }
+        }
+      }
+    }
+    __syncthreads();
+    for (int rc_inner = 0; rc_inner < 16; ++rc_inner) {
+      compute_local[0] = (compute_local[0] + (pad_temp_shared[((rc_inner * 13) + (((int)threadIdx.x) * 2))] * placeholder_shared[((((int)threadIdx.z) * 16) + rc_inner)]));
+    }
+  }
+  compute[((((((int)blockIdx.z) * 1568) + (((int)threadIdx.z) * 49)) + (((int)blockIdx.y) * 7)) + ((int)threadIdx.x))] = compute_local[0];
+}
+
