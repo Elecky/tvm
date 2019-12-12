@@ -552,7 +552,7 @@ Stmt loop_folder::Mutate_(const For *op, const Stmt &s) {
     micro_code_expander expander(loop_vars, 2, uop_templates_);
     auto res = expander.expand(body);
     // TODO: I limited the micro-code count to be less than 32, is there any beeter way to do limitation?
-    if (std::get<0>(res) && std::get<3>(res) < 32) {
+    if (std::get<0>(res) && std::get<3>(res) <= 32) {
         /* insert this micro-kernel into list. */
         micro_kernels.push_back(move(std::get<1>(res)));
         /* build statements to set local register and launch micro-kernel */
@@ -586,7 +586,7 @@ Stmt loop_folder::Mutate_(const Block *op, const Stmt &s) {
     /* handle the condition that a micro-code is not wrapped in any loop. */
     micro_code_expander expander(Array<Var>()/* no loop var */, 2, uop_templates_);
     auto res = expander.expand(s);
-    if (std::get<0>(res) && std::get<3>(res) < 32) {
+    if (std::get<0>(res) && std::get<3>(res) < 8) {
         /* insert this micro-kernel into list. */
         micro_kernels.push_back(move(std::get<1>(res)));
         /* build statements to set local register and launch micro-kernel */

@@ -378,7 +378,7 @@ std::unordered_map<string, NNPUAssembler::assemble_func_p> NNPUAssembler::initia
         table.insert({item, &NNPUAssembler::assembleVctrSclr});
     }
 
-    for (auto &item : vector<string> { "VExp", "VLog" }) {
+    for (auto &item : vector<string> { "VExp", "VLog", "VTanh", "VSigmoid" }) {
         table.insert({item, &NNPUAssembler::assembleVctrUnary});
     }
 
@@ -1239,7 +1239,7 @@ MicroCodeParser::initialize_dispatch() {
         table.insert({"NNPU." + item, &MicroCodeParser::parseVectorBinary});
     }
 
-    for (string &item : vector<string> { "VExp", "VLog" }) {
+    for (string &item : vector<string> { "VExp", "VLog", "VTanh", "VSigmoid" }) {
         table.insert({"NNPU." + item, &MicroCodeParser::parseVectorUnary});
     }
 
@@ -1366,7 +1366,8 @@ void MicroCodeParser::parseVectorUnary(const vector<string> &tokens, const strin
 
     using type = VctrUnaryMCode::OpType;
     static const std::unordered_map<string, type> Ops
-        { {"NNPU.VExp", type::VExp}, {"NNPU.VLog", type::VLog} };
+        { {"NNPU.VExp", type::VExp}, {"NNPU.VLog", type::VLog},
+          {"NNPU.VTanh", type::VTanh}, {"NNPU.VSigmoid", type::VSigmoid} };
     auto it = Ops.find(tokens[0]);
 
     CHECK(it != Ops.end()) << ", invalid op-code: " << tokens[0];
@@ -1657,7 +1658,7 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_run_ =
                     << ", only int type arguments can be passed to NNPU device";
                 dev_args.push_back(static_cast<int32_t>(args[i]));
             }
-
+            std::cerr << args[1].operator std::__cxx11::string() << '\n';
             NNPU_AssembleAndRun(args[0].operator std::__cxx11::string(), 
                                 args[1].operator std::__cxx11::string(),
                                 args[2].operator std::__cxx11::string(),
@@ -1679,4 +1680,12 @@ static TVM_ATTRIBUTE_UNUSED auto &__register_set_profile_ =
                     << ", expecting 2nd argument to be a directory [string]";
                 nnpu::profile_dir = args[1].operator std::__cxx11::string();
             }
+        });
+
+extern int sc_cur_cycle;
+
+static TVM_ATTRIBUTE_UNUSED auto &__register_get_cycle_ =
+    ::tvm::runtime::Registry::Register("nnpu.get_cycle", true)
+        .set_body([](TVMArgs args, TVMRetValue *rv) {
+            *rv = sc_cur_cycle;
         });

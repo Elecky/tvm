@@ -1,5 +1,5 @@
 # data configs
-dtype_w: int8
+dtype_w: float32
 dtype_n: int8
 
 multi_core: false
@@ -78,7 +78,7 @@ scratchpad1:
   type: two_port
 
 scratchpad2:
-  enable: true
+  enable: false
   nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64
@@ -90,7 +90,7 @@ scratchpad2:
   type: two_port
 
 scratchpad3:
-  enable: true
+  enable: false
   nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
@@ -102,7 +102,7 @@ scratchpad3:
   type: one_port
 
 scratchpad4:
-  enable: true
+  enable: false
   nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64

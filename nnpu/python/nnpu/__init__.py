@@ -14,3 +14,5 @@ func()
 
 func = tvm.get_global_func('nnpu.init_uop_template', False)
 func(os.path.join(os.path.dirname(os.path.abspath(os.path.expanduser(__file__))), '..', '..', 'config', 'micro_code_template.txt'))
+
+get_cycle = tvm.get_global_func('nnpu.get_cycle', False)

@@ -9,15 +9,22 @@ import argparse
 parser = argparse.ArgumentParser(description='test of NNPU Op')
 parser.add_argument('--sim', type=str, help='the simulator to use', 
                     default='S0', choices=['S0', 'S1', 'SC'])
+parser.add_argument('--profile', type=bool, help='enable profiling', 
+                    default=True)
 args = parser.parse_args()
 
-env = nnpu.get_env()
-nnpu.set_device(env, type=args.sim)
+cfg_path = './nnpu_config-opt.yaml'
+if (args.profile):
+    profile_dir = '/home/jian/Documents/nnpu_profile'
+    nnpu.set_profile(['timeline', 'memory_access_latency'], profile_dir)
 
-with ScheduleProcHelper():
+with ScheduleProcHelper(), nnpu.Environment(cfg_path):
     env = nnpu.get_env()
-    shape1 = (128, 1024)
-    shape2 = (128, 1024)
+    nnpu.set_device(env, type=args.sim)
+
+    shape1 = (128, 256)
+    shape2 = (128, 256)
+    macops = shape1[0] * shape1[1] * shape2[0]
     gemm_shape = (8, 8, 8)
     factor = gemm_shape[1]
     assert shape1[1] == shape2[1], \
@@ -106,3 +113,13 @@ with ScheduleProcHelper():
     out_nd = tvm.nd.array(np.zeros(out_shape, dtype=out_host.dtype), ctx)
 
     func(a_nd, b_nd, out_nd)
+
+    from functools import reduce 
+    if (args.sim == 'SC'):
+        print()
+        print('###### summary ######')
+        print('total mac ops =', macops)
+        print('ellapsed cycles =', nnpu.get_cycle())
+        print('efficiency =', macops / nnpu.get_cycle() / reduce(lambda x, y: x*y, gemm_shape, 1))
+        if (args.profile):
+            print('timeline saved in', profile_dir)

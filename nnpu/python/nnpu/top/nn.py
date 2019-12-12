@@ -7,7 +7,8 @@ from nnvm.top import registry as reg
 import logging
 from nnvm.top import nn as _nn
 
-levels = 16
+levels = 1
+level = 16
 
 def is_packed_layout(layout):
     """check if layout is packed layout"""
@@ -57,19 +58,22 @@ def compute_relu_default(data):
     """
 
     Imm = tvm.const(0, data.dtype)
-    if not topi.util.equal_const_int(data.shape[len(data.shape) - 1] % 16, 0) :
-        nums = topi.util.get_const_int(data.shape[len(data.shape) - 1] % 16)
-        before = tuple([0 for i in range(len(data.shape))])
-        after = [0 for i in range(len(data.shape) - 1)]
-        after.append(16 - nums)
-        after = tuple(after)
-        pad_data = topi.nn.pad(data, before, after)
-    else:
-        pad_data = data
-    res = tvm.compute(pad_data.shape, lambda *i: tvm.max(pad_data(*i), Imm), name = "relu_res", tag = "elemwise_relu")
+
+    return tvm.compute(data.shape, lambda *i: tvm.max(data(*i), Imm), name = "relu_res", tag = "elemwise_relu")
+
+    shape = [topi.util.get_const_int(x) for x in data.shape]
+    from functools import reduce
+    size = reduce(lambda x, y: x * y, shape, 1)
+    assert size % 32 == 0, 'not aligned'
+    print('relu')
+    print(size)
+    flatten_data = topi.reshape(data, (size,))
+    relu = tvm.compute((size,), lambda *i: tvm.max(flatten_data(*i), Imm), name = "relu_res", tag = "elemwise_relu")
+    res = topi.reshape(relu, data.shape)
+
     return res
 
-@reg.register_compute("relu", level = levels)
+@reg.register_compute("relu", level = level)
 def compute_relu(attrs, inputs, out):
     return compute_relu_default(inputs[0])
 
@@ -78,72 +82,35 @@ def schedule_relu_default(outs):
     assert len(outs) == 1
     env = nnpu.get_env()
     output = outs[0]
-    ewise_ops = []
-    ewise_inputs = []
-    relu_res = []
-    """
-    def _traverse(op):
-        if topi.tag.is_broadcast(op.tag):
-            if not op.same_as(output.op):
-                ewise_ops.append(op)
-            for tensor in op.input_tensors:
-                if isinstance(tensor.op, tvm.tensor.PlaceholderOp):
-                    ewise_inputs.append((op, tensor))
-                else:
-                    _traverse(tensor.op)
-        else:
-            assert op.tag == "packed_relu"
-            relu_res.append(op)
 
-    _traverse(output.op)
-    """
-    relu_res.append(output.op)
-    assert len(relu_res) == 1
-    relu_stage = relu_res[0].output(0)
+    s = tvm.create_schedule(output.op)
 
-    data = relu_stage.op.input_tensors[0]
-    if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
-        temp = data.op.input_tensors[0]
-        pad_data = data
-        data = temp
-    else:
-        pad_data = None
-    if data.dtype == env.cfg['dtype_n']:
-        modes = 'n'
-    elif data.dtype == env.cfg['dtype_w']:
-        modes = 'w'
-    else:
-        raise RuntimeError("NPU not support dtype %s"%data.dtype)
+    # ewise_ops = []
+    # ewise_inputs = []
+    # relu_res = []
+    data = output.op.input_tensors[0]
+    relu_res = s.cache_write(output, env.get_scope('buffer4'))
+    flatten = s.cache_read(data, env.get_scope('buffer4'), relu_res)
+    # split output
+    xo, xi = s[output].split(output.op.axis[0], 256)
+    tx, xo = s[output].split(xo, nparts=2)
+    s[flatten].compute_at(s[output], xo)
+    s[relu_res].compute_at(s[output], xo)
 
-    factors = 16
-    Imm = tvm.const(0, data.dtype)
+    s[output].bind(tx, tvm.thread_axis("cthread"))
 
-    s = nnpu.create_schedule(output.op)
+    # pragma copy
+    s[output].pragma(xi, env.dma_copy_from_buf)
+    s[flatten].pragma(flatten.op.axis[0], env.dma_copy_to_buf)
 
-    cout = s.cache_write(output, env.dram_scope)
-    relu_stage = s.cache_write(cout, env.uni_scratchpad_scope)
-    if pad_data is not None:
-        cdata = pad_data
-        s[pad_data].set_scope(env.dram_scope)
-    else:
-        cdata = s.cache_read(data, env.dram_scope, [relu_stage])
-    c2data = s.cache_read(cdata, env.uni_scratchpad_scope, [relu_stage])
-    s[relu_stage].set_scope(env.uni_scratchpad_scope)
-    s[cdata].pragma(s[cdata].op.axis[0], env.dma_copy_pragma)
+    # tensorize
+    xo, xi = s[relu_res].split(relu_res.op.axis[0], 32)
+    s[relu_res].tensorize(xi, env.intrins.get('VGTMI', scope_in='buffer4', scope_out='buffer4', imm_value=0.0))
 
-    s[c2data].pragma(s[c2data].op.axis[0], env.scratchpad_ls)
-    s[cout].pragma(s[cout].op.axis[0], env.scratchpad_ls)
-    s[output].pragma(s[output].op.axis[0], env.dma_copy_pragma)
-
-    lens = len(data.shape)
-    args = [s[relu_stage].op.axis[i] for i in range(lens - 1)]
-    ko, ki = s[relu_stage].split(s[relu_stage].op.axis[lens - 1], factor = factors)
-    args.extend([ko, ki])
-    s[relu_stage].reorder(*args)
-    s[relu_stage].tensorize(ki, env.intrins.get('VGTMI', imm_value = Imm.value, mode = modes))
+    # print(tvm.lower(s, [data, output], simple_mode=True))
     return s
 
-@reg.register_schedule("relu", level = levels)
+@reg.register_schedule("relu", level = level)
 def schedule_relu(attrs, outs, target):
     """
     Schedule for relu
@@ -162,7 +129,7 @@ def schedule_relu(attrs, outs, target):
     if target.device_name == 'nnpu':
         return schedule_relu_default(outs)
     if str(target).startswith("llvm"):
-        return tvm.create_schedule([x.op for x in outs])
+        return _nn._fschedule_broadcast(attrs, outs, target)
     raise RuntimeError("not support target %s"%target)
 
 
@@ -189,20 +156,23 @@ def compute_dense_default(data, weight, bias = None):
     """
     env = nnpu.get_env()
     assert len(data.shape) == 2 and len(weight.shape) == 2
-    dtype_n, dtype_w = env.cfg["dtype_n"], env.cfg["dtype_w"]
+
     if bias is not None:
         assert len(bias.shape) == 1
     batch_size, in_dim = data.shape
     out_dim, _ = weight.shape
     k = tvm.reduce_axis((0, in_dim))
+    print('dense')
+    print(batch_size, in_dim, out_dim)
+    print('=', batch_size * in_dim * out_dim)
     if bias is not None:
-        first = tvm.compute((batch_size, out_dim), lambda i,j : tvm.sum(data[i, k].astype(dtype_w) * weight[j, k].astype(dtype_w), axis = k), name = "first", tag = "inner_dense")
+        first = tvm.compute((batch_size, out_dim), lambda i,j : tvm.sum(data[i, k] * weight[j, k], axis = k), name = "first", tag = "inner_dense")
         res = tvm.compute((batch_size, out_dim), lambda i,j : first[i, j] + bias[j], name = "dense_res", tag="packed_dense")
     else:
-        res = tvm.compute((batch_size,out_dim), lambda i,j : tvm.sum(data[i, k].astype(dtype_w) * weight[j, k].astype(dtype_w), axis = k), name = "dense_res", tag = "packed_dense")
+        res = tvm.compute((batch_size,out_dim), lambda i,j : tvm.sum(data[i, k] * weight[j, k], axis = k), name = "dense_res", tag = "packed_dense")
     return res
 
-@reg.register_compute("dense", level = levels)
+@reg.register_compute("dense", level = level)
 def compute_dense(attrs, inputs, out):
 	"""math: Y = XW^T + b
 
@@ -214,7 +184,7 @@ def compute_dense(attrs, inputs, out):
 
 def schedule_dense_default(attrs, outs):
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
-    s = nnpu.create_schedule([x.op for x in outs])
+    s = tvm.create_schedule([x.op for x in outs])
     output = outs[0]
     ewise_ops = []
     ewise_inputs = []
@@ -233,15 +203,96 @@ def schedule_dense_default(attrs, outs):
         else:
             assert op.tag == "packed_dense"
             dense_res.append(op)
-			
-            
+
     _traverse(output.op)
     ewise_ops.reverse()
+    assert len(ewise_ops) == 0, 'fuse not implemented'
     
     assert len(dense_res) == 1
     gemm_shape = (8, 8, 8)
+    gevm_shape = (1, 8, 8)
     factors = 16
+
+    if attrs['use_bias'] != 0:
+        vaddv_res = dense_res[0].output(0)
+        gemm_res, bias = vaddv_res.op.input_tensors
+        data, weight = gemm_res.op.input_tensors
+    else:
+        vaddv_res = None
+        gemm_res = dense_res[0].output(0)
+        data, weight = gemm_res.op.input_tensors
+    
+    N, K, M = data.shape[0], data.shape[1], weight.shape[0]
+    N, K, M = [topi.util.get_const_int(x) for x in [N, K, M]]
+    if (N % gemm_shape[0] == 0):
+        gevm_mode = False
+    else:
+        gevm_mode = True
+    assert K % gemm_shape[1] == 0 and M % gemm_shape[2] == 0, 'not aligned'
+    if (gevm_mode):
+        # cache read, cache write, and set scopes
+        cdata = s.cache_read(data, env.get_scope('buffer1'), [gemm_res])
+        cweight = s.cache_read(weight, env.get_scope('buffer2'), [gemm_res])
+        s[gemm_res].set_scope(env.get_scope('buffer3'))
+        if (vaddv_res is None):
+            cout = s.cache_write(output, env.get_scope('buffer4'))
+        else:
+            vaddv_res = s.cache_write(output, env.get_scope('buffer4'))
+            # s[vaddv_res].set_scope(env.get_scope('buffer4'))
+            cbias = s.cache_read(bias, env.get_scope('buffer5'), [vaddv_res])
+        # pragma read
+        s[cdata].pragma(s[cdata].op.axis[0], env.dma_copy_to_buf)
+        s[cweight].pragma(s[cweight].op.axis[0], env.dma_copy_to_buf)
+        if (vaddv_res is not None):
+            s[cbias].pragma(s[cbias].op.axis[0], env.dma_copy_to_buf)
+        
+        # split output
+        nf, mf = 1, 512
+        if (M // mf < 2):
+            mf = M // 2
+
+        no, mo, ni, mi = s[output].tile(s[output].op.axis[0], s[output].op.axis[1], nf, mf)
+        mp, mo = s[output].split(mo, nparts=2)
+        s[output].reorder(mp, no, mo, ni, mi)
+        s[output].pragma(ni, env.dma_copy_from_buf)
+        s[output].bind(mp, tvm.thread_axis("cthread"))
+        
+        # compute_at
+        s[cbias].compute_at(s[output], mp)
+        s[gemm_res].compute_at(s[output], mo)
+        if (vaddv_res is not None):
+            s[vaddv_res].compute_at(s[output], mo)
+        else:
+            s[cout].compute_at(s[output], mo)
+
+        # split and tensorize GEMM
+        ni, mi, nt, mt = s[gemm_res].tile(s[gemm_res].op.axis[0], s[gemm_res].op.axis[1], gevm_shape[0], gevm_shape[2])
+        ki, kt = s[gemm_res].split(s[gemm_res].op.reduce_axis[0], 8)
+        ko, ki = s[gemm_res].split(ki, 1)
+        s[gemm_res].reorder(ko, ki, ni, mi, kt, nt, mt)
+        s[gemm_res].tensorize(kt, env.intrins.get('GEMM', shape=gevm_shape, scope_in1='buffer1', scope_in2='buffer2', scope_out='buffer3', mode='w'))
+        # compute_at data and weight
+        s[cdata].compute_at(s[gemm_res], ko)
+        s[cweight].compute_at(s[gemm_res], ko)
+
+        if (vaddv_res is not None):
+            # split and tensorize VAddV
+            vector_unit_size = 32
+            mi, mt = s[vaddv_res].split(s[vaddv_res].op.axis[1], vector_unit_size)
+            s[vaddv_res].tensorize(mt, env.intrins.get('VAddV', scope_in1='buffer3', scope_in2='buffer5', scope_out='buffer4', mode='w', size=vector_unit_size))
+        else:
+            s[cout].pragma(s[cout].op.axis[0], env.scratchpad_copy)
+
+
+        # print(tvm.lower(s, [data, weight, bias, output], simple_mode=True))
+
+        return s
+
+    else:
+        raise NotImplementedError('gemm mode is not implemented now')
+
     if attrs['use_bias'] == '0':
+        raise NotImplementedError('not implemented now')
         # get every stage's tensor of conv2d
         dense_stage = dense_res[0].output(0)
 
@@ -440,29 +491,27 @@ def schedule_dense_default(attrs, outs):
     print(nnpu.lower(s, [data, weight, output], simple_mode = True))
     return s
 	
-@reg.register_schedule("dense", level = levels)
+@reg.register_schedule("dense", level = level)
 def schedule_dense(attrs, outs, target):
-	"""
+    """
     Schedule for dense
-	Parameters
-	------------
-	outs : Array of Tensor
-	       The computation graph description of dense
-		   in the format of an array of tensors
-	
-	Returns
-	------------
-	s : Schedule
-	    The computation schedule for dense
+    Parameters
+    ------------
+    outs : Array of Tensor
+           The computation graph description of dense
+    	   in the format of an array of tensors
 
-	"""
-	target = tvm.target.create(target)
-	if target.device_name == "nnpu":
-		return schedule_dense_default(attrs, outs)
-	if str(target).startswith("llvm"):
-		return tvm.create_schedule([x.op for x in outs])
-	raise RuntimeError("not support target %s" % target)
-
+    Returns
+    ------------
+    s : Schedule
+        The computation schedule for dense  
+    """
+    target = tvm.target.create(target)
+    if target.device_name == "nnpu":
+    	return schedule_dense_default(attrs, outs)
+    if str(target).startswith("llvm"):
+    	return tvm.create_schedule([x.op for x in outs])
+    raise RuntimeError("not support target %s" % target)
 
 
 # nnpu : elemwise_add
@@ -1129,16 +1178,17 @@ def schedule_softmax(attrs, outs, target):
     raise RuntimeError("not support target %s"%target)
 
 
-
-def packed_conv2d(data, kernel, strides, padding, out_dtype):
-    print("nnpu : compute_conv2d")
+def packed_conv2d(data, kernel, bias, strides, padding, out_dtype):
     
     env = nnpu.get_env()
-    dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
     assert isinstance(strides, int) or len(strides) == 2
-    if out_dtype is None:
-        out_dtype = dtype_w
-    filter_height, filter_width, num_filter, in_channel = kernel.shape
+
+    filter_height, filter_width, num_filter, in_channel = [topi.util.get_const_int(x) for x in kernel.shape]
+
+    # TODO: this is for demo only
+    # batch_size, in_height, in_width, in_channel = [topi.util.get_const_int(x) for x in data.shape]
+    # if (in_height == 28):
+    #     padding = (padding[0] + 2, padding[1] + 2)
 
     if isinstance(strides, int):
         stride_height = stride_width = strides
@@ -1149,43 +1199,93 @@ def packed_conv2d(data, kernel, strides, padding, out_dtype):
         pad_data = topi.nn.pad(data, [0, padding[0], padding[1], 0], name = "pad_data")
     else:
         pad_data = data 
-    batch_size, in_height, in_width, in_channel = pad_data.shape
+    batch_size, in_height, in_width, in_channel = [topi.util.get_const_int(x) for x in pad_data.shape]
 
     out_height = topi.util.simplify((in_height - filter_height) // stride_height + 1)
+    out_height = topi.util.get_const_int(out_height)
 
     out_width = topi.util.simplify((in_width - filter_width) // stride_width + 1)
+    out_width = topi.util.get_const_int(out_width)
 
-    k_in = tvm.reduce_axis((0, in_channel))
-    k_f_w = tvm.reduce_axis((0, filter_width))
+    print('conv2d')
+    print(out_height, out_width, num_filter, filter_height, filter_width, in_channel)
+    print('=', out_height * out_width * num_filter * filter_height * filter_width * in_channel)
+
     k_f_h = tvm.reduce_axis((0, filter_height))
-    if data.dtype == dtype_w:
+    k_f_w = tvm.reduce_axis((0, filter_width))
+    k_ci_o = tvm.reduce_axis((0, in_channel // 8))
+    k_ci_i = tvm.reduce_axis((0, 8))
+    if (bias is None):
+        col_data_shape = (batch_size, out_height, out_width, filter_height, filter_width, in_channel)
+        col_data = tvm.compute(col_data_shape,
+                            lambda n, h, w, kh, kw, c: pad_data[n, h + kh*stride_height, w+kw*stride_width, c],
+                            name='col_data')
+
+        assert col_data_shape[-1] % 8 == 0, 'not aligned'
+        assert col_data_shape[2] % 8 == 0, 'not aligned'
+        # Nz layout
+        packed_data_shape = (batch_size, out_height, filter_height, filter_width, in_channel // 8, out_width, 8)
+        packed_data = tvm.compute(packed_data_shape,
+                            lambda n, h, kh, kw, co, w, ci: col_data[n, h, w, kh, kw, co * 8 + ci],
+                            name='packed_data')
+        # Nz layout
+        packed_kernel_shape = (filter_height, filter_width, out_channel // 8, in_channel // 8, 8, 8)
+        packed_kernel = tvm.compute(packed_kernel_shape,
+                            lambda kh, kw, oco, co, oci, ci: kernel[kh, kw, oco*8+oci, co*8+ci],
+                            name='packed_kernel')
+        
+        res1 = tvm.compute((batch_size, out_height, out_channel // 8, out_width, 8),
+                        lambda n, h, oco, w, oci: 
+                            tvm.sum(packed_data[n, h, k_f_h, k_f_w, k_ci_o, w, k_ci_i]
+                                * packed_kernel[k_f_h, k_f_w, oco, k_ci_o, oci, k_ci_i],
+                                axis=[k_f_h, k_f_w, k_ci_o, k_ci_i] ),
+                        name='conv2d_inner')
         res = tvm.compute((batch_size, out_height, out_width, out_channel),
-                          lambda n, h, w, oc: 
-                            tvm.sum(pad_data[n, h + k_f_h, w + k_f_w, k_in]
-                                    * kernel[k_f_h, k_f_w, oc, k_in],
-                                    axis=[k_f_h, k_f_w, k_in] ),
-                          name='conv2d_res', tag='packed_conv2d')
+                        lambda n, h, w, oc: res1[n, h, oc / 8, w, oc % 8],
+                        name='conv2d_res', tag='packed_conv2d')
     else:
-        raise NotImplementedError
+        col_data_shape = (batch_size, out_height, out_width, filter_height, filter_width, in_channel)
+        col_data = tvm.compute(col_data_shape,
+                            lambda n, h, w, kh, kw, c: pad_data[n, h + kh*stride_height, w+kw*stride_width, c],
+                            name='col_data')
+
+        assert col_data_shape[-1] % 8 == 0, 'not aligned'
+        assert col_data_shape[2] % 8 == 0, 'not aligned'
+        # Nz layout
+        packed_data_shape = (batch_size, out_height, filter_height, filter_width, in_channel // 8, out_width, 8)
+        packed_data = tvm.compute(packed_data_shape,
+                            lambda n, h, kh, kw, co, w, ci: col_data[n, h, w, kh, kw, co * 8 + ci],
+                            name='packed_data')
+        # Nz layout
+        packed_kernel_shape = (filter_height, filter_width, out_channel // 8, in_channel // 8, 8, 8)
+        packed_kernel = tvm.compute(packed_kernel_shape,
+                            lambda kh, kw, oco, co, oci, ci: kernel[kh, kw, oco*8+oci, co*8+ci],
+                            name='packed_kernel')
+        
+        res1 = tvm.compute((batch_size, out_height, out_channel // 8, out_width, 8),
+                        lambda n, h, oco, w, oci: 
+                            tvm.sum(packed_data[n, h, k_f_h, k_f_w, k_ci_o, w, k_ci_i]
+                                * packed_kernel[k_f_h, k_f_w, oco, k_ci_o, oci, k_ci_i],
+                                axis=[k_f_h, k_f_w, k_ci_o, k_ci_i] ),
+                        name='conv2d_inner')
+        bias_res = tvm.compute((batch_size, out_height, out_channel // 8, out_width, 8),
+                        lambda n, h, oco, w, oci: res1[n, h, oco, w, oci] + bias[oco * 8 + oci],
+                        name='bias_res')
+        res = tvm.compute((batch_size, out_height, out_width, out_channel),
+                        lambda n, h, w, oc: bias_res[n, h, oc / 8, w, oc % 8],
+                        name='conv2d_res', tag='packed_conv2d')
 
     return res
 
-def schedule_conv2d_default(outs):
-    print("nnpu : schedule_conv2d")
+def schedule_conv2d_default(outs, attrs):
     env = nnpu.get_env()
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
-    s = nnpu.create_schedule([x.op for x in outs])
-    dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
-    factors = 16
+    s = tvm.create_schedule([x.op for x in outs])
+
     output = outs[0]
     ewise_inputs = []
     ewise_ops = []
     conv2d_res = []
-    assert output.dtype == dtype_w
-    if output.op.input_tensors[0].dtype == dtype_w:
-        modes = 'w'
-    elif output.op.input_tensors[0].dtype == dtype_n:
-        modes = 'n'
     def _traverse(op):
         if topi.tag.is_broadcast(op.tag):
             ewise_ops.append(op)
@@ -1209,8 +1309,103 @@ def schedule_conv2d_default(outs):
     ewise_ops.reverse() 
 
     assert len(conv2d_res) == 1
+    assert len(ewise_ops) == 0, 'fuse not supported'
+
+    N, OH, OW, OC = [topi.util.get_const_int(x) for x in output.shape]
+
+    conv2d_res = output
     # get every stage's tensor of conv2d
-    conv2d_stage = conv2d_res[0].output(0)
+    if (attrs['use_bias']):
+        # bias_res = s.cache_write(output, env.get_scope('buffer4'))
+        bias_res = output.op.input_tensors[0]
+        conv2d_res, bias = bias_res.op.input_tensors
+    else:
+        # conv2d_res = s.cache_write(output, env.get_scope('buffer4'))
+        conv2d_res = output.op.input_tensors[0]
+        bias = None
+        raise NotImplementedError('not implemented')
+
+    packed_data, packed_kernel = conv2d_res.op.input_tensors
+    col_data = packed_data.op.input_tensors[0]
+    pad_data = col_data.op.input_tensors[0]
+    kernel = packed_kernel.op.input_tensors[0]
+
+    # cache read data/kernel
+    if isinstance(pad_data.op, tvm.tensor.ComputeOp) and "pad" in pad_data.op.tag:
+        data = pad_data.op.input_tensors[0]
+    else:
+        data = pad_data
+        pad_data = None
+    if (bias is not None):
+        cbias = s.cache_read(bias, env.get_scope('buffer5'), [bias_res])
+
+    # set scopes
+    s[packed_data].set_scope(env.get_scope('buffer1'))
+    s[packed_kernel].set_scope(env.get_scope('buffer2'))
+    s[conv2d_res].set_scope(env.get_scope('buffer3'))
+    s[bias_res].set_scope(env.get_scope('buffer4'))
+    # s[cbias].set_scope(env.get_scope('buffer5'))
+
+    # split output
+    hfactor, wfactor, ocfactor = 8, 16, 128
+    if (OH % (hfactor * 2) != 0):
+        hfactor = 4
+    # if (OW % wfactor != 0):
+    #     wfactor = 8
+    if (OC < ocfactor):
+        ocfactor = OC
+    assert OC % ocfactor == 0, 'split factor error'
+    if (OH // hfactor < 2):
+        hfactor = OH // 2
+    print('hfactor, wfactor, ocfactor = ', hfactor, wfactor, ocfactor)
+
+    ho, hi = s[output].split(output.op.axis[1], hfactor)
+    wo, wi = s[output].split(output.op.axis[2], wfactor)
+    oco, oci = s[output].split(output.op.axis[3], ocfactor)
+    oci0, oci1 = s[output].split(oci, 8)  # to eliminate division
+    cthread_h, ho = s[output].split(ho, nparts=2)
+    s[output].reorder(cthread_h, ho, wo, oco, hi, wi, oci0, oci1)
+    out_oco = oco
+
+    s[output].bind(cthread_h, tvm.thread_axis('cthread'))
+
+    s[cbias].compute_at(s[output], cthread_h)
+
+    # pragma dma copy
+    s[packed_data].pragma(packed_data.op.axis[0], env.dma_copy_to_buf)
+    s[packed_kernel].pragma(packed_kernel.op.axis[0], env.dma_copy_to_buf)
+    s[cbias].pragma(cbias.op.axis[0], env.dma_copy_to_buf)
+    s[output].pragma(hi, env.dma_copy_from_buf)
+
+    # split and tensorize bias_res
+    wo, wt = s[bias_res].split(bias_res.op.axis[3], 8)
+    s[bias_res].reorder(*bias_res.op.axis[0:3], wo, wt, bias_res.op.axis[4])
+    # tensorize on wt
+    s[bias_res].tensorize(wt, env.intrins.get('MAddV', shape=(8, 8), scope_in_mat='buffer3', scope_in_vctr='buffer5', scope_out='buffer4', mode='w'))
+    s[bias_res].compute_at(s[output], out_oco)
+
+    # split and tensorize conv2d_res
+    n, h, oco, w, oci = conv2d_res.op.axis
+    kfh, kfw, kcio, kcii = conv2d_res.op.reduce_axis
+    wo, wt = s[conv2d_res].split(w, 8)
+    in_channel_block = topi.util.get_const_int(packed_data.shape[4])
+    factor = 4 if in_channel_block % 4 == 0 else 1
+    kcioo, kcioi = s[conv2d_res].split(kcio, factor)
+    s[conv2d_res].reorder(n, kfh, kfw, kcioo, kcioi, h, oco, wo, wt, oci, kcii)
+    # tensorize on wt
+    s[conv2d_res].tensorize(wt, env.intrins.get('GEMM', shape=(8, 8, 8), scope_in1='buffer1', scope_in2='buffer2', scope_out='buffer3', mode='w'))
+    s[conv2d_res].compute_at(s[output], out_oco)
+
+    # compute_at data and kernel
+    s[packed_data].compute_at(s[conv2d_res], kcioo)
+    s[col_data].compute_inline()
+    s[packed_kernel].compute_at(s[conv2d_res], kcioo)
+
+    # print(tvm.lower(s, [data, kernel, bias, output], simple_mode=True))
+    # lib = tvm.build(s, [data, kernel, bias, output], 'nnpu', 'llvm', 'func')
+    # print(lib.imported_modules[0].get_source('ir'))
+    return s
+    # exit()
 
     # cache read data/kernel to scratchpad buffer, do pragma.
     data, kernel = conv2d_stage.op.input_tensors
@@ -1393,7 +1588,7 @@ def schedule_conv2d_default(outs):
     return s
 
     
-@reg.register_schedule("conv2d", level = 16)
+@reg.register_schedule("conv2d", level = level)
 def schedule_conv2d(attrs, outs, target):
     """
     Schedule for conv2d
@@ -1411,14 +1606,14 @@ def schedule_conv2d(attrs, outs, target):
     if is_packed_layout(layout):
         target = tvm.target.create(target)
         if target.device_name == "nnpu":
-            return schedule_conv2d_default(outs)
+            return schedule_conv2d_default(outs, attrs)
         if str(target).startswith("llvm"):
             return tvm.create_schedule([x.op for x in outs])
         raise RuntimeError("not support target %s"%target)
     return _nn.schedule_conv2d(attrs, outs, target)
     
 
-@reg.register_compute("conv2d", level = levels)
+@reg.register_compute("conv2d", level = level)
 def compute_conv2d(attrs, inputs, out):
     padding = attrs.get_int_tuple("padding")
     strides = attrs.get_int_tuple("strides")
@@ -1427,11 +1622,15 @@ def compute_conv2d(attrs, inputs, out):
     layout = attrs['layout']
     kernel_layout = attrs['kernel_layout']
     out_dtype = attrs['out_dtype']
+    if (attrs['use_bias']):
+        bias = inputs[2]
+    else:
+        bias = None
     assert dilation == (1, 1)
     assert layout == 'NHWC', 'NNPU only supports NHWC input layout.'
     assert kernel_layout == 'HWOI', 'NNPU only supports HWOI kernel layout'
     if is_packed_layout(layout):
-        return packed_conv2d(inputs[0], inputs[1], strides, padding, out_dtype = out_dtype)
+        return packed_conv2d(inputs[0], inputs[1], bias, strides, padding, out_dtype = out_dtype)
     return _nn.compute_conv2d(attrs, inputs, out)
 
 # nnpu : tanh
@@ -1746,10 +1945,9 @@ def schedule_sigmoid(attrs, outs, target):
 
 # nnpu : max_pool2d
 def compute_max_pool2d_default(data, pool_size, strides, padding):
-    print("nnpu : max_pool2 compute")
     env = nnpu.get_env()
-    print(strides)
-    dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
+    print("nnpu : max_pool2 compute")
+    
     assert isinstance(strides, int) or len(strides) == 2
     assert len(pool_size) == 2
     if isinstance(strides, int):
@@ -1757,26 +1955,27 @@ def compute_max_pool2d_default(data, pool_size, strides, padding):
     else:
         stride_height, stride_width = strides
     
-    kernel_height, kernel_width = pool_size
+    pool_height, pool_width = pool_size
     if(padding[0]):
         pad_data = topi.nn.pad(data, [0, padding[0], padding[1], 0], name = "pad_data")
     else:
         pad_data = data
     batch_size, in_height, in_width, channel = pad_data.shape
-    out_height = topi.util.simplify((in_height - kernel_height) // stride_height + 1)
-    out_width = topi.util.simplify((in_width - kernel_width) // stride_width + 1)
+    out_height = topi.util.simplify((in_height - pool_height) // stride_height + 1)
+    out_width = topi.util.simplify((in_width - pool_width) // stride_width + 1)
+    print(batch_size, out_height, out_width, pool_height, pool_width, channel)
+    print('=', batch_size * out_height * out_width * pool_height * pool_width * channel)
 
-    k_k_h = tvm.reduce_axis((0, kernel_height))
-    k_k_w = tvm.reduce_axis((0, kernel_width))
+    p_h = tvm.reduce_axis((0, pool_height))
+    p_w = tvm.reduce_axis((0, pool_width))
 
-    first = tvm.compute((batch_size,in_height, out_width, channel), 
-                                lambda b_c, i_h, o_w, c : tvm.max(pad_data[b_c, i_h, o_w * stride_width + k_k_w, c], axis = k_k_w), name = "first")
     res = tvm.compute((batch_size, out_height, out_width, channel),
-                                lambda b_c, o_h, o_w, c : tvm.max(first[b_c, o_h * stride_height + k_k_h, o_w, c], axis = k_k_h), name = 'res', tag = "max_pool2d")
+                    lambda b_c, o_h, o_w, c : tvm.max(pad_data[b_c, o_h * stride_height + p_h, o_w*stride_width+p_w, c], axis=[p_h, p_w]), 
+                    name = 'res', tag = "max_pool2d")
     return res
-    
 
-@reg.register_compute("max_pool2d", level = levels)
+
+@reg.register_compute("max_pool2d", level = level)
 def compute_max_pool2d(attrs, inputs, out):
     layout = attrs['layout']
     data = inputs[0]
@@ -1788,25 +1987,12 @@ def compute_max_pool2d(attrs, inputs, out):
 
 def schedule_max_pool2d_default(outs):
     env = nnpu.get_env()
-    dtype_n, dtype_w = env.cfg['dtype_n'], env.cfg['dtype_w']
+    
     assert len(outs) == 1
-    factors = 16
+    
     output = outs[0]
-    ewise_inputs = []
-    ewise_ops = []
-    max_pool2d_res = []
-    max_pool2d_res.append(output.op)
-    assert len(max_pool2d_res) == 1
-    max_pool2d_stage1 = max_pool2d_res[0].output(0)
-    print(max_pool2d_stage1)
-    max_pool2d_stage = max_pool2d_stage1.op.input_tensors[0]
-    data = max_pool2d_stage.op.input_tensors[0]
-    if data.dtype == dtype_n:
-        modes = 'n'
-    elif data.dtype == dtype_w:
-        modes = 'w'
-    else:
-        raise RuntimeError("NPU not support dtype %s"%data.dtype)
+    data = output.op.input_tensors[0]
+    
     if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
         temp = data.op.input_tensors[0]
         pad_data = data
@@ -1814,44 +2000,47 @@ def schedule_max_pool2d_default(outs):
     else:
         pad_data = None
     
-    s = nnpu.create_schedule(output.op)
-    cout = s.cache_write(output, env.dram_scope)
-    max_pool2d_stage1 = s.cache_write(cout, env.uni_scratchpad_scope)
+    s = tvm.create_schedule(output.op)
+    # cache write
+    cout = s.cache_write(output, env.get_scope('buffer4'))
+    
     if pad_data is not None:
         cdata = pad_data
-        s[pad_data].set_scope(env.dram_scope)
+        s[cdata].set_scope(env.get_scope('buffer5'))
     else:
-        cdata = s.cache_read(data, env.dram_scope, [max_pool2d_stage])
-    c2data = s.cache_read(cdata, env.uni_scratchpad_scope, [max_pool2d_stage])
-    s[cdata].pragma(s[cdata].op.axis[0], env.dma_copy_pragma)
-    s[c2data].pragma(s[c2data].op.axis[0], env.scratchpad_ls)
-
-    s[max_pool2d_stage].set_scope(env.uni_scratchpad_scope)
-    s[max_pool2d_stage1].set_scope(env.uni_scratchpad_scope)
-    s[cout].pragma(s[cout].op.axis[3], env.scratchpad_ls)
-    s[output].pragma(s[output].op.axis[3], env.dma_copy_pragma)
-
-    ko, ki = s[max_pool2d_stage].split(s[max_pool2d_stage].op.reduce_axis[0], factor = 1)
-    xo, xi = s[max_pool2d_stage].split(s[max_pool2d_stage].op.axis[3], factor = factors)
-    m, l, n = s[max_pool2d_stage].op.axis[0:3]
-    s[max_pool2d_stage].reorder(m, l, n, xo, ko, ki, xi)
+        cdata = s.cache_read(data, env.get_scope('buffer5'), [cout])
+    # pragma
+    s[cdata].pragma(cdata.op.axis[0], env.dma_copy_to_buf)
     
-    s[max_pool2d_stage].tensorize(ki, env.intrins.get('VGTMMerge', mode = modes))
-    s[cdata].compute_at(s[max_pool2d_stage], ko)
-    s[c2data].compute_at(s[max_pool2d_stage], ko)
+    N, H, W, C = [topi.util.get_const_int(x) for x in output.shape]
+    hfactor, wfactor, cfactor = 4, 4, 4*32
+    hfactor = hfactor if hfactor <= H else H
+    wfactor = wfactor if wfactor <= W else W
+    cfactor = cfactor if cfactor <= C else C
 
-    ko, ki = s[max_pool2d_stage1].split(s[max_pool2d_stage1].op.reduce_axis[0], factor=1)
-    xo, xi = s[max_pool2d_stage1].split(s[max_pool2d_stage1].op.axis[3], factor=16)
-    m, l, n = s[max_pool2d_stage1].op.axis[0:3]
-    s[max_pool2d_stage1].reorder(m, l, n, xo, ko, ki, xi)
-    s[max_pool2d_stage1].tensorize(ki, env.intrins.get('VGTMMerge', mode = modes, nDim = 3))
-    s[max_pool2d_stage].compute_at(s[max_pool2d_stage1], ko)
-    s[max_pool2d_stage1].compute_at(s[cout], s[cout].op.axis[2])
-    print(nnpu.lower(s, [data], simple_mode = True))
+    # split and tensorize
+    n, h, w, c = s[cout].op.axis
+    co, ci = s[cout].split(c, 32)
+    ph, pw = s[cout].op.reduce_axis
+    pw, dummy = s[cout].split(pw, 1)
+    s[cout].reorder(n, ph, pw, h, w, co, dummy, ci)
+    s[cout].tensorize(dummy, env.intrins.get('VGTMMerge', scope_in='buffer5', scope_out='buffer4', mode='w', nDim=2, size=32))
+
+    # split output
+    n, h, w, c = output.op.axis
+    ho, wo, hi, wi = s[output].tile(h, w, hfactor, wfactor)
+    co, ci = s[output].split(c, cfactor)
+    s[output].reorder(n, ho, wo, co, hi, wi, ci)
+    s[output].pragma(hi, env.dma_copy_from_buf)
+
+    # compute_at
+    s[cout].compute_at(s[output], co)
+    s[cdata].compute_at(s[output], co)
+
     return s
 
     
-@reg.register_schedule("max_pool2d", level = levels)
+@reg.register_schedule("max_pool2d", level = level)
 def schedule_max_pool2d(attrs, outs, target):
     layout = attrs["layout"]
     if is_packed_layout(layout):

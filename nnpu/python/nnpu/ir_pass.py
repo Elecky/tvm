@@ -157,6 +157,16 @@ def _build_copy(dst, src,
     '''
     ndim = len(src_shape)
 
+    def build_padding(dst_base, level, shape, strides):
+        if (level == len(shape) - 1):
+            body = create_memset(dst_base, shape[-1], dst_strides[-1])
+            irb.emit(body)
+        else:
+            var = tvm.var('i.pad.{0}'.format(level))
+            body = build_padding(dst_base + var * strides[level], level + 1, shape, strides)
+            loop = tvm.make.For(var, 0, shape[level], 0, 0, body)  # fortype = serial)
+            return loop
+
     def _build(src_base, dst_base, level):
         '''
             src_base: index of source (in element count)
@@ -176,7 +186,7 @@ def _build_copy(dst, src,
                 body = create_copy_ir(
                         dst_base,
                         dst_strides[-memcpy_dim:],
-                        src_base,
+                        src_base + (0 if not pad_before else pad_before[level]) * dst_strides[level],
                         src_strides[-memcpy_dim:],
                         src_shape[-memcpy_dim:])
             body = tvm.make.Evaluate(body)
@@ -184,22 +194,8 @@ def _build_copy(dst, src,
         else:
             irb = tvm.ir_builder.create()
 
-            if (pad_before and util.equal_const_int(pad_before[level], 0)):
-                extend = dst_strides[-1]
-                # check whether axis 'level' is compact.
-                l = ndim - 1
-                while (l > level and dst_strides[l - 1] == dst_shape[l] * extend):
-                    l = l - 1
-                    extend = dst_strides[l]
-
-                if (l == level):
-                    body = create_memset(
-                                dst_base, 
-                                pad_before[level] * extend / dst_strides[-1], 
-                                dst_strides[-1])
-                    irb.emit(body)
-                else:
-                    raise AssertionError('can\'t pad')
+            if (pad_before and pad_before[level] != 0):
+                irb.emit(build_padding(dst_base, 0, [pad_before[level]] + dst_shape[level + 1:], dst_strides[level:]))
                 
             # iterate from 0 to src_shape[level]
             var = tvm.var('i{0}'.format(level))
@@ -208,25 +204,11 @@ def _build_copy(dst, src,
                                      * dst_strides[level],
                           level + 1)
             loop = tvm.make.For(var, 0, src_shape[level], 0, 0, body)  # fortype = serial)
-            
             irb.emit(loop)
 
-            if (pad_after and util.equal_const_int(pad_after[level], 0)):
-                extend = dst_strides[-1]
-                # check whether axis 'level' is compact.
-                l = ndim - 1
-                while (l > level and dst_strides[l - 1] == dst_shape[l] * extend):
-                    l = l - 1
-                    extend = dst_strides[l]
-
-                if (l == level):
-                    body = create_memset(
-                                dst_base + (src_shape[level] + pad_before[level]) * extend, 
-                                pad_after[level] * extend / dst_strides[-1], 
-                                dst_strides[-1])
-                    irb.emit(body)
-                else:
-                    raise AssertionError('can\'t pad')
+            if (pad_after and pad_after[level] != 0):
+                irb.emit(build_padding(dst_base + (src_shape[level] + pad_before[level]) * dst_strides[level],
+                                       0, [pad_after[level]] + dst_shape[level + 1:], dst_strides[level:]))
 
             return irb.get()
     return _build(0, 0, 0)
@@ -804,8 +786,10 @@ def custom_tensorize(stmt_in):
         # stmt = tvm.ir_pass.CanonicalSimplify(stmt)
         # stmt = tvm.ir_pass.Simplify(stmt)
         # print (stmt)
+        assert isinstance(stmt, tvm.stmt.For), 'invalid AST, not For loop'
         loop_var = stmt.loop_var
         indices = [loop_var]
+        assert util.equal_const_int(stmt.min, 0), 'invalid loop start'
         ext = util.get_const_int(stmt.extent)
         if ext != params['size']:
             raise RuntimeError('invalid AST, loop with extent {0} is exptected, got {1}'.format(params['size'], ext))
@@ -819,7 +803,7 @@ def custom_tensorize(stmt_in):
         cast = src
         if (isinstance(src, tvm.expr.Cast)):
             cast = src
-            src = cast.Value
+            src = cast.value
         # print(src)
         if (isinstance(src, tvm.expr.Add)):
             uop = 'NNPU.VAddV'
@@ -863,12 +847,96 @@ def custom_tensorize(stmt_in):
                                 )
         return tvm.stmt.Evaluate(body)
 
+    def mat_vctr(stmt, params):
+        # IR structure checking
+        for1 = stmt
+        assert isinstance(for1, tvm.stmt.For), 'invalid AST, not For loop'
+        for2 = for1.body
+        assert isinstance(for2, tvm.stmt.For), 'invalid AST, not For loop'
+        store = for2.body
+        assert isinstance(store, tvm.stmt.Store), 'invalid AST, expected Store'
+        src = store.value
+        if (isinstance(src, tvm.expr.Cast)):
+            op = src.value
+        else:
+            op = src
+        # check op
+        if (isinstance(op, tvm.expr.Add)):
+            uop = 'NNPU.MAddV'
+        elif (isinstance(op, tvm.expr.Sub)):
+            uop = 'NNPU.MSubV'
+        elif (isinstance(op, tvm.expr.Mul)):
+            uop = 'NNPU.MMulV'
+        else:
+            raise RuntimeError('invalid AST, unexpected Op node')
+        lhs = op.a
+        if (isinstance(lhs, tvm.expr.Cast)):
+            lhs = lhs.value
+        assert isinstance(lhs, tvm.expr.Load), 'invalid AST, expected Load'
+        rhs = op.b
+        if (isinstance(rhs, tvm.expr.Cast)):
+            rhs = rhs.value
+        assert isinstance(rhs, tvm.expr.Load), 'invalid AST, expected Load'
+        
+        # loop range checking
+        assert util.equal_const_int(for1.min, 0), 'invalid AST, loop start is not zero'
+        assert util.equal_const_int(for2.min, 0), 'invalid AST, loop start is not zero'
+        shape = params['shape']
+        assert util.equal_const_int(for1.extent, shape[0]), 'invalid AST, loop range dont match, {0} vs {1}'.format(for1.extent, shape[0])
+        assert util.equal_const_int(for2.extent, shape[1]), 'invalid AST, loop range dont match, {0} vs {1}'.format(for2.extent, shape[1])
+
+        # type checking
+        dst_type = src.dtype
+        lhs_type = lhs.dtype
+        rhs_type = rhs.dtype
+        if not lhs_type == rhs_type:
+            raise RuntimeError('invalid AST, difference source type')
+
+        def try_match(lhs, rhs):
+            # detect index
+            indices = [for1.loop_var, for2.loop_var]
+            dst_coef = tvm.arith.DetectLinearEquation(store.index, indices)
+            assert len(dst_coef) == 3
+            assert util.equal_const_int(dst_coef[1], 1)
+            lhs_coef = tvm.arith.DetectLinearEquation(lhs.index, indices)
+            assert len(lhs_coef) == 3
+            assert util.equal_const_int(lhs_coef[1], 1)
+            rhs_coef = tvm.arith.DetectLinearEquation(rhs.index, indices)
+            assert len(rhs_coef) == 3
+            assert util.equal_const_int(rhs_coef[1], 1)
+            if (not util.equal_const_int(rhs_coef[0], 0)):
+                return None
+
+            # build
+            body = tvm.call_intrin("int32", uop,
+                                create_access_ptr(dst_type, store.buffer_var, dst_coef[-1], 1, 'w'),
+                                dst_coef[0] * get_dtype_bytes(dst_type),
+                                create_access_ptr(lhs_type, lhs.buffer_var, lhs_coef[-1], 1, 'r'),
+                                lhs_coef[0] * get_dtype_bytes(lhs_type),
+                                create_access_ptr(rhs_type, rhs.buffer_var, rhs_coef[-1], 1, 'r'),
+                                shape[0], shape[1],
+                                get_mode_code(lhs_type, dst_type)
+                                )
+            return tvm.stmt.Evaluate(body)
+
+        body = try_match(lhs, rhs)
+        if (body is not None):
+            return body
+        else:
+            body = try_match(rhs, lhs)
+            assert body is not None, 'match failure, maybe not matrix-vector computation'
+            return body
+
     def transform_(stmt):
         if (_match_pragma(stmt, 'nnpu.vector')):
             params = ast.literal_eval(stmt.value.value)
             body = None
             if (params['code'] == 'binary'):
                 body = binary_(stmt.body, params)
+            elif (params['code'] == 'matrix-vector'):
+                body = mat_vctr(stmt.body, params)
+            else:
+                raise RuntimeError('unhandled type')
             # print(body)
             return body
         return None
@@ -1113,5 +1181,38 @@ def im2col_transform(stmt):
             return builder.get()
         return None
 
+    return tvm.ir_pass.IRTransform(
+            stmt, transform_, None, ["AttrStmt"])
+
+def remove_if_in_mkernel(stmt):
+    def transform_(stmt):
+        if (_match_pragma(stmt, 'remove_condition')):
+            # first collect all conditions
+            conditions = []
+            extends = {}
+            def collect_condition(stmt):
+                if (isinstance(stmt, tvm.stmt.For)):
+                    extends[stmt.loop_var] = util.get_const_int(stmt.extent)
+                elif (isinstance(stmt, tvm.stmt.IfThenElse)):
+                    likely = stmt.condition
+                    assert likely.name == 'likely', 'not likely call'
+                    cond = likely.args[0]
+                    if (isinstance(cond, tvm.expr.LT) and isinstance(cond.a, tvm.expr.Add)):
+                        # TODO: better pattern extraction.
+                        ax0 = cond.a.a
+                        x1 = cond.a.b
+                        limit = cond.b
+                        # so the condition is ax0+x1<limit
+                        conditions.append((ax0, x1, cond.b))
+                return None
+            tvm.ir_pass.IRTransform(stmt, collect_condition, None, ['IfThenElse', 'For'])
+
+            print(conditions)
+            print(extends)
+
+            def create_condition():
+                pass
+
+        return None
     return tvm.ir_pass.IRTransform(
             stmt, transform_, None, ["AttrStmt"])

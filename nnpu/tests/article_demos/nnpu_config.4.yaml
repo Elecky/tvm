@@ -1,5 +1,5 @@
 # data configs
-dtype_w: int8
+dtype_w: int16
 dtype_n: int8
 
 multi_core: false
@@ -50,6 +50,9 @@ dram:
   # timing related parameters
   speed: 32  # equivalent transfer rate, bytes per cycle.
 
+# scratchpad design, choices are [unified, seperated]
+scratchpad_design: unified
+
 # unified scratchpad configs
 scratchpad0:
   enable: true
@@ -67,9 +70,9 @@ scratchpad0:
 
 scratchpad1:
   enable: true
-  nchannel: 8
+  nchannel: 16
   # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 64
+  width_per_channel: 128
   # log size in byte of every channel
   log_size: 15
   # read and write delays in cycle
@@ -79,9 +82,9 @@ scratchpad1:
 
 scratchpad2:
   enable: true
-  nchannel: 8
+  nchannel: 16
   # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 64
+  width_per_channel: 128
   # log size in byte of every channel
   log_size: 15
   # read and write delays in cycle
@@ -91,7 +94,19 @@ scratchpad2:
 
 scratchpad3:
   enable: true
-  nchannel: 8
+  nchannel: 16
+  # qeuivalent width in bits of every channel, has to be the power of 2
+  width_per_channel: 256
+  # log size in byte of every channel
+  log_size: 17
+  # read and write delays in cycle
+  r_delay: 1
+  w_delay: 1
+  type: two_port
+
+scratchpad4:
+  enable: true
+  nchannel: 16
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 128
   # log size in byte of every channel
@@ -99,27 +114,15 @@ scratchpad3:
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
-  type: one_port
-
-scratchpad4:
-  enable: true
-  nchannel: 8
-  # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 64
-  # log size in byte of every channel
-  log_size: 12
-  # read and write delays in cycle
-  r_delay: 1
-  w_delay: 1
-  type: one_port
+  type: two_port
 
 scratchpad5:
-  enable: false
+  enable: true
   nchannel: 2
   # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 64
+  width_per_channel: 256
   # log size in byte of every channel
-  log_size: 12
+  log_size: 13
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -127,11 +130,11 @@ scratchpad5:
 
 # accumulation buffer in matrix unit.
 acc_buffer:
-  nchannel: 8
+  nchannel: 16
   # qeuivalent width in bits of every channel, has to be the power of 2
-  width_per_channel: 128
+  width_per_channel: 256
   # log size in byte of every channel
-  log_size: 15
+  log_size: 17
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
@@ -157,8 +160,6 @@ vector_unit:
   delays: { VExp: 2, VLog: 2, VDivV: 3, IDivV: 3, VReduceSum: 2, VReduceMax: 2, VReduceMin: 2,
             VDivS: 3, SDivV: 3, VDotV: 2 }
   size: 16
-  r_priority: 3
-  w_priority: 3
 
 matrix_unit:
   set_up_cycle: false  # need one cycle to calculate and set up read/write access.
@@ -169,23 +170,13 @@ matrix_unit:
   opcodes_need_multiply: ['GEMM', 'MMulM', 'MMulI', 'MMulV', 'MRowDot']
   opcodes_nned_adder_tree: ['GEMM', 'MRowDot', 'MReduceSumRow']
   opcodes_need_adder: ['MAddM', 'MSubM', 'MAddI', 'ISubM', 'MMulI', 'MAddV', 'MSubV']
-  r_priority: 4
-  w_priority: 4
 
 misc_delays:
   address_generation: 1  # number of cycles needed to calculate memory dependency, ie, the delay in AGU.
 
 DMA:
   start_up_time: 0  # the time in cycles needed to start a DMA.
-  speed: 16  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
-  r_priority: 1
-  w_priority: 1
-  buffer_size: 32
-
-memcpy:
-  r_priority: 2
-  w_priority: 2
-  buffer_size: 128
+  speed: 32  # the qeuivalent transfer speed, bytes per cycle (of accelerator).
 
 delay_modeling_switch:
   DMA: true

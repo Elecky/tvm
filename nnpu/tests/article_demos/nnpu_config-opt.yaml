@@ -1,5 +1,5 @@
 # data configs
-dtype_w: int8
+dtype_w: int16
 dtype_n: int8
 
 multi_core: false
@@ -52,7 +52,7 @@ dram:
 
 # unified scratchpad configs
 scratchpad0:
-  enable: true
+  enable: false
   nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64
@@ -99,10 +99,10 @@ scratchpad3:
   # read and write delays in cycle
   r_delay: 1
   w_delay: 1
-  type: one_port
+  type: two_port
 
 scratchpad4:
-  enable: true
+  enable: false
   nchannel: 8
   # qeuivalent width in bits of every channel, has to be the power of 2
   width_per_channel: 64

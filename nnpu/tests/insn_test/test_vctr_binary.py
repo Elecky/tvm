@@ -24,7 +24,7 @@ def test():
     b_buf, b_dram = nnpu.utils.CopyHtoBuf(b, 'b', sph, dst_scope=b_scope)
     
     c_buf = tvm.compute(shape, lambda *i: a_buf(*i) + b_buf(*i), 'c_buf')
-    sph.MarkScope(c_buf, 'buffer3')
+    sph.MarkScope(c_buf)
     c_host, c_dram = nnpu.utils.CopyBufToH(c_buf, 'c', sph)
 
     mul_buf = tvm.compute(shape, 
@@ -89,26 +89,14 @@ def test():
     # print(func.imported_modules[0].get_source('asm'))
 
     func(a_nd, b_nd, c_nd, mul_nd, gtm_nd)
-    # exit()
-    # print('a = ')
-    # print(a_np)
-    # print('b = ')
-    # print(b_np)
-    # print('a + b =')
-    # print(c_nd.asnumpy())
-    # print("numpy ground truth is")
+
     gt = a_np + b_np
-    # print(gt)
     np.testing.assert_allclose(c_nd.asnumpy(), gt)
-    # print('(int16)a * b =')
-    # print(mul_nd.asnumpy())
-    np.testing.assert_allclose(mul_nd.asnumpy(), np.multiply(a_np, b_np, dtype=mul_host.dtype))
-    # print('max(a, b) = ')
-    # print(gtm_nd.asnumpy())
+    gt = np.multiply(a_np, b_np, dtype=mul_host.dtype)
+    np.testing.assert_allclose(mul_nd.asnumpy(), gt)
     gt = np.maximum(a_np, b_np)
     np.testing.assert_allclose(gtm_nd.asnumpy(), gt)
     print('test passed!!')
-
 
 if __name__ == '__main__':
     import argparse
@@ -117,7 +105,7 @@ if __name__ == '__main__':
     parser.add_argument('--sim', type=str, help='the simulator to use', 
                         default='S0', choices=['S0', 'S1', 'SC'])
     args = parser.parse_args()
-
-    env = nnpu.get_env()
-    nnpu.set_device(env, type=args.sim)
-    test()
+    with nnpu.Environment('./nnpu_config.yaml'):
+        env = nnpu.get_env()
+        nnpu.set_device(env, type=args.sim)
+        test()
