@@ -18,8 +18,8 @@ nnpu.set_profile(['timeline', 'memory_access_latency'], profile_dir)
 
 with ScheduleProcHelper():
     env = nnpu.get_env()
-    shape1 = (136, 1024)
-    shape2 = (128, 1024)
+    shape1 = (136, 256)
+    shape2 = (128, 256)
     gemm_shape = (8, 8, 8)
     factor = gemm_shape[1]
     assert shape1[1] == shape2[1], \
@@ -114,8 +114,8 @@ with ScheduleProcHelper():
     # s[out_acc].compute_at(s[out_host], xo)
     # s[out_acc].unroll(s[out_acc].leaf_iter_vars[2])
     print(tvm.lower(s, [a, b, out_host], simple_mode=True))
-    exit()
     print(nnpu.lower(s, [a, b, out_host], simple_mode=True))
+    # exit()
 
     func = nnpu.build(s, [a, b, out_host], 'nnpu', 'llvm', 'nnpu_func')
     print('------------------- device module 1 TVM IR: ')
@@ -139,6 +139,6 @@ with ScheduleProcHelper():
     out_np = out_nd.asnumpy()
     # print(out_np)
     out_np = np.transpose(out_np, axes=(0, 2, 1, 3))
-    out_np = np.reshape(out_np, (128, 128))
+    out_np = np.reshape(out_np, (136, 128))
     np.testing.assert_allclose(gt, out_np)
     print('test passed')

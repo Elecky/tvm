@@ -40,7 +40,7 @@ class IntrinManager(object):
         # define intrin constructors here
         
         # unary vector intrin
-        def vctr_unary(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', mode='w'):
+        def vctr_unary(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', mode='w', size=16):
             env = self.env
             cfg = self.env.cfg
 
@@ -55,8 +55,8 @@ class IntrinManager(object):
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
 
-            in_shape = (cfg['vector_unit']['size'], )
-            out_shape = (cfg['vector_unit']['size'], )
+            in_shape = (size, )
+            out_shape = (size, )
 
             op_in = tvm.placeholder(in_shape, dtype=dtype_in,
                                     name='in')
@@ -77,6 +77,22 @@ class IntrinManager(object):
                 else:
                     expr = lambda i: tvm.log(op_in[i])
                 intrin_func = 'VLog'
+            elif (intrin_op == 'VTanh'):
+                if (mode == 'inc'):
+                    expr = lambda i: tvm.tanh(op_in[i].astype(dtype_out))
+                elif (mode == 'dec'):
+                    expr = lambda i: tvm.tanh(op_in[i]).astype(dtype_out)
+                else:
+                    expr = lambda i: tvm.tanh(op_in[i])
+                intrin_func = 'VTanh'
+            elif (intrin_op == 'VSigmoid'):
+                if (mode == 'inc'):
+                    expr = lambda i: tvm.sigmoid(op_in[i].astype(dtype_out))
+                elif (mode == 'dec'):
+                    expr = lambda i: tvm.sigmoid(op_in[i]).astype(dtype_out)
+                else:
+                    expr = lambda i: tvm.sigmoid(op_in[i])
+                intrin_func = 'VSigmoid'
             else:
                 raise ValueError('unsupported vctr unary intrin op')
             
@@ -94,7 +110,7 @@ class IntrinManager(object):
                 irb.emit(tvm.call_intrin("int32", 'NNPU.' + intrin_func,
                             get_access_ptr(dout, env, 'w'),
                             get_access_ptr(din, env, 'r'),
-                            cfg['vector_unit']['size'],
+                            size,
                             self.get_mode_code(mode)
                             ))
                 
@@ -110,8 +126,10 @@ class IntrinManager(object):
 
         self.intrin_ctors['VExp'] = vctr_unary
         self.intrin_ctors['VLog'] = vctr_unary
+        self.intrin_ctors['VTanh'] = vctr_unary
+        self.intrin_ctors['VSigmoid'] = vctr_unary
 
-        def vctr_imm(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', imm_value = 1 , mode = 'w'):
+        def vctr_imm(intrin_op, scope_in = 'buffer0', scope_out = 'buffer0', imm_value = 1 , mode = 'w', size=32):
             env = self.env
             cfg = self.env.cfg
             scope_in = self.get_scope(scope_in)
@@ -127,8 +145,8 @@ class IntrinManager(object):
             if (name in self.intrin_cache):
                 return self.intrin_cache[name]
 
-            in_shape = (cfg['vector_unit']['size'], )
-            out_shape = (cfg['vector_unit']['size'], )
+            in_shape = (size, )
+            out_shape = (size, )
             op_in = tvm.placeholder(in_shape, dtype=dtype_in,
                                     name='in')
 
@@ -177,7 +195,7 @@ class IntrinManager(object):
                             get_access_ptr(dout, env, 'w'),
                             get_access_ptr(din, env, 'r'),
                             tvm.const(imm_value, 'float64'),
-                            cfg['vector_unit']['size'],
+                            size,
                             self.get_mode_code(mode)
                             ))
                 return irb.get()

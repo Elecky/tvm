@@ -16,24 +16,36 @@ parser.add_argument('--sim', type=str, help='the simulator to use',
                     default='S0', choices=['S0', 'S1', 'SC'])
 args = parser.parse_args()
 
-env = nnpu.get_env()
-nnpu.set_device(env, type=args.sim)
+config = 0
+cfg_path = './nnpu_config.{0}.yaml'.format(config)
+if (config >= 0):
+    gemm_shape = (8, 8, 8)
+    factors = [8, 16, 64]
+if (config >= 1):
+    gemm_shape = (16, 16, 16)
+    factors = [8, 16, 64]
+if (config >= 2):
+    pass
+if (config >= 3):
+    factors = [8, 16, 256]
+if (config >= 4):
+    pass
 
-with ScheduleProcHelper():
+with ScheduleProcHelper(), nnpu.Environment(cfg_path):
     env = nnpu.get_env()
+    nnpu.set_device(env, type=args.sim)
     #==================================#
     # ------ first define shapes ------
     #==================================#
 
     # the input image and kernel shapes.
-    shape = (18, 18, 32)     # layout: HWC
-    kshape = (3, 3, 64, 32)  # layout: HWOI
+    shape = (18, 18, 256)     # layout: HWC
+    kshape = (3, 3, 256, 256)  # layout: HWOI
     # convolution stride.
     stride_h, stride_w = 1, 1
     
     # the shape of MAC. 
     # this determines the input tensor shape of GEMM instruction, ie (n_row, facotr) and (n_col, factor)
-    gemm_shape = (8, 8, 8)
     n_row, factor, n_col = gemm_shape
 
     # do some checking on shapes. in this test we don't do padding, so shapes must meet some restrictions.
@@ -103,14 +115,17 @@ with ScheduleProcHelper():
                                         axis=[kh_reduce, kw_reduce, co_reduce, ci_reduce]),
                            'conv_acc')
 
-    # reshape output. 
-    # this is done when copying from accumulation buffer to scratchpad.
-    conv = tvm.compute(conv_shape,
-                       lambda ph, pw, oc: conv_acc[ph, pw / n_row, oc / n_col, pw % n_row, oc % n_col],
-                       'conv')
     # indentity computation.
-    conv_host = tvm.compute(conv_shape, lambda *i: conv(*i))
-
+    conv = tvm.compute(conv_acc_shape, lambda *i: conv_acc(*i), 'conv')
+    conv_host = tvm.compute(conv_shape,
+                       lambda ph, pw, oc: conv[ph, pw / n_row, oc / n_col, pw % n_row, oc % n_col],
+                       'conv_host')
+    # this is done when copying from accumulation buffer to scratchpad.
+    # conv = tvm.compute(conv_shape,
+    #                    lambda ph, pw, oc: conv_acc[ph, pw / n_row, oc / n_col, pw % n_row, oc % n_col],
+    #                    'conv')
+    # reshape output. 
+    # conv_host = tvm.compute(conv_shape, lambda *i: conv(*i))
     res_host = conv_host
 
     # ------ this ends the computation description. ------
@@ -120,54 +135,55 @@ with ScheduleProcHelper():
     #==================================#
 
     # set the memory scopes of tensors that should be on accelerator.
-    # here we put keature and kernel on buffer0 and buffer1 respectively.
-    nnpu.utils.MarkScope(feature_buf, 'buffer1')
-    nnpu.utils.MarkScope(kernel_buf, 'buffer2')
-    # the GEMM output is on accumulation buffer.
-    nnpu.utils.MarkScope(conv_acc, 'acc')
-    nnpu.utils.MarkScope(conv, 'buffer3')
 
     s = nnpu.create_schedule(res_host.op)
+    # set memory scopes
+    # here we put keature and kernel on buffer0 and buffer1 respectively.
+    s[feature_buf].set_scope(env.get_scope('buffer1'))
+    s[kernel_buf].set_scope(env.get_scope('buffer2'))
+    s[conv_acc].set_scope(env.get_scope('acc'))
+    s[conv].set_scope(env.get_scope('buffer3'))
     # reorder the GEMM compute stage.
     # the rule is, first make sure the axes of one GEMM instruction are the last 3 iterations, then other reduction axes follows.
     ph, pw_o, oco, pw_i, oci = conv_acc.op.axis
-    s[conv_acc].reorder(ph, pw_o, kh_reduce, kw_reduce, co_reduce, oco, pw_i, oci ,ci_reduce)
+    s[conv_acc].reorder(co_reduce, kh_reduce, kw_reduce, ph, pw_o, oco, pw_i, oci ,ci_reduce)
     # tensorize
     s[conv_acc].tensorize(pw_i, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', scope_in1='buffer1', scope_in2='buffer2',
                                               scope_out='acc'))
-    # unroll some axes, to eliminate loop overhead.
-    # s[conv_acc].unroll(co_reduce)
-    # s[conv_acc].unroll(kw_reduce)
-    # s[conv_acc].unroll(kh_reduce)
 
+    # s[conv].reorder(conv.op.axis[0], pwo, co, pwi, ci)
+
+    # split output
+    # split copy, to eliminate division and modolar arithmetic.
+    pwo, oco, pwi, oci = s[res_host].tile(res_host.op.axis[1], res_host.op.axis[2], n_row, n_col)
+    ph = res_host.op.axis[0]
+    # factors is the size of output to generate every block
+    assert factors[1] % n_row == 0 and factors[2] % n_col == 0, 'after split, still should be able to be tensorized'
+    pho, phi = s[res_host].split(ph, factors[0])
+    phvt, pho = s[res_host].split(pho, nparts=2)
+    pwoo, pwoi = s[res_host].split(pwo, factors[1] // n_row)
+    ocoo, ocoi = s[res_host].split(oco, factors[2] // n_col)
+    s[res_host].reorder(phvt, pho, pwoo, ocoo, phi, pwoi, ocoi, pwi, oci)
+
+    # use virtual thread
+    s[res_host].bind(phvt, tvm.thread_axis("cthread"))
+
+
+    # compute_at
     # use compute_at to attach GEMM stage into CopyAcc2Buf stage(copying from accumulation buffer to scratchpad).
     # because accumulation buffer may be quiet small, so we copy output into scratchpad 
     #   once GEMM finished computing one row of output.
-    s[conv_acc].compute_at(s[conv], s[conv].op.axis[0])
-
-    # split copy, to eliminate division and modolar arithmetic.
-    s[conv].tile(conv.op.axis[1], conv.op.axis[2], n_row, n_col)
-
-    # split output
-    ph, pw, oc = res_host.op.axis
-    # factors is the size of output to generate every block
-    factors = [16, 16, 64]
-    assert factors[1] % n_row == 0 and factors[2] % n_col == 0, 'after split, still should be able to be tensorized'
-    pho, phi = s[res_host].split(ph, factors[0])
-    pwo, pwi = s[res_host].split(pw, factors[1])
-    oco, oci = s[res_host].split(oc, factors[2])
-    s[res_host].reorder(oco, pho, pwo, phi, pwi, oci)
-
-    # compute_at
-    s[conv].compute_at(s[res_host], s[res_host].leaf_iter_vars[2])
-    s[kernel_buf].compute_at(s[res_host], oco)
-    s[feature_buf].compute_at(s[res_host], pwo)
+    s[conv_acc].compute_at(s[res_host], ocoo)
+    s[conv].compute_at(s[res_host], ocoo)
+    s[kernel_buf].compute_at(s[conv_acc], s[conv_acc].leaf_iter_vars[1])
+    s[feature_buf].compute_at(s[conv_acc], s[conv_acc].leaf_iter_vars[1])
 
     # add copy pragma.
     s[feature_buf].pragma(feature_buf.op.axis[0], env.dma_copy_to_buf)
     s[kernel_buf].pragma(kernel_buf.op.axis[0], env.dma_copy_to_buf)
     s[res_host].pragma(phi, env.dma_copy_from_buf)
-    s[conv].pragma(s[conv].leaf_iter_vars[-2], env.copy_acc2buf)
+    s[conv].pragma(s[conv].leaf_iter_vars[0], env.copy_acc2buf)
+
     #==================================#
     # ------ this ends the scheduling ------
     #==================================#
@@ -180,8 +196,8 @@ with ScheduleProcHelper():
     # print(func.imported_modules[0].get_source('asm'))
     print('------------------- device module 1 TVM IR: ')
     print(func.imported_modules[0].get_source('ir'))
-    print('------------------- device module 1 uop: ')
-    print(func.imported_modules[0].get_source('uop'))
+    # print('------------------- device module 1 uop: ')
+    # print(func.imported_modules[0].get_source('uop'))
     # exit()
 
     ctx = tvm.nd.TVMContext(13, 0)

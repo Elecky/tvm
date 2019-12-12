@@ -9,15 +9,28 @@ import argparse
 parser = argparse.ArgumentParser(description='test of NNPU Op')
 parser.add_argument('--sim', type=str, help='the simulator to use', 
                     default='S0', choices=['S0', 'S1', 'SC'])
+parser.add_argument('--profile', type=bool, help='enable profiling', 
+                    default=True)
+parser.add_argument('--parallel', type=bool, help='enable parallel', 
+                    default=False)
+parser.add_argument('--dimx', type=int, help='tile size of x', 
+                    default=2)
+parser.add_argument('--dimy', type=int, help='tile size of y', 
+                    default=2)
 args = parser.parse_args()
 
-env = nnpu.get_env()
-nnpu.set_device(env, type=args.sim)
+cfg_path = './nnpu_config-opt.yaml'
+if (args.profile):
+    profile_dir = '/home/jian/Documents/nnpu_profile'
+    nnpu.set_profile(['timeline', 'memory_access_latency'], profile_dir)
 
-with ScheduleProcHelper():
+with ScheduleProcHelper(), nnpu.Environment(cfg_path):
     env = nnpu.get_env()
-    shape1 = (128, 1024)
-    shape2 = (128, 1024)
+    nnpu.set_device(env, type=args.sim)
+    
+    shape1 = (128, 256)
+    shape2 = (128, 256)
+    macops = shape1[0] * shape1[1] * shape2[0]
     gemm_shape = (8, 8, 8)
     factor = gemm_shape[1]
     assert shape1[1] == shape2[1], \
@@ -42,13 +55,13 @@ with ScheduleProcHelper():
     ko = tvm.reduce_axis((0, shape1[1] // factor), 'ko')
     ki = tvm.reduce_axis((0, factor), 'ki')
 
-    out_acc = tvm.compute(out_shape_tiled, 
+    out_buf = tvm.compute(out_shape_tiled, 
                           lambda xo, yo, xi, yi:
                             tvm.sum(a_buf[xo, ko, xi, ki].astype(dtype_w) 
                                     * b_buf[yo, ko, yi, ki].astype(dtype_w),
                                     axis=[ko, ki]),
                           'out_acc')
-    out_buf = tvm.compute(out_shape_tiled, lambda *i: out_acc(*i), 'out_host')
+    # out_buf = tvm.compute(out_shape_tiled, lambda *i: out_acc(*i), 'out_host')
     out_host = tvm.compute(out_shape_tiled, lambda *i: out_buf(*i), 'out_host')
 
     # schedule
@@ -63,32 +76,37 @@ with ScheduleProcHelper():
     s[a_buf].set_scope(env.get_scope(a_buffer_scope))
     s[b_buf].set_scope(env.get_scope(b_buffer_scope))
     s[out_buf].set_scope(env.get_scope('buffer3'))
-    s[out_acc].set_scope(env.get_scope('acc'))
+    # s[out_acc].set_scope(env.get_scope('acc'))
 
     # pragma read
     s[a_buf].pragma(a_buf.op.axis[0], env.dma_copy_to_buf)
     s[b_buf].pragma(b_buf.op.axis[0], env.dma_copy_to_buf)
 
     # tensorize
-    xo, yo, xi, yi = out_acc.op.axis
-    ko, ki = out_acc.op.reduce_axis
-    koo, koi = s[out_acc].split(ko, 4)
-    s[out_acc].reorder(koo, xo, yo, koi, xi, yi, ki)
-    s[out_acc].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', 
-                                            scope_out='acc', scope_in1='buffer1',
+    xo, yo, xi, yi = out_buf.op.axis
+    ko, ki = out_buf.op.reduce_axis
+    koo, koi = s[out_buf].split(ko, 4)
+    s[out_buf].reorder(koo, xo, yo, koi, xi, yi, ki)
+    s[out_buf].tensorize(xi, env.intrins.get('GEMM', shape=gemm_shape, mode='inc', 
+                                            scope_out='buffer3', scope_in1='buffer1',
                                             scope_in2='buffer2'))
-    s[al].compute_at(s[out_acc], koo)
-    s[bl].compute_at(s[out_acc], koo)
+    s[al].compute_at(s[out_buf], koo)
+    s[bl].compute_at(s[out_buf], koo)
 
-    s[out_buf].pragma(out_buf.op.axis[0], env.copy_acc2buf)
+    # s[out_buf].pragma(out_buf.op.axis[0], env.copy_acc2buf)
 
     # split output
     xo, yo, tx, ty = out_host.op.axis
     # this the the rows of matrix loaded to faster scratchpad
-    dim_x, dim_y = 8, 16
+    dim_x, dim_y = args.dimx, args.dimy
     xo, yo, xi, yi = s[out_host].tile(xo, yo, dim_x, dim_y)
-    factor_x, factor_y = 1, 1  # to split outter loop
-    bx, by, xo, yo = s[out_host].tile(xo, yo, factor_x, factor_y)
+    if (args.parallel):
+        nparts_x, nparts_y = 2, 1  # to split outter loop
+    else:
+        nparts_x, nparts_y = 1, 1  # to split outter loop
+    # bx, by, xo, yo = s[out_host].tile(xo, yo, factor_x, factor_y)
+    bx, xo = s[out_host].split(xo, nparts=nparts_x)
+    by, yo = s[out_host].split(yo, nparts=nparts_y)
     s[out_host].reorder(bx, by, yo, xo, xi, yi, tx, ty)
     s[out_host].pragma(xi, env.dma_copy_from_buf)
 
@@ -97,7 +115,7 @@ with ScheduleProcHelper():
 
     # compute_at
     s[out_buf].compute_at(s[out_host], xo)
-    s[out_acc].compute_at(s[out_host], xo)
+    # s[out_acc].compute_at(s[out_host], xo)
 
     print(nnpu.lower(s, [a, b, out_host], simple_mode=True))
 
@@ -116,3 +134,13 @@ with ScheduleProcHelper():
     out_nd = tvm.nd.array(np.zeros(out_shape_tiled, dtype=out_host.dtype), ctx)
 
     func(a_nd, b_nd, out_nd)
+
+    from functools import reduce 
+    if (args.sim == 'SC'):
+        print()
+        print('###### summary ######')
+        print('total mac ops =', macops)
+        print('ellapsed cycles =', nnpu.get_cycle())
+        print('efficiency =', macops / nnpu.get_cycle() / reduce(lambda x, y: x*y, gemm_shape, 1))
+        if (args.profile):
+            print('timeline saved in', profile_dir)

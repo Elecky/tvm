@@ -2,7 +2,7 @@ NNPU.GEMM iiiciciciiuu
 NNPU.AccMemset ciiifi
 NNPU.CopyAccToBuffer ccii
 NNPU.VAddV|NNPU.VSubV|NNPU.VMulV|NNPU.VDivV|NNPU.VGTMV cccii
-NNPU.VExp|NNPU.VLog ccii
+NNPU.VExp|NNPU.VLog|NNPU.VTanh|NNPU.VSigmoid ccii
 NNPU.VAddI|NNPU.VSubI|NNPU.VMulI|NNPU.VDivI|NNPU.VGTMI|NNPU.ISubV|NNPU.IDivV ccfii
 NNPU.VReduceSum|NNPU.VReduceMax|NNPU.VReduceMin ccii
 NNPU.MReduceSumRow cciiiiuu

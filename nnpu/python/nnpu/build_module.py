@@ -41,13 +41,15 @@ def build_config(debug_flag=0, **kwargs):
     # FIXME: the tvm StorageRewrite may cause some wired problems, check it back!!@!!!!
     env = get_env()
     pass_list = [(1, early_rewrite),
+                 (1, lambda stmt: tvm.ir_pass.LoopPartition(stmt, True)),
+                 (1, lambda stmt: tvm.ir_pass.Simplify(stmt)),
                  (1, ir_pass.inject_dma_intrin),
                  (1, ir_pass.inject_scratchpad_ls),
                  (1, ir_pass.inject_scratchpad_copy),
                  (1, ir_pass.inject_accTobuffer),
                  (1, ir_pass.inject_dmacopy2buf_intrin),
                  (1, ir_pass.annotate_coproc_scope),
-                 (1, lambda x: tvm.ir_pass.LiftAttrScope(x, "coproc_uop_scope", True)),
+                 (1, lambda x: tvm.ir_pass.LiftAttrScope(x, "coproc_uop_scope", False)),
                  (1, ir_pass.lift_alloc_to_scope_begin),
                  (1, lambda x: tvm.ir_pass.LiftAttrScope(x, "coproc_scope", False)),
                  (1, lambda x: tvm.ir_pass.LiftAttrScope(x, "nnpu_function", False)),
